@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: preview
+      args:
+        GITHUB_PAGES: ${GITHUB_PAGES:-false}
+        PAGES_BASE_PATH: ${PAGES_BASE_PATH:-}
+    ports:
+      - "3000:80"
+    volumes:
+      - ./out:/export
+    restart: unless-stopped

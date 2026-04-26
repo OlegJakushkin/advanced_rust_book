@@ -1,0 +1,33 @@
+syntax = "proto3";
+package billing.v1;
+
+message CreateInvoiceRequest {
+  string customer_id = 1;
+  repeated uint64 line_totals = 2;
+}
+
+message CreateInvoiceResponse {
+  string invoice_id = 1;
+  uint64 total_cents = 2;
+}
+
+message StreamInvoicesRequest {
+  string tenant = 1;
+}
+
+message InvoiceEvent {
+  string invoice_id = 1;
+  string kind = 2;
+}
+
+message UploadSummary {
+  uint32 accepted = 1;
+  uint32 rejected = 2;
+}
+
+service BillingService {
+  rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse);
+  rpc StreamInvoices(StreamInvoicesRequest) returns (stream InvoiceEvent);
+  rpc UploadInvoices(stream CreateInvoiceRequest) returns (UploadSummary);
+  rpc ChatInvoices(stream InvoiceEvent) returns (stream InvoiceEvent);
+}
