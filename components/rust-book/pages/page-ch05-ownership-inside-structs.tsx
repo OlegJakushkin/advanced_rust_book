@@ -134,7 +134,7 @@ const pitfalls = [
   "Making long-lived domain types borrow from request buffers because it seems allocation-free. The lifetime coupling usually spreads farther than the allocation savings justify.",
   "Putting `Rc<T>` into code that later wants a thread boundary. `Rc<T>` is single-thread only; replacing it with `Arc<T>` late can reveal a deeper model problem.",
   "Treating `Arc<T>` as a universal answer. Shared ownership is a semantic commitment and an atomic-cost tradeoff, not a default container.",
-  "Trying to build a self-referential struct like `struct Parsed<'a> { raw: String, first: &'a str }`. Safe Rust rejects the ordinary form because moving the owner would invalidate the internal reference.",
+  "Trying to build a self-referential struct like `struct Parsed<'a> { raw: String, first: &'a str }`. Safe Rust cannot construct it: borrowing `self.raw` to fill `first` conflicts with moving `raw` into the same value, and the lifetime `'a` is supplied by the caller — there is no way to name the struct's own field.",
   "Overusing lifetime parameters on service structs, then discovering everything from tests to caches to async tasks now carries avoidable lifetime complexity.",
   "Creating `Rc<RefCell<T>>` or `Arc<Mutex<T>>` graphs with back-edges and forgetting about cycles or contention. If shared graphs are real, design the ownership edges deliberately and use `Weak` for non-owning back references.",
 ]
@@ -346,8 +346,20 @@ export function PageCh05OwnershipInsideStructs() {
                     <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">
                       struct Parsed&lt;'a&gt; {"{"} raw: String, first: &amp;'a str {"}"}
                     </code>
-                    . The trouble is that the borrow would point into storage owned by the same struct. Moving the struct
-                    can move that storage, which makes the ordinary safe layout invalid.
+                    . You cannot construct it in safe code: filling <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">first</code>{" "}
+                    requires borrowing <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">self.raw</code>,
+                    which conflicts with moving <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">raw</code>{" "}
+                    into the same value, and the lifetime{" "}
+                    <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">'a</code>{" "}
+                    is supplied by the caller — no lifetime can name the struct's own field. The deeper soundness reason
+                    self-references generally need {" "}
+                    <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">Pin</code>{" "}
+                    is that for address-sensitive inline data, moving the struct moves the storage that the internal
+                    pointer aims at. For{" "}
+                    <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">String</code>{" "}
+                    or <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">Vec</code>{" "}
+                    the bytes live on the heap and survive moves, so it is the construction rule, not the move, that
+                    rules this layout out.
                   </p>
                 </div>
               </div>

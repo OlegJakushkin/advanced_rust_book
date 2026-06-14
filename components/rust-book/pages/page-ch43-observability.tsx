@@ -605,8 +605,9 @@ e2e_p95_ms < 400`}</code>
               <div>
                 <h4 className="font-semibold text-foreground">Example 2: summarize latency, success rate, and alert state from one SLO window</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This is the kind of aggregate view an operator or an alert rule wants: end-to-end p95, success budget,
-                  and whether the window already looks unhealthy.
+                  This is the kind of aggregate view an operator or an alert rule wants: a conservative latency budget,
+                  success budget, and whether the window already looks unhealthy. Note that p95(queue) + p95(handler)
+                  is an upper bound, not the true end-to-end p95 — percentiles are not additive.
                 </p>
               </div>
               {codes.observability_metrics_slo_window !== DEFAULT_CODES.observability_metrics_slo_window && (
@@ -627,7 +628,7 @@ e2e_p95_ms < 400`}</code>
               output={outputs.observability_metrics_slo_window ?? null}
               isRunning={isRunning === "observability_metrics_slo_window"}
               filename="metrics_slo_window.rs"
-              expectedOutput={"e2e p95 = 390\nsuccess rate = 0.9920\nalert = true"}
+              expectedOutput={"latency budget = 390\nsuccess rate = 0.9920\nalert = true"}
               showResultComparison={true}
               originalCode={DEFAULT_CODES.observability_metrics_slo_window}
               onRevert={() => resetCode("observability_metrics_slo_window")}

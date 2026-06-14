@@ -41,7 +41,7 @@ fn main() {
 
     println!("hot = {}", hot.len());
     println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.len() <= hot.capacity());
+    println!("capacity ok = {}", hot.capacity() >= requests.len());
 }`,
   performance_row_major_scan: `#[derive(Debug)]
 struct Grid {
@@ -52,6 +52,7 @@ struct Grid {
 
 impl Grid {
     fn row_sums(&self) -> Vec<u32> {
+        debug_assert_eq!(self.data.len(), self.rows * self.cols);
         self.data
             .chunks(self.cols)
             .map(|row| row.iter().copied().sum())

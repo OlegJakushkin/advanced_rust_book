@@ -62,16 +62,24 @@ async fn main() {
 
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
-                        break outbound;
-                    }
-                }
+                biased;
                 Some(frame) = outbound_rx.recv() => {
                     match frame {
                         OutboundFrame::Text(_) | OutboundFrame::Pong(_) | OutboundFrame::Close => {
                             outbound += 1;
                         }
+                    }
+                }
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        while let Ok(frame) = outbound_rx.try_recv() {
+                            match frame {
+                                OutboundFrame::Text(_) | OutboundFrame::Pong(_) | OutboundFrame::Close => {
+                                    outbound += 1;
+                                }
+                            }
+                        }
+                        break outbound;
                     }
                 }
             }

@@ -94,7 +94,7 @@ impl HttpSecurityPolicy {
     }
 
     fn hsts_enabled(&self) -> bool {
-        self.redirect_http && self.hsts_max_age_secs > 0
+        self.hsts_max_age_secs > 0
     }
 
     fn rotate_now(&self, days_left: u16) -> bool {
@@ -118,7 +118,7 @@ fn main() {
     };
 
     println!("cookie = {}", cookie.name);
-    println!("cookie secure = {}", cookie.is_hardened());
+    println!("cookie hardened = {}", cookie.is_hardened());
     println!("cors = {}", policy.cors_mode());
     println!("hsts = {}", policy.hsts_enabled());
     println!("rotate now = {}", policy.rotate_now(21));

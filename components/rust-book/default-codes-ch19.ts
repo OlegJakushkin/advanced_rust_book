@@ -74,6 +74,12 @@ where
         .split_once('.')
         .ok_or_else(|| serde::de::Error::custom("expected decimal amount"))?;
 
+    if cents.len() != 2 {
+        return Err(serde::de::Error::custom(
+            "expected exactly two fractional digits",
+        ));
+    }
+
     let whole = units.parse::<u64>().map_err(serde::de::Error::custom)?;
     let frac = cents.parse::<u64>().map_err(serde::de::Error::custom)?;
 

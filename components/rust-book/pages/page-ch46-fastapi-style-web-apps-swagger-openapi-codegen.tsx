@@ -177,6 +177,25 @@ const driftPreventionCards = [
   },
 ]
 
+const comparisonCallouts = [
+  {
+    title: "Python FastAPI background",
+    body: "The handler shape feels familiar: typed extractors, request and response models, generated OpenAPI. The Rust difference is that ownership, Send or Sync bounds, and cancellation stay visible instead of being smoothed over by runtime reflection.",
+  },
+  {
+    title: "C# ASP.NET Core background",
+    body: "Routing, model binding, and middleware concepts transfer well. The Rust difference is that the application service boundary should stay free of framework request types so domain logic survives transport rewrites without leaning on attribute-based plumbing.",
+  },
+  {
+    title: "Go net/http or chi background",
+    body: "Explicit handlers, simple middleware chains, and small structs translate naturally. The Rust difference is that extractors and typed state replace per-handler request parsing, and OpenAPI generation usually leans on derive macros rather than struct tags.",
+  },
+  {
+    title: "C++ web framework background",
+    body: "If the previous stack pieced together HTTP parsing, JSON, and OpenAPI manually, Rust shifts those concerns into typed extractors, derive-based schemas, and one declared codegen workflow. The polyglot benefit is one reviewable contract instead of several drifting integrations.",
+  },
+]
+
 const transportPipelineSnippet = `HTTP extractor DTO
     -> application command or query
     -> service trait or concrete app service
@@ -475,7 +494,7 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>

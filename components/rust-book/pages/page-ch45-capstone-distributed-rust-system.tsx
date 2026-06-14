@@ -108,7 +108,8 @@ const tokioSection = {
   ],
   code: `let permit = semaphore.clone().acquire_owned().await?;
 let envelope = build_envelope(request, trace_id)?;
-broker.publish(&envelope).await?;
+let route = route_for(&envelope.workload);
+broker.publish(route, &envelope).await?;
 drop(permit);`,
 }
 
@@ -123,8 +124,12 @@ const workerPoolSection = {
   code: `while let Some(delivery) = rx.recv().await {
     let envelope = verify_and_decode(delivery)?;
     match envelope.workload {
-        WorkloadSpec::GraphSearch(spec) => graph_tx.send(spec).await?,
-        WorkloadSpec::MatrixTile(spec) => matrix_tx.send(spec).await?,
+        WorkloadSpec::GraphSearch { start, goal } => {
+            graph_tx.send(GraphSearchSpec { start, goal }).await?
+        }
+        WorkloadSpec::MatrixTile { rows, cols, tile } => {
+            matrix_tx.send(MatrixTileSpec { rows, cols, tile }).await?
+        }
     }
 }`,
 }

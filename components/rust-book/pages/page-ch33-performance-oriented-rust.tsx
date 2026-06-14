@@ -79,7 +79,7 @@ const localityCards = [
 const dispatchCards = [
   {
     title: "Static dispatch and inlining",
-    body: "Generic functions usually monomorphize, which gives the optimizer the concrete call target. That often makes inlining possible, but it also increases compile-time and code-size pressure when many instantiations exist.",
+    body: "Generic functions are monomorphized once per concrete type, so the optimizer always sees the concrete call target. Whether the call is then inlined is a separate decision, and many instantiations still increase compile-time and code-size pressure.",
   },
   {
     title: "Dynamic dispatch",
@@ -960,7 +960,7 @@ fn main() {
 
     println!("hot = {}", hot.len());
     println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.len() <= hot.capacity());
+    println!("capacity ok = {}", hot.capacity() >= requests.len());
 }`}
         />
 
@@ -1031,7 +1031,7 @@ fn main() {
 
     println!("hot = {}", hot.len());
     println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.len() <= hot.capacity());
+    println!("capacity ok = {}", hot.capacity() >= requests.len());
 }
 ````
 
@@ -1046,6 +1046,7 @@ struct Grid {
 
 impl Grid {
     fn row_sums(&self) -> Vec<u32> {
+        debug_assert_eq!(self.data.len(), self.rows * self.cols);
         self.data
             .chunks(self.cols)
             .map(|row| row.iter().copied().sum())

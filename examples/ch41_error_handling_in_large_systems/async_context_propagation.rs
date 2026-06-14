@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
         .await
         .context("loading lockfile")
         .err()
-        .map(|err| err.to_string())
+        .map(|err| format!("{:#}", err))
         .unwrap_or_else(|| String::from("none"));
 
     println!("manifest = {}", manifest);

@@ -2,7 +2,7 @@ export const DEFAULT_CODES_CH28: Record<string, string> = {
   cpp_integration_calling_c_abi: `mod c_shim {
     #[unsafe(no_mangle)]
     pub extern "C" fn ffi_demo_abs(input: i32) -> i32 {
-        input.abs()
+        input.wrapping_abs()
     }
 }
 
@@ -33,14 +33,14 @@ pub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> 
         return 1;
     }
 
-    if ptr.is_null() && len != 0 {
+    if ptr.is_null() {
         return 2;
     }
 
     let slice = unsafe {
         // SAFETY:
-        // - ptr is either non-null for len elements, or len == 0.
-        // - the caller promises the memory is readable for len i32 values.
+        // - ptr is non-null and the caller promises it is valid for len i32 values.
+        // - from_raw_parts requires a non-null, aligned pointer even when len == 0.
         std::slice::from_raw_parts(ptr, len)
     };
 

@@ -102,7 +102,7 @@ const disconnectStormChecklist = [
   "Keep one fast path for immediate reject when the system is already overloaded instead of buffering doomed reconnect work.",
 ]
 
-const messageEnvelopeSnippet = `#[derive(Debug)]
+const messageEnvelopeSnippet = `#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ClientMessage {
     Subscribe { stream: String },
@@ -111,7 +111,8 @@ enum ClientMessage {
     Close { reason: Option<String> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")]
 struct Envelope<T> {
     version: u16,
     trace_id: String,

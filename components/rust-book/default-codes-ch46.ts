@@ -1,5 +1,7 @@
 export const DEFAULT_CODES_CH46: Record<string, string> = {
-  fastapi_style_handler_service_boundary: `#[derive(Debug, Clone)]
+  fastapi_style_handler_service_boundary: `#![allow(dead_code)]
+
+#[derive(Debug, Clone)]
 struct CreateInvoiceRequest {
     customer_id: String,
     line_totals: Vec<u64>,
@@ -123,7 +125,9 @@ fn main() {
     println!("total cents = {}", created.total_cents);
     println!("request id = {}", created.request_id);
 }`,
-  fastapi_style_openapi_codegen_scaffold: `#[derive(Debug, Clone)]
+  fastapi_style_openapi_codegen_scaffold: `#![allow(dead_code)]
+
+#[derive(Debug, Clone)]
 struct ApiSchema {
     name: &'static str,
     required_fields: &'static [&'static str],

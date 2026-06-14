@@ -435,7 +435,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h4 className="font-semibold text-foreground">
-                  Example 1: Tokio tasks, JoinSet, bounded admission, and a visible cancellation path
+                  Example 1: Tokio tasks, JoinSet, bounded admission, and a visible shutdown signal
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   The queue is bounded, tasks are explicit runtime units, and retry accounting stays in one orchestration
@@ -479,9 +479,11 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Cancellation</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Shutdown signal</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  The stop signal is explicit. Shutdown is part of the orchestration contract, not a side effect of exit.
+                  The worker drains its queue, then observes an explicit shutdown flag at exit. Wiring the signal in once
+                  here makes adding real mid-flight cancellation, with select! and abort, a small step rather than a
+                  redesign.
                 </p>
               </div>
             </div>

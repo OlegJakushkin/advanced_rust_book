@@ -85,7 +85,7 @@ const invariantCards = [
   {
     title: "Keep behavior near the invariant",
     body: "A rich model is not 'methods for style.' It is how the rule stays close to the state that the rule protects. Rust `impl` blocks are a strong fit for this.",
-    code: `order.add_line(sku, qty, price)?;\norder.submit()?;`,
+    code: `order.add_line(sku, qty, unit_price)?;\norder.submit()?;`,
   },
 ]
 
@@ -1035,7 +1035,8 @@ export function PageCh16DomainDrivenDesignInRustExercises() {
           helperText={
             <>
               Tip: keep the local rule in <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Quantity::new</code>,
-              then keep the multi-field consistency update inside the aggregate method.
+              then keep the multi-field consistency update inside the aggregate method. The per-line total is{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">qty.get() as u64 * unit_price_cents</code>.
             </>
           }
           initialCode={`#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct OrderId(u64);\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct Quantity(u32);\n\nimpl Quantity {\n    fn new(value: u32) -> Result<Self, &'static str> {\n        Ok(Self(value))\n    }\n\n    fn get(self) -> u32 {\n        self.0\n    }\n}\n\n#[derive(Debug)]\nstruct Order {\n    id: OrderId,\n    line_count: usize,\n    total_cents: u64,\n}\n\nimpl Order {\n    fn new(id: OrderId) -> Self {\n        Self {\n            id,\n            line_count: 0,\n            total_cents: 0,\n        }\n    }\n\n    fn add_line(&mut self, qty: Quantity, unit_price_cents: u64) {\n        self.line_count += 0;\n        self.total_cents += 0;\n    }\n}\n\nfn main() {\n    println!(\"zero = {:?}\", Quantity::new(0));\n    let mut order = Order::new(OrderId(7));\n    let qty = Quantity::new(3).unwrap();\n    order.add_line(qty, 600);\n    println!(\"order = {:?}\", order.id);\n    println!(\"lines = {}\", order.line_count);\n    println!(\"total cents = {}\", order.total_cents);\n}`}

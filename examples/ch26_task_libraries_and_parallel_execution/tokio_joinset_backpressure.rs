@@ -51,9 +51,9 @@ async fn main() {
         while let Some(result) = set.join_next().await {
             match result.unwrap() {
                 Ok(_id) => completed += 1,
-                Err(_id) => {
+                Err(id) => {
                     retries += 1;
-                    completed += 1;
+                    set.spawn(async move { Ok::<u32, u32>(id) });
                 }
             }
         }

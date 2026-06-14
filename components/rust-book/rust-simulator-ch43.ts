@@ -75,16 +75,16 @@ export function simulateCh43Output(code: string, key?: string): string | null {
     const hasSuccess = hasSuccessRateFormula(code)
     const hasSaturation = hasSaturationFormula(code)
     const hasAlertLogic =
-      /end_to_end_p95_ms\(\s*stats\s*\)\s*>\s*350/.test(code) &&
+      /latency_budget_ms\(\s*stats\s*\)\s*>\s*350/.test(code) &&
       /success_rate\(\s*stats\s*\)\s*<\s*0\.995/.test(code) &&
       /saturation\(\s*stats\s*\)\s*>\s*0\.90/.test(code)
 
     const successRate = requests === 0 ? 0 : 1.0 - errors / requests
-    const e2e = queueP95 + handlerP95
+    const budget = queueP95 + handlerP95
     const saturation = totalWorkers === 0 ? 0 : busyWorkers / totalWorkers
-    const alert = e2e > 350 || successRate < 0.995 || saturation > 0.9
+    const alert = budget > 350 || successRate < 0.995 || saturation > 0.9
 
-    return `e2e p95 = ${hasE2EFormula ? e2e : 0}\nsuccess rate = ${hasSuccess ? successRate.toFixed(4) : "0.0000"}\nalert = ${
+    return `latency budget = ${hasE2EFormula ? budget : 0}\nsuccess rate = ${hasSuccess ? successRate.toFixed(4) : "0.0000"}\nalert = ${
       hasAlertLogic && hasSaturation ? alert : false
     }`
   }

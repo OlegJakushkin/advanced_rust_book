@@ -50,7 +50,6 @@ export function simulateCh49Output(code: string, key?: string): string | null {
     const secure = parseBoolField(code, "secure", true)
     const httpOnly = parseBoolField(code, "http_only", true)
     const sameSite = parseStringField(code, "same_site", "Lax")
-    const redirectHttp = parseBoolField(code, "redirect_http", true)
     const hstsMaxAge = parseNumberField(code, "hsts_max_age_secs", 63_072_000)
     const allowedOrigin = parseStringField(code, "allowed_origin", "https://app.example.com")
     const renewBeforeDays = parseNumberField(code, "renew_before_days", 14)
@@ -59,10 +58,10 @@ export function simulateCh49Output(code: string, key?: string): string | null {
 
     const hardenedCookie = secure && httpOnly && sameSite !== "None"
     const corsMode = allowedOrigin === "*" ? "wildcard" : "locked-down"
-    const hsts = redirectHttp && hstsMaxAge > 0
+    const hsts = hstsMaxAge > 0
     const rotateNow = daysLeft <= renewBeforeDays
 
-    return `cookie = ${cookieName}\ncookie secure = ${hardenedCookie}\ncors = ${corsMode}\nhsts = ${hsts}\nrotate now = ${rotateNow}`
+    return `cookie = ${cookieName}\ncookie hardened = ${hardenedCookie}\ncors = ${corsMode}\nhsts = ${hsts}\nrotate now = ${rotateNow}`
   }
 
   if (key === "ch49_ex_harden_api_defaults") {
@@ -77,7 +76,7 @@ export function simulateCh49Output(code: string, key?: string): string | null {
     const corsMode = allowedOrigin === "*" ? "wildcard" : "locked-down"
     const hsts = redirectHttp && hstsMaxAge > 0
 
-    return `redirect = ${redirectHttp}\ncookie secure = ${hardenedCookie}\ncors = ${corsMode}\nhsts = ${hsts}`
+    return `redirect = ${redirectHttp}\ncookie hardened = ${hardenedCookie}\ncors = ${corsMode}\nhsts = ${hsts}`
   }
 
   return null

@@ -60,7 +60,7 @@ const coreConcepts = [
   },
   {
     title: "RAII and deterministic destruction",
-    body: "Rust inherits the RAII spirit familiar to C++ engineers, but makes the ownership rules visible in ordinary code. Scope exit triggers deterministic destruction in reverse lexical order. That matters for files, sockets, locks, buffers, and transaction guards.",
+    body: "Rust inherits the RAII spirit familiar to C++ engineers, but makes the ownership rules visible in ordinary code. Local variables in a block are dropped in reverse declaration order; struct fields and collection elements drop in forward order. That matters for files, sockets, locks, buffers, and transaction guards.",
     exampleCode: "{ let file = open_log(); }",
     exampleNote: "Cleanup happens when the owner leaves scope, not when a GC eventually notices it.",
   },

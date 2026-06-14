@@ -20,7 +20,7 @@ function sum(values: number[]): number {
 
 function hasSafeFfiSumWrapper(code: string): boolean {
   const checksOut = /out_total\.is_null\(\)/.test(code)
-  const checksInput = /ptr\.is_null\(\)\s*&&\s*len\s*!=\s*0/.test(code)
+  const checksInput = /ptr\.is_null\(\)/.test(code)
   const buildsSlice = /from_raw_parts\(\s*ptr\s*,\s*len\s*\)/.test(code)
   const assignsOut =
     /\*\s*out_total\s*=\s*total/.test(code) ||

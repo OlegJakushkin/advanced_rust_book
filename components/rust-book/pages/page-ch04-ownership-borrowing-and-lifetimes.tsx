@@ -24,7 +24,7 @@ const mentalModelPoints = [
   },
   {
     title: "Borrowing is temporary access, not shared ownership",
-    body: "A reference gives a view, not a second owner. Shared references allow read access. A mutable reference requires temporary exclusivity so mutation cannot race with another alias in safe code.",
+    body: "A reference gives a view, not a second owner. Shared references allow read access. A mutable reference requires temporary exclusivity so mutation cannot happen while another alias to the same data exists.",
   },
   {
     title: "Lifetimes describe reference validity relationships",

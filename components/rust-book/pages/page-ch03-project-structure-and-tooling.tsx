@@ -62,7 +62,7 @@ const testingLayers = [
   },
   {
     title: "Benchmarks",
-    body: "Benchmarking in Rust is often an ecosystem workflow rather than one universal standard-library story. Many teams use Criterion on stable toolchains and `cargo bench` when the repository defines bench targets.",
+    body: "Benchmarking in Rust is often an ecosystem workflow rather than one universal standard-library story. Many teams use Criterion, which runs on stable through its own bench harness wired up as a `[[bench]]` target with `harness = false` and invoked through `cargo bench`, since the built-in `#[bench]` harness still requires nightly.",
   },
 ]
 

@@ -1,7 +1,7 @@
 mod c_shim {
     #[unsafe(no_mangle)]
     pub extern "C" fn ffi_demo_abs(input: i32) -> i32 {
-        input.abs()
+        input.wrapping_abs()
     }
 }
 

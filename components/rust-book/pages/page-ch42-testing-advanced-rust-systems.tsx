@@ -104,6 +104,7 @@ const snapshotSnippet = `let report = render_error_report(&event);
 insta::assert_snapshot!(report);`
 
 const benchmarkSnippet = `#[test]
+#[ignore = "perf-lane: run via \`cargo test -- --ignored\` on a dedicated benchmark runner"]
 fn encode_batch_regression_budget() {
     let stats = run_encode_fixture();
     assert!(stats.p95_us <= 250, "encode budget exceeded: {:?}", stats);
@@ -461,7 +462,12 @@ export function PageCh42TestingAdvancedRustSystems() {
             <p className="text-sm text-muted-foreground leading-6">
               Benchmark regressions belong in their own lane. They are less deterministic than correctness tests, more
               sensitive to hardware and build profile, and only useful when the budget itself is meaningful to the product.
-              Keep them coarse, stable, and obviously tied to one service budget.
+              Keep them coarse, stable, and obviously tied to one service budget. When a budget guard is expressed as an
+              ordinary <code className="font-mono text-foreground">#[test]</code>, mark it
+              <code className="font-mono text-foreground"> #[ignore]</code> (or gate it behind a feature flag) so it runs
+              in an isolated performance job on a dedicated runner, not in the shared correctness suite. A Criterion or
+              <code className="font-mono text-foreground"> [[bench]]</code> harness is the cleaner home once the budget
+              earns one.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{benchmarkSnippet}</code>

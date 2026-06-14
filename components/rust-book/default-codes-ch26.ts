@@ -37,9 +37,9 @@ async fn main() {
         while let Some(result) = set.join_next().await {
             match result.unwrap() {
                 Ok(_id) => completed += 1,
-                Err(_id) => {
+                Err(id) => {
                     retries += 1;
-                    completed += 1;
+                    set.spawn(async move { Ok::<u32, u32>(id) });
                 }
             }
         }
@@ -67,27 +67,30 @@ fn main() {
 
     let (tx, rx) = crossbeam::channel::bounded::<Vec<u64>>(2);
 
-    tx.send(vec![1_u64, 2, 3, 4]).unwrap();
-    tx.send(vec![5_u64, 6, 7, 8]).unwrap();
-    tx.send(vec![9_u64, 10]).unwrap();
-    drop(tx);
+    let (batches, total) = std::thread::scope(|scope| {
+        scope.spawn(move || {
+            tx.send(vec![1_u64, 2, 3, 4]).unwrap();
+            tx.send(vec![5_u64, 6, 7, 8]).unwrap();
+            tx.send(vec![9_u64, 10]).unwrap();
+        });
 
-    let (batches, total) = pool.install(|| {
-        let mut batches = 0_u64;
-        let mut total = 0_u64;
+        pool.install(|| {
+            let mut batches = 0_u64;
+            let mut total = 0_u64;
 
-        while let Ok(batch) = rx.recv() {
-            let subtotal: u64 = batch
-                .par_iter()
-                .copied()
-                .map(|value| value * 2)
-                .sum();
+            while let Ok(batch) = rx.recv() {
+                let subtotal: u64 = batch
+                    .par_iter()
+                    .copied()
+                    .map(|value| value * 2)
+                    .sum();
 
-            total += subtotal;
-            batches += 1;
-        }
+                total += subtotal;
+                batches += 1;
+            }
 
-        (batches, total)
+            (batches, total)
+        })
     });
 
     println!("batches = {}", batches);

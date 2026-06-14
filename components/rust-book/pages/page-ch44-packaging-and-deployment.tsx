@@ -72,6 +72,8 @@ const dockerSection = {
   body: "Multi-stage builds keep the Rust toolchain in the builder layer and copy only the final artifact into the runtime layer. That reduces image size and narrows the attack surface while keeping the build reproducible in CI.",
   code: `FROM rust:1 AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y musl-tools && rm -rf /var/lib/apt/lists/*
+RUN rustup target add x86_64-unknown-linux-musl
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 RUN cargo build --release --target x86_64-unknown-linux-musl

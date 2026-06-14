@@ -449,6 +449,12 @@ export function PageCh41ErrorHandlingInLargeSystems() {
                   This is deliberately boring. That is a virtue. The richer Rust-side error chain should stay behind the
                   wrapper where another Rust layer can still use it safely.
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground leading-5">
+                  The <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">#[unsafe(no_mangle)]</code>{" "}
+                  attribute-wrapper syntax assumes the Rust 2024 edition (rustc 1.82 or newer). On older toolchains,
+                  write the bare <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">#[no_mangle]</code>{" "}
+                  attribute instead.
+                </p>
               </div>
             </div>
           </div>

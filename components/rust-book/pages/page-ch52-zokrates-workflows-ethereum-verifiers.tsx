@@ -185,10 +185,10 @@ const artifactRows = [
   },
   {
     artifact: "verification key",
-    secrecy: "public-ish but versioned",
+    secrecy: "public; ships inside the deployed verifier contract",
     owner: "verifier deploy lane",
     retention: "versioned with circuit and contract",
-    note: "Even when public, it still needs exact version alignment.",
+    note: "The discipline that matters is exact version alignment with the circuit and proving key, not secrecy.",
   },
   {
     artifact: "witness",
@@ -452,6 +452,13 @@ zokrates generate-proof
 zokrates export-verifier
 zokrates verify`}</code>
               </pre>
+              <p className="text-xs text-muted-foreground leading-5 mt-3">
+                Stages assume default filenames unless overridden: <code className="font-mono">out</code> for the compiled
+                program, <code className="font-mono">proving.key</code> and <code className="font-mono">verification.key</code> from setup,{" "}
+                <code className="font-mono">witness</code> from compute-witness, and <code className="font-mono">proof.json</code> from
+                generate-proof. Pass <code className="font-mono">-i</code> and <code className="font-mono">-o</code> when you
+                want explicit per-circuit paths instead.
+              </p>
             </div>
           </article>
 
@@ -700,7 +707,7 @@ zokrates verify`}</code>
               isRunning={isRunning === "zokrates_workflow_command_plan"}
               filename="workflow_orchestration_plan.rs"
               expectedOutput={
-                "steps = 6\ncompile = zokrates compile -i age_check.zok -o age_check\nproof = zokrates generate-proof -i age_check\ncontract = artifacts/AgeCheckVerifier.sol"
+                "steps = 6\ncompile = zokrates compile -i age_check.zok -o artifacts/age_check\nproof = zokrates generate-proof -i artifacts/age_check\ncontract = artifacts/AgeCheckVerifier.sol"
               }
               showResultComparison={true}
               originalCode={DEFAULT_CODES.zokrates_workflow_command_plan}
@@ -1257,6 +1264,7 @@ struct Invocation {
 }
 
 fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
+    let compiled = format!("artifacts/{}", circuit);
     vec![
         Invocation {
             stage: "compile",
@@ -1266,14 +1274,14 @@ fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
                 "-i".into(),
                 format!("{}.zok", circuit),
                 "-o".into(),
-                circuit.into(),
+                compiled.clone(),
             ],
-            artifact: PathBuf::from(format!("artifacts/{}", circuit)),
+            artifact: PathBuf::from(&compiled),
         },
         Invocation {
             stage: "setup",
             program: "zokrates",
-            args: vec!["setup".into(), "-i".into(), circuit.into()],
+            args: vec!["setup".into(), "-i".into(), compiled.clone()],
             artifact: PathBuf::from("artifacts/proving.key"),
         },
         Invocation {
@@ -1283,7 +1291,7 @@ fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
                 let mut args = vec![
                     "compute-witness".into(),
                     "-i".into(),
-                    circuit.into(),
+                    compiled.clone(),
                     "-a".into(),
                 ];
                 args.extend(witness_args.iter().map(|value| value.to_string()));
@@ -1294,19 +1302,19 @@ fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
         Invocation {
             stage: "generate-proof",
             program: "zokrates",
-            args: vec!["generate-proof".into(), "-i".into(), circuit.into()],
+            args: vec!["generate-proof".into(), "-i".into(), compiled.clone()],
             artifact: PathBuf::from("artifacts/proof.json"),
         },
         Invocation {
             stage: "export-verifier",
             program: "zokrates",
-            args: vec!["export-verifier".into(), "-i".into(), circuit.into()],
+            args: vec!["export-verifier".into(), "-i".into(), compiled.clone()],
             artifact: PathBuf::from("artifacts/AgeCheckVerifier.sol"),
         },
         Invocation {
             stage: "verify",
             program: "zokrates",
-            args: vec!["verify".into(), "-i".into(), circuit.into()],
+            args: vec!["verify".into(), "-i".into(), compiled],
             artifact: PathBuf::from("artifacts/verify.log"),
         },
     ]

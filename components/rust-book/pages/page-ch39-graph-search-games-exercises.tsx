@@ -195,7 +195,7 @@ const challengeTracks = [
 const reviewQuestions = [
   "Why are stable indices usually calmer than borrowed references in graph owners that grow or serialize?",
   "When is BFS the correct answer even if Dijkstra or A* looks more advanced?",
-  "What makes a heuristic useful enough for A* but still safe enough for the guarantee you want?",
+  "What is the difference between an admissible and a consistent (monotone) heuristic for A*, and which one does the standard closed-set version need to avoid re-opening nodes?",
   "Why can frontier parallelism still fail if the visited-set or merge step is one hot lock?",
   "What extra operational questions appear the moment graph search crosses process or queue boundaries?",
 ]

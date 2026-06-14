@@ -56,14 +56,21 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
+                changed = shutdown_rx.changed() => {
+                    if changed.is_err() || *shutdown_rx.borrow() {
                         break accepted;
                     }
                 }
-                Ok((stream, _peer)) = listener.accept() => {
-                    accepted += 1;
-                    tokio::spawn(handle(stream));
+                result = listener.accept() => {
+                    match result {
+                        Ok((stream, _peer)) => {
+                            accepted += 1;
+                            tokio::spawn(handle(stream));
+                        }
+                        Err(_e) => {
+                            break accepted;
+                        }
+                    }
                 }
             }
         }

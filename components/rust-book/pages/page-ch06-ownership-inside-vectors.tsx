@@ -240,17 +240,18 @@ export function PageCh06OwnershipInsideVectors() {
               <h5 className="font-medium text-foreground mb-2">Reallocation hazards</h5>
               <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                 <li>
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">push</code> and{" "}
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extend</code> may move the buffer
-                  when capacity runs out.
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">push</code>,{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extend</code>, and{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">insert</code> may move the buffer
+                  when length grows past capacity.
                 </li>
                 <li>
                   <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">reserve</code> is an explicit
                   request for more capacity and may also relocate storage.
                 </li>
                 <li>
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">insert</code>,{" "}
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">remove</code>, sorting, and
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">remove</code>,{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">swap_remove</code>, sorting, and
                   compaction may shift element positions even when the buffer does not relocate.
                 </li>
               </ul>

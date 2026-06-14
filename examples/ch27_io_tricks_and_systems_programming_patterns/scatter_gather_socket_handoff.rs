@@ -21,22 +21,22 @@ fn main() -> io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let addr = listener.local_addr()?;
 
-    let server = thread::spawn(move || -> io::Result<usize> {
+    let server = thread::spawn(move || -> io::Result<(bool, usize)> {
         let (mut stream, _) = listener.accept()?;
         stream.set_nodelay(true)?;
 
         let mut parts = [IoSlice::new(b"hdr:"), IoSlice::new(b"payload")];
         write_all_vectored(&mut stream, &mut parts)?;
         stream.flush()?;
-        Ok(parts.len())
+        Ok((stream.nodelay()?, parts.len()))
     });
 
     let mut client = TcpStream::connect(addr)?;
     let mut buf = [0_u8; 11];
     client.read_exact(&mut buf)?;
 
-    let parts = server.join().unwrap()?;
-    println!("nodelay = {}", true);
+    let (nodelay, parts) = server.join().unwrap()?;
+    println!("nodelay = {}", nodelay);
     println!("vectored parts = {}", parts);
     println!("client = {}", String::from_utf8_lossy(&buf));
     Ok(())

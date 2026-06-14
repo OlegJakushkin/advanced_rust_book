@@ -538,6 +538,8 @@ tokio::spawn(async move {
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Shutdown</div>
                 <p className="text-xs text-muted-foreground leading-5">
                   The watch channel carries a stop signal into the accept loop, and `select!` makes that branch visible in code.
+                  `changed()` also resolves with `Err` when every sender is dropped, so the branch treats that as a stop; the
+                  `borrow()` re-check exists because a watch can carry values other than the stop sentinel.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -991,14 +993,21 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             tokio::select! {
-                _ = shutdown_rx.changed() => {
-                    if *shutdown_rx.borrow() {
+                changed = shutdown_rx.changed() => {
+                    if changed.is_err() || *shutdown_rx.borrow() {
                         break accepted;
                     }
                 }
-                Ok((stream, _peer)) = listener.accept() => {
-                    accepted += 1;
-                    tokio::spawn(handle(stream));
+                result = listener.accept() => {
+                    match result {
+                        Ok((stream, _peer)) => {
+                            accepted += 1;
+                            tokio::spawn(handle(stream));
+                        }
+                        Err(_e) => {
+                            break accepted;
+                        }
+                    }
                 }
             }
         }

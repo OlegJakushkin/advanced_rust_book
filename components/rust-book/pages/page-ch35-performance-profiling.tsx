@@ -311,10 +311,9 @@ export function PageCh35PerformanceProfiling() {
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-                  <code className="font-mono text-foreground">{`cargo build --release
-cargo flamegraph --example hot_stage_summary
+                  <code className="font-mono text-foreground">{`cargo flamegraph --bin service -- --workload representative
 
-# or sample the real binary
+# or sample the real binary directly
 perf record -g ./target/release/service
 perf report`}</code>
                 </pre>

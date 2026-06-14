@@ -290,7 +290,7 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
           runKey="ch01_ex_parse_limit"
           expectedOutput={'default = Ok(100)\nzero = Err("limit must be greater than 0")\nvalue = Ok(25)'}
           helperText="Tip: keep the type as Result<usize, &'static str>, handle None first, then validate and parse the Some branch."
-          initialCode={`fn parse_limit(input: Option<&str>) -> Result<usize, &'static str> {\n    match input {\n        None => Ok(0),\n        Some(raw) => match raw.parse::<usize>() {\n            Ok(limit) => Ok(limit),\n            Err(_) => Err("invalid number"),\n        },\n    }\n}\n\nfn main() {\n    println!("default = {:?}", parse_limit(None));\n    println!("zero = {:?}", parse_limit(Some("0")));\n    println!("value = {:?}", parse_limit(Some("25")));\n}`}
+          initialCode={`fn parse_limit(input: Option<&str>) -> Result<usize, &'static str> {\n    match input {\n        None => Ok(100),\n        Some(raw) => match raw.parse::<usize>() {\n            Ok(0) => Err("limit must be greater than 0"),\n            Ok(limit) => Ok(limit),\n            Err(_) => Err("invalid number"),\n        },\n    }\n}\n\nfn main() {\n    println!("default = {:?}", parse_limit(None));\n    println!("zero = {:?}", parse_limit(Some("0")));\n    println!("value = {:?}", parse_limit(Some("25")));\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

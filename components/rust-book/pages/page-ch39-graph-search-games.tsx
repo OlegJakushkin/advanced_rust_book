@@ -65,7 +65,7 @@ queue.push_back(start);`,
   },
   {
     title: "A*",
-    body: "Use A* when you can provide an admissible heuristic that estimates remaining cost. It often wins on mazes, grids, and route search because it avoids exploring obviously irrelevant frontier work.",
+    body: "Use A* when you can provide a heuristic that estimates remaining cost. An admissible heuristic never overestimates the true remaining cost and gives optimality; a consistent (monotone) heuristic additionally lets the standard closed-set A* finalize each node on first pop and never need to re-open it. Common grid distances such as Manhattan and Euclidean are consistent. A* often wins on mazes, grids, and route search because it avoids exploring obviously irrelevant frontier work.",
     code: `estimate = cost_so_far + heuristic(node, goal)`,
   },
 ]
@@ -155,7 +155,7 @@ const pitfalls = [
   "Storing references into graph owners that later grow or reorder. The calm repair is usually stable indices, not more lifetimes.",
   "Using adjacency matrices for sparse service or dependency graphs and paying quadratic memory for no algorithmic win.",
   "Running recursive DFS on very deep graphs without thinking about stack depth or an iterative alternative.",
-  "Using Dijkstra where BFS already solves the unweighted problem, or using A* with a heuristic that is not trustworthy enough for the claimed guarantee.",
+  "Using Dijkstra where BFS already solves the unweighted problem, or using A* with a heuristic that is not admissible (so optimality is lost) or not consistent (so the closed-set version may need to re-open nodes and break the claimed guarantee).",
   "Parallelizing graph search with one hot global visited lock and then blaming threads when the frontier stalls.",
   "Treating distributed graph search as only a bigger local BFS. The control plane changes once queueing, duplicate suppression, and trace lineage matter.",
 ]

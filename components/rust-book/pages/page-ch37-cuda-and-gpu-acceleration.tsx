@@ -201,9 +201,13 @@ const callBoundarySnippet = `unsafe fn raw_launch(
     Ok(())
 }
 
-fn checked_launch(...) -> Result<(), LaunchError> {
-    validate_lengths(...)?
-    unsafe { raw_launch(...) }
+fn checked_launch(
+    cfg: LaunchConfig,
+    input: &DeviceBuffer,
+    output: &mut DeviceBuffer,
+) -> Result<(), LaunchError> {
+    validate_lengths(cfg, input, output)?;
+    unsafe { raw_launch(cfg, input, output) }
 }`
 
 const productionPatterns = [

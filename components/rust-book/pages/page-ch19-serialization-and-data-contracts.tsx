@@ -383,6 +383,12 @@ amount_cents: u64,`}</code>
                   Custom logic belongs at the edge. Do not store a decimal money string in the domain only because one API
                   contract needed it. Keep the internal unit cheap and precise, then translate at serialization time.
                 </p>
+                <p className="mt-3 text-sm text-muted-foreground leading-6">
+                  Be careful with naive split-on-dot money parsing: it is a classic correctness trap. The fractional part
+                  must be validated as exactly two digits, or scaled by its length, before being added to the whole part.
+                  A reader that accepts <code className="px-1 rounded bg-muted font-mono text-xs">"12.5"</code> as 1205
+                  cents has silently lost money.
+                </p>
               </div>
             </div>
           </div>
@@ -1045,6 +1051,12 @@ where
     let (units, cents) = text
         .split_once('.')
         .ok_or_else(|| serde::de::Error::custom("expected decimal amount"))?;
+
+    if cents.len() != 2 {
+        return Err(serde::de::Error::custom(
+            "expected exactly two fractional digits",
+        ));
+    }
 
     let whole = units.parse::<u64>().map_err(serde::de::Error::custom)?;
     let frac = cents.parse::<u64>().map_err(serde::de::Error::custom)?;

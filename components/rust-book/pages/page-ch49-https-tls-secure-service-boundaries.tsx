@@ -597,7 +597,7 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
               output={outputs.https_tls_security_defaults ?? null}
               isRunning={isRunning === "https_tls_security_defaults"}
               filename="security_defaults_and_rotation.rs"
-              expectedOutput={"cookie = __Host-session\ncookie secure = true\ncors = locked-down\nhsts = true\nrotate now = false"}
+              expectedOutput={"cookie = __Host-session\ncookie hardened = true\ncors = locked-down\nhsts = true\nrotate now = false"}
               showResultComparison={true}
               originalCode={DEFAULT_CODES.https_tls_security_defaults}
               onRevert={() => resetCode("https_tls_security_defaults")}

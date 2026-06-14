@@ -298,8 +298,10 @@ export function PageCh08UndefinedBehaviorAndUnsafeRustExercises() {
           expectedOutput={'short = Err("buffer too small")\nvalue = Ok(())\nbuf = RST!'}
           helperText={
             <>
-              Tip: start with the length check. The unsafe block should depend on a precondition that is already true when
-              the first pointer write runs.
+              Note: the starter code is deliberately unsound. It performs an unconditional four-byte write, so calling
+              it on a three-byte buffer writes one byte past the allocation, which is undefined behavior in real Rust.
+              Your task is to add the length guard before the unsafe block runs. The unsafe block should depend on a
+              precondition that is already true when the first pointer write runs.
             </>
           }
           initialCode={`fn write_magic(buf: &mut [u8]) -> Result<(), &'static str> {\n    let ptr = buf.as_mut_ptr();\n\n    unsafe {\n        ptr.add(0).write(82);\n        ptr.add(1).write(83);\n        ptr.add(2).write(84);\n        ptr.add(3).write(33);\n    }\n\n    Ok(())\n}\n\nfn main() {\n    let mut short = vec![0u8; 3];\n    let mut ok = vec![0u8; 4];\n\n    println!(\"short = {:?}\", write_magic(&mut short));\n    println!(\"value = {:?}\", write_magic(&mut ok));\n    println!(\"buf = {}\", std::str::from_utf8(&ok).unwrap());\n}`}

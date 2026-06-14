@@ -329,7 +329,7 @@ export function PageCh49HttpsTlsSecureServiceBoundariesExercises() {
           }
           filename="harden_edge_policy_lab.rs"
           runKey="ch49_ex_harden_api_defaults"
-          expectedOutput={"redirect = true\ncookie secure = true\ncors = locked-down\nhsts = true"}
+          expectedOutput={"redirect = true\ncookie hardened = true\ncors = locked-down\nhsts = true"}
           helperText={
             <>
               Tip: change the configuration values, not the printed text. The easiest secure repair is usually explicit:
@@ -382,7 +382,7 @@ fn main() {
     };
 
     println!("redirect = {}", policy.redirect_http);
-    println!("cookie secure = {}", cookie.is_hardened());
+    println!("cookie hardened = {}", cookie.is_hardened());
     println!("cors = {}", policy.cors_mode());
     println!("hsts = {}", policy.redirect_http && policy.hsts_max_age_secs > 0);
 }`}

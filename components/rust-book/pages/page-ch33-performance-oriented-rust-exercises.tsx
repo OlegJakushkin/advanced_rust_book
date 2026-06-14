@@ -355,7 +355,7 @@ fn main() {
 
     println!("hot = {}", hot.len());
     println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.len() <= hot.capacity());
+    println!("capacity ok = {}", hot.capacity() >= requests.len());
 }`}
         />
 

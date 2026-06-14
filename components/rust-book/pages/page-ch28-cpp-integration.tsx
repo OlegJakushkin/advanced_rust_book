@@ -445,7 +445,10 @@ export function PageCh28CppIntegration() {
                 <p className="text-sm text-muted-foreground mt-1">
                   The demo keeps the symbol self-contained by defining it in Rust with the C ABI, then calling it through
                   an <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code> declaration as
-                  if it came from native code.
+                  if it came from native code. Even a trivial exported function needs a panic policy at the boundary: the
+                  body uses <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">wrapping_abs</code> so an
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]"> i32::MIN</code> input cannot panic
+                  across the C ABI seam.
                 </p>
               </div>
               {codes.cpp_integration_calling_c_abi !== DEFAULT_CODES.cpp_integration_calling_c_abi && (
@@ -713,7 +716,7 @@ const exercises: Exercise[] = [
     starterPrompt:
       "Create a checklist for `sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> i32`.",
     prompts: [
-      "What must be true about `ptr` when `len > 0`?",
+      "What must be true about `ptr` before calling `from_raw_parts`, even when `len == 0`?",
       "What must be true about `out_total` before writing?",
       "What unwind rule should the wrapper follow?",
       "What tests or sanitizer runs should exist?",
@@ -916,10 +919,10 @@ export function PageCh28CppIntegrationExercises() {
           expectedOutput={"status = 0\ntotal = 21"}
           helperText={
             <>
-              Tip: check <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">out_total</code> first, reject{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ptr == null</code> when{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">len != 0</code>, rebuild the slice once,
-              and keep the unsafe region small.
+              Tip: check <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">out_total</code> first, reject
+              a null <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ptr</code> unconditionally because{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">from_raw_parts</code> needs a non-null
+              pointer even for a zero-length slice, then rebuild the slice once and keep the unsafe region small.
             </>
           }
           initialCode={`#[unsafe(no_mangle)]\npub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> i32 {\n    unsafe {\n        *out_total = 0;\n    }\n\n    0\n}\n\nfn main() {\n    let values = [4_i32, 7, 10];\n    let mut total = -1_i64;\n\n    let status = sum_i32s(values.as_ptr(), values.len(), &mut total);\n\n    println!(\"status = {}\", status);\n    println!(\"total = {}\", total);\n}`}
@@ -953,7 +956,7 @@ export function PageCh28CppIntegrationExercises() {
 mod c_shim {
     #[unsafe(no_mangle)]
     pub extern "C" fn ffi_demo_abs(input: i32) -> i32 {
-        input.abs()
+        input.wrapping_abs()
     }
 }
 
@@ -988,14 +991,15 @@ pub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> 
         return 1;
     }
 
-    if ptr.is_null() && len != 0 {
+    if ptr.is_null() {
         return 2;
     }
 
     let slice = unsafe {
         // SAFETY:
-        // - ptr is either valid for len i32 values or len == 0.
+        // - ptr is non-null and the caller promises it is valid for len i32 values.
         // - the caller retains ownership of the input buffer.
+        // - from_raw_parts requires a non-null, aligned pointer even when len == 0.
         std::slice::from_raw_parts(ptr, len)
     };
 

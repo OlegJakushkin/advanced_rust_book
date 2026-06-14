@@ -59,14 +59,14 @@ const generatedModuleSnippet = `pub mod billing {
 // billing::billing_service_client::BillingServiceClient`
 
 const serviceShapeSnippet = `#[tonic::async_trait]
-impl billing_service_server::BillingService for BillingApi {
+pub trait BillingService: Send + Sync + 'static {
     async fn create_invoice(
         &self,
         request: Request<CreateInvoiceRequest>,
     ) -> Result<Response<CreateInvoiceResponse>, Status>;
 
-    type StreamInvoicesStream =
-        Pin<Box<dyn Stream<Item = Result<InvoiceEvent, Status>> + Send + 'static>>;
+    type StreamInvoicesStream:
+        Stream<Item = Result<InvoiceEvent, Status>> + Send + 'static;
 
     async fn stream_invoices(
         &self,
@@ -77,6 +77,9 @@ impl billing_service_server::BillingService for BillingApi {
         &self,
         request: Request<Streaming<CreateInvoiceRequest>>,
     ) -> Result<Response<UploadSummary>, Status>;
+
+    type ChatInvoicesStream:
+        Stream<Item = Result<InvoiceEvent, Status>> + Send + 'static;
 
     async fn chat_invoices(
         &self,
@@ -434,7 +437,9 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegen() {
             </h4>
             <p className="text-sm text-muted-foreground leading-6">
               The generated service shape should teach you the operational contract immediately: one request-response,
-              subscription-style output stream, upload-style input stream, or full duplex channel.
+              subscription-style output stream, upload-style input stream, or full duplex channel. Codegen produces the
+              trait shown below; your server type writes the <code className="font-mono">impl</code> block that supplies
+              real bodies and concrete stream types for each associated <code className="font-mono">type</code>.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{serviceShapeSnippet}</code>

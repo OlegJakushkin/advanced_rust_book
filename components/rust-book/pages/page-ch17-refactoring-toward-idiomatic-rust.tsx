@@ -126,13 +126,9 @@ fn build_label(service: &str, route: &str) -> String {
         return Err(HeaderError::TooSmall);
     }
 
-    unsafe {
-        // SAFETY: length checked above, exclusive mutable slice guarantees no aliasing writes.
-        buf.as_mut_ptr().add(0).write(b'R');
-    }
-
+    buf[..4].copy_from_slice(b"RUST");
     Ok(())
-}`,
+}`
   },
   {
     title: "Improving API ergonomics",

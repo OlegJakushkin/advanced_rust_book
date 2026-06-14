@@ -4,14 +4,15 @@ pub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> 
         return 1;
     }
 
-    if ptr.is_null() && len != 0 {
+    if ptr.is_null() {
         return 2;
     }
 
     let slice = unsafe {
         // SAFETY:
-        // - ptr is either valid for len i32 values or len == 0.
+        // - ptr is non-null and the caller promises it is valid for len i32 values.
         // - the caller retains ownership of the input buffer.
+        // - from_raw_parts requires a non-null, aligned pointer even when len == 0.
         std::slice::from_raw_parts(ptr, len)
     };
 

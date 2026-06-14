@@ -44,10 +44,11 @@ export function simulateCh52Output(code: string, key?: string): string | null {
       /"generate-proof"\.into\(\)/.test(code) && /"-i"\.into\(\)/.test(code)
 
     const ready = hasWorkflowStages && hasCompileShape && hasProofShape
+    const compiled = `artifacts/${circuit}`
 
     return `steps = ${ready ? 6 : 0}\ncompile = ${
-      ready ? `zokrates compile -i ${circuit}.zok -o ${circuit}` : "broken"
-    }\nproof = ${ready ? `zokrates generate-proof -i ${circuit}` : "broken"}\ncontract = ${contract}`
+      ready ? `zokrates compile -i ${circuit}.zok -o ${compiled}` : "broken"
+    }\nproof = ${ready ? `zokrates generate-proof -i ${compiled}` : "broken"}\ncontract = ${contract}`
   }
 
   if (key === "zokrates_ethereum_verifier_boundary") {

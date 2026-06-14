@@ -444,7 +444,7 @@ fn panic(_info: &PanicInfo) -> ! {
               <div className="font-medium text-foreground mb-2">A fallible-growth mindset</div>
               <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
                 <code className="font-mono text-foreground">{`#[cfg(feature = "alloc")]
-fn append_packet(buf: &mut Vec<u8>, bytes: &[u8]) -> Result<(), alloc::collections::TryReserveError> {
+fn append_packet(buf: &mut alloc::vec::Vec<u8>, bytes: &[u8]) -> Result<(), alloc::collections::TryReserveError> {
     buf.try_reserve(bytes.len())?;
     buf.extend_from_slice(bytes);
     Ok(())

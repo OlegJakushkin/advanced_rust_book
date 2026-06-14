@@ -49,8 +49,8 @@ const regionReasons = [
 const lifetimeModels = [
   {
     title: "Borrowed-from-arena references",
-    body: "A reference arena gives you `&'arena T` values tied to the arena lifetime. This is excellent for build-once, traverse-many trees where the arena outlives all reads. It is less comfortable when you need mutation after long-lived borrows exist, or when the data must cross wider subsystem boundaries.",
-    signature: "fn alloc(&'arena self, value: T) -> &'arena T",
+    body: "A reference arena gives you references tied to the arena's borrow. The idiomatic shape is `fn alloc<'a>(&'a self, value: T) -> &'a T`, often written simply as `fn alloc(&self, value: T) -> &T` and elided. In practice `typed-arena` returns `&mut T` so the caller can still mutate the newly allocated value. This is excellent for build-once, traverse-many trees where the arena outlives all reads. It is less comfortable when you need mutation after long-lived borrows exist, or when the data must cross wider subsystem boundaries.",
+    signature: "fn alloc<'a>(&'a self, value: T) -> &'a mut T",
   },
   {
     title: "Index or ID handles",

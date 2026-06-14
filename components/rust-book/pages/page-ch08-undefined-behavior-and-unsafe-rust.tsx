@@ -485,7 +485,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Audit note</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Overwriting with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ptr::write</code>{" "}
+                  Overwriting with the raw-pointer write method (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.write()</code>){" "}
                   is fine here because the element type is <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">u8</code>. For
                   a drop-carrying type such as <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code>, skipping the old destructor would matter.
                 </p>
