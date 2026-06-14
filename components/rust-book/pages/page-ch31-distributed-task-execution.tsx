@@ -99,7 +99,7 @@ const retryIsolationCards = [
   },
   {
     title: "Retry traffic is still traffic",
-    body: "A retry lane consumes queue slots, worker time, and downstream capacity. Count it explicitly. An uncapped retry stream is just delayed overload with better marketing.",
+    body: "A retry lane consumes queue slots, worker time, and downstream capacity. Count it explicitly. An uncapped retry stream is just delayed overload.",
   },
   {
     title: "Terminal failure paths",
@@ -210,8 +210,8 @@ export function PageCh31DistributedTaskExecution() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Distributed task execution is where queues, retries, leases, tracing, and task graphs meet. Rust helps most when
-          the ownership handoff is explicit and the recovery policy is not hidden in transport folklore.
+          Distributed task systems need durable handoff, leases, retries, idempotency, tracing, and recovery policy. This
+          chapter models those requirements in Rust worker and queue boundaries.
         </p>
       </div>
 
@@ -247,12 +247,9 @@ export function PageCh31DistributedTaskExecution() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building a media pipeline that ingests uploads, transcodes variants, generates thumbnails, runs content
-            scans, and publishes one final completion record. Some tasks are short. Some run for minutes. Some fan out into
-            a graph. Some fail transiently because a GPU worker is temporarily saturated. A synchronous in-process design is
-            too coupled, but a distributed queue introduces new truths: the same task may run twice, a dead worker must not
-            stall the whole system, and result aggregation becomes a first-class subsystem. Rust cannot remove those tradeoffs,
-            but it does make the work handoff and state transition explicit.
+            A media pipeline ingests uploads, transcodes variants, generates thumbnails, scans content, and publishes one
+            final completion record. The business requirement is durable distributed work with leases, retry budgets,
+            idempotent completion, graph-aware aggregation, and traceable recovery after worker failure.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -315,8 +312,8 @@ export function PageCh31DistributedTaskExecution() {
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A useful senior rule is simple: if another engineer says “exactly once,” ask immediately whether they mean
-                transport delivery, handler execution, or durable side effects. Those are different claims.
+                When another engineer says “exactly once,” ask whether they mean transport delivery, handler execution, or
+                durable side effects. Those are different claims.
               </p>
             </div>
           </div>
@@ -409,7 +406,7 @@ frontier 3: notify`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Coming from C++, C#, or Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -461,7 +458,7 @@ frontier 3: notify`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

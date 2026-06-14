@@ -193,8 +193,8 @@ export function PageCh19SerializationAndDataContracts() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Serialization is where Rust types meet files, browsers, queues, and other services. The design win comes from
-          treating that boundary as a contract, not as an accidental struct dump.
+          Serialization defines the contract between Rust services, files, queues, and external clients. This chapter
+          covers versioned payloads, schema ownership, compatibility, and explicit transport boundaries.
         </p>
       </div>
 
@@ -229,11 +229,9 @@ export function PageCh19SerializationAndDataContracts() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are shipping the same order events to four places: a public HTTP API, a Kafka-like internal event stream, a
-            browser dashboard through WASM, and a native C integration that wants an explicit ABI boundary. The naive move is
-            to serialize the same Rust struct everywhere and hope the differences stay small. The senior move is calmer:
-            define which contract each boundary actually needs, choose a format that matches the operational cost of that
-            boundary, and keep schema evolution explicit before production traffic makes the decision for you.
+            An order system publishes events to a public API, an internal event stream, a browser-facing module, and a
+            native integration boundary. The business requirement is a separate data contract for each consumer, with
+            explicit format choice, schema versioning, owned handoff rules, and compatibility tests for mixed deployments.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">Repository note</h4>
@@ -431,7 +429,7 @@ amount_cents: u64,`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: prior instincts that help and mislead</h4>
+            <h4 className="font-semibold text-foreground mb-3">prior instincts that help and mislead</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -483,7 +481,7 @@ amount_cents: u64,`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

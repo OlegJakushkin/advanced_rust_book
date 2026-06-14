@@ -85,7 +85,7 @@ const workflowCommands = [
   },
   {
     command: "cargo bench",
-    why: "Use when the workspace defines benchmark targets or a benchmark harness. If it does not, add a deliberate benchmark story instead of guessing.",
+    why: "Use when the workspace defines benchmark targets or a benchmark harness. If it does not, set up a real benchmark before measuring instead of guessing.",
   },
 ]
 
@@ -102,7 +102,7 @@ const pitfalls = [
   "Making fields public because it feels faster in the moment. Public fields turn internal layout into API, which later makes invariants harder to enforce.",
   "Using Cargo features as a runtime mode system. Features are compile-time graph shaping tools; they are usually a poor place to encode mutually exclusive operational states.",
   "Letting one crate depend on several adjacent layers because 'it is convenient right now'. Dependency shortcuts accumulate architectural debt quickly in Rust workspaces.",
-  "Treating Clippy and formatting as late cleanup. Senior Rust teams usually wire them into ordinary local and CI flow, not a release-week ritual.",
+  "Treating Clippy and formatting as late cleanup. Wire them into ordinary local and CI flow instead of leaving them for a release-week pass.",
 ]
 
 export function PageCh03ProjectStructureAndTooling() {
@@ -142,8 +142,8 @@ export function PageCh03ProjectStructureAndTooling() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust is easier to scale once the repository tells the same ownership story as the code: clear crate
-          boundaries, narrow visibility, additive features, and a disciplined toolchain loop.
+          Large Rust repositories need predictable crate boundaries, module visibility, feature flags, dependency policy,
+          and CI commands. This chapter sets the project structure that keeps builds repeatable and maintainable.
         </p>
       </div>
 
@@ -170,12 +170,9 @@ export function PageCh03ProjectStructureAndTooling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are carving a production system into Rust: an API service, a worker, a CLI for support operations, and
-            a shared domain model used by all three. In C++, the repository once drifted into target-level sprawl and
-            awkward header boundaries. In C#, projects multiplied until dependency direction became blurry. In Go, the
-            directory tree stayed simple for a long time, then hid too much policy in package conventions. Rust asks for
-            a cleaner answer: which crates own which responsibilities, which modules are internal only, and which tool
-            commands are safe enough to become part of the team&apos;s ordinary reflexes?
+            A product repository must deliver an API service, a worker, a support CLI, and a shared domain model from one
+            Rust workspace. The business requirement is clear package ownership, crate boundaries that match release and
+            dependency policy, module visibility that protects invariants, and repeatable Cargo commands in CI.
           </p>
         </section>
 
@@ -250,7 +247,7 @@ export function PageCh03ProjectStructureAndTooling() {
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
                   Modules are how you hide detail inside a crate. The default visibility is private, which is a strong
-                  default for senior teams. Reach first for{" "}
+                  default to keep. Reach first for{" "}
                   <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(crate)</code>, then{" "}
                   <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(super)</code>, and only then
                   full <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub</code> when you truly
@@ -331,7 +328,7 @@ export function PageCh03ProjectStructureAndTooling() {
             </div>
 
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <div className="font-medium text-foreground mb-3">Senior-engineer dependency rules</div>
+              <div className="font-medium text-foreground mb-3">Dependency rules</div>
               <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                 <li>Prefer fewer transitive surfaces over convenient one-off crates.</li>
                 <li>Audit default features before accepting them blindly.</li>
@@ -353,7 +350,7 @@ export function PageCh03ProjectStructureAndTooling() {
             </div>
 
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <div className="font-medium text-foreground mb-3">Command pack for a real Rust workspace</div>
+              <div className="font-medium text-foreground mb-3">Commands for a real Rust workspace</div>
               <ul className="space-y-3">
                 {workflowCommands.map((item) => (
                   <li key={item.command} className="rounded-lg border border-border bg-muted/30 p-3">
@@ -373,7 +370,7 @@ export function PageCh03ProjectStructureAndTooling() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Recommended senior-engineer Rust workflow</h4>
+            <h4 className="font-semibold text-foreground mb-3">A recommended Rust workflow</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Sketch the crate boundary first: core domain, adapters, binaries, and external integration points.</li>
               <li>Start with modules inside one crate, then split crates only where the dependency or API boundary is real.</li>
@@ -384,7 +381,7 @@ export function PageCh03ProjectStructureAndTooling() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: how prior instincts translate</h4>
+            <h4 className="font-semibold text-foreground mb-3">How prior instincts translate</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -436,7 +433,7 @@ export function PageCh03ProjectStructureAndTooling() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -524,8 +521,8 @@ export function PageCh03ProjectStructureAndTooling() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to design a multi-crate product layout, repair a feature matrix, choose
-            dependency policy, and write the baseline test/lint/benchmark command pack you would expect in a serious
-            Rust workspace.
+            dependency policy, and write the baseline test/lint/benchmark commands you would expect in a
+            production Rust workspace.
           </p>
           <Button onClick={() => setCurrentPage(5)} className="gap-2">
             Open Chapter 03 Exercises

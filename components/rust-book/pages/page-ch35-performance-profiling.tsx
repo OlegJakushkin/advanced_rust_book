@@ -199,8 +199,8 @@ export function PageCh35PerformanceProfiling() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Performance profiling is how you turn “it feels slow” into one bounded question another engineer can verify,
-          benchmark, and fix without guesswork.
+          Performance profiling converts slow paths into verifiable bottlenecks with owners, budgets, and measurements.
+          This chapter covers benchmarks, flame graphs, counters, and regression checks.
         </p>
       </div>
 
@@ -242,11 +242,9 @@ export function PageCh35PerformanceProfiling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service regressed after a “small cleanup.” The new code looks fine in review, but p99 latency rose, queue
-            depth climbed, and CPU samples now show more time under serialization than parsing. Another path spends most of
-            its wall time waiting on a lock, yet the flame graph makes the parser look guilty because the parser sits above
-            the lock acquisition in the call stack. This is the point of profiling: separate wall time from CPU time, and
-            separate symptoms from stories.
+            A service release increased p99 latency while CPU samples, queue depth, and serialization timings now disagree
+            about the bottleneck. The business requirement is to decompose wall time into CPU, queue wait, lock wait, IO,
+            serialization, and boundary overhead so the next code change targets the owning subsystem.
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {questionCards.map((card) => (
@@ -499,7 +497,7 @@ perf report`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

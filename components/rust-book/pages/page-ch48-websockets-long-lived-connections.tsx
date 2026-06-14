@@ -300,8 +300,8 @@ export function PageCh48WebsocketsLongLivedConnections() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Long-lived connections are easy to demo and easy to get wrong in production. Rust helps when the connection
-          lifecycle, task ownership, and backpressure policy stay explicit instead of hiding behind one ambient socket object.
+          Long-lived connections need controlled lifecycle, per-connection task ownership, flow control, heartbeat policy,
+          and shutdown behavior. This chapter covers WebSocket services as operational state machines.
         </p>
       </div>
 
@@ -348,11 +348,9 @@ export function PageCh48WebsocketsLongLivedConnections() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are adding live task progress and operator notifications to a browser console. The first prototype works:
-            one WebSocket, one echo handler, one happy path. Then production arrives. One tenant opens thousands of tabs.
-            A deploy causes reconnect storms. A slow consumer turns one fan-out room into an unbounded memory sink. Another
-            team asks whether gRPC streaming or SSE would have been easier. This chapter is about the operational model that
-            survives that conversation.
+            An admin console needs live task progress and operator notifications over long-lived connections. The business
+            requirement is a connection model that survives many tabs, reconnect storms, slow consumers, bounded fan-out,
+            protocol versioning, and graceful shutdown.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful design order</h4>
@@ -600,7 +598,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

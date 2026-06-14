@@ -9,6 +9,7 @@ import {
   HardDrive,
   Shield,
   TriangleAlert,
+  Wrench,
 } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
@@ -23,7 +24,7 @@ const mentalModelPoints = [
     body: "A Rust `let` binding is not a little object wrapper with secret identity. It is a name in a scope. The value can move, be borrowed temporarily, or be dropped when its owner goes out of scope.",
   },
   {
-    title: "Moves transfer responsibility, not mystical bytes",
+    title: "Moves transfer responsibility, not data by magic",
     body: "For non-`Copy` types such as `String`, `Vec<T>`, and most structs, assignment or argument passing usually transfers ownership. After the move, the previous binding is simply no longer the owner.",
   },
   {
@@ -95,7 +96,7 @@ const productionPatterns = [
 
 const pitfalls = [
   "Confusing a binding with object identity. Rebinding a name is not the same thing as preserving one owner.",
-  "Using a reference as if it could extend lifetime. References describe access; they do not manufacture survival.",
+  "Using a reference as if it could extend lifetime. References describe access; they do not keep the referenced value alive.",
   "Marking wide state as `mut` early and then fighting borrow conflicts that were really scope-design problems.",
   "Trying to return references to function-local data instead of deciding who should own the result.",
   "Putting slow, fallible, or order-sensitive business logic inside `Drop` instead of keeping destructors small and unsurprising.",
@@ -146,8 +147,8 @@ export function PageCh02TheRustMentalModel() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust becomes easier once you stop thinking in terms of “variables that happen to hold data” and start thinking
-          in terms of values, owners, scopes, and temporary borrows.
+          Reliable Rust services depend on a precise model of values, ownership transfer, drops, stack and heap storage,
+          expressions, and references. This chapter defines that model for code review and debugging.
         </p>
       </div>
 
@@ -171,11 +172,9 @@ export function PageCh02TheRustMentalModel() {
         <section className="p-5 rounded-xl bg-card border border-border">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing a service that parses inbound messages, enriches them, and dispatches owned jobs to worker
-            threads. The bytes start in one scope, become domain data in another, and disappear at a third boundary. In
-            other languages, some of that story might stay hidden behind runtime behavior or team discipline. Rust&apos;s
-            mental model becomes useful the moment you can answer four questions without hesitation: what is the value, who
-            owns it, where does it live, and when is it dropped?
+            A message-ingestion service parses inbound bytes, enriches records, and dispatches owned jobs to workers. The
+            business requirement is a precise value lifecycle: where data is created, which component owns it, where heap
+            storage is used, and when cleanup occurs.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <h4 className="font-semibold text-foreground mb-2">Operational checklist</h4>
@@ -227,7 +226,7 @@ export function PageCh02TheRustMentalModel() {
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -253,7 +252,7 @@ export function PageCh02TheRustMentalModel() {
                 <div className="font-medium text-foreground mb-2">A lifetime does not keep anything alive</div>
                 <p className="text-sm text-muted-foreground leading-6">
                   Owned values live until their owner is dropped. Lifetimes constrain references that point at those
-                  values. If the owner goes away, no annotation can rescue the reference.
+                  values. If the owner is dropped, no annotation can keep a reference to it valid.
                 </p>
               </div>
             </div>
@@ -295,7 +294,7 @@ export function PageCh02TheRustMentalModel() {
           <div className="rounded-lg border border-border bg-card p-4">
             <h4 className="font-semibold text-foreground mb-3">Lifetime repair rule of thumb</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              When a lifetime error appears, repair ownership before you reach for annotations. Usually the real choice is one of two shapes: borrow from caller-owned input that already lives long enough, or return an owned value so the function transfers data instead of a reference. Randomly adding <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">'a</code> to a signature rarely fixes the model because lifetimes describe valid borrowing relationships; they do not manufacture a longer-lived owner.
+              When a lifetime error appears, repair ownership before you reach for annotations. Usually the real choice is one of two shapes: borrow from caller-owned input that already lives long enough, or return an owned value so the function transfers data instead of a reference. Randomly adding <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">'a</code> to a signature rarely fixes the model because lifetimes describe valid borrowing relationships; they do not extend how long an owner lives.
             </p>
           </div>
 
@@ -342,7 +341,7 @@ export function PageCh02TheRustMentalModel() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

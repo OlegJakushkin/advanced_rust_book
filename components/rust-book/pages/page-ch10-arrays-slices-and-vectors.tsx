@@ -157,9 +157,8 @@ export function PageCh10ArraysSlicesAndVectors() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust gets cleaner and faster when you choose the right contiguous-storage tool: array for fixed shape, slice for
-          a borrowed view, and <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;T&gt;</code> for
-          owned growth.
+          Contiguous storage choices affect allocation, cache locality, and API flexibility. This chapter defines arrays
+          for fixed shape, slices for borrowed access, and vectors for owned growth.
         </p>
       </div>
 
@@ -191,12 +190,9 @@ export function PageCh10ArraysSlicesAndVectors() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing an ingestion service that parses fixed headers, scans rolling windows of metrics, and builds
-            dynamic retry batches. One engineer used large fixed arrays everywhere because they looked cheap. Another used
-            <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Vec&lt;T&gt;</code>
-            for every helper, even when the code only read a contiguous view. A third added an inline-first small-buffer
-            optimization before anyone had measured allocation pressure. Rust wants a calmer question first: what shape does
-            this code really need right now—fixed-size value, borrowed view, or owned growable buffer?
+            An ingestion service parses fixed headers, scans metric windows, and builds dynamic retry batches. The
+            business requirement is to choose the narrowest storage shape for each path: fixed arrays for protocol
+            invariants, slices for borrowed contiguous access, and vectors for owned runtime growth.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -410,7 +406,7 @@ export function PageCh10ArraysSlicesAndVectors() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -463,7 +459,7 @@ export function PageCh10ArraysSlicesAndVectors() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

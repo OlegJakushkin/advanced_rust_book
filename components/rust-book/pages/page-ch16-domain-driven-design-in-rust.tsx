@@ -209,7 +209,7 @@ const pitfalls = [
   "Leaving domain IDs as raw `u64` or `String` everywhere, then mixing order IDs, customer IDs, and transport IDs by accident.",
   "Building anaemic record bags and pushing all real rules into handlers, repositories, or controllers because that felt more familiar from framework-heavy designs.",
   "Letting repository traits mirror storage tables instead of aggregate boundaries. That usually means persistence leaked upward and the domain leaked downward.",
-  "Returning borrowed references from async repository or service boundaries. The lifetime friction is often design feedback, not compiler mood.",
+  "Returning borrowed references from async repository or service boundaries. The lifetime friction is often design feedback, not ownership or borrowing rule involved.",
   "Adopting event sourcing for every aggregate. Some domains need a durable event log; others only need plain current state plus a few audit records.",
   "Confusing domain events with public integration events. Not every internal fact should become an external contract.",
 ]
@@ -255,8 +255,8 @@ export function PageCh16DomainDrivenDesignInRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Domain-driven design fits Rust unusually well once you stop searching for inheritance and start modeling
-          invariants, aggregate boundaries, and domain language directly in the type system.
+          Domain-driven Rust encodes business rules in types, constructors, aggregate boundaries, and repository
+          interfaces. This chapter keeps invalid states and persistence concerns out of core domain code.
         </p>
       </div>
 
@@ -288,13 +288,9 @@ export function PageCh16DomainDrivenDesignInRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are refactoring an order platform with pricing, inventory reservation, payment authorization, and
-            fulfillment workflows. The previous design used raw IDs, DTO-shaped structs, and service methods that
-            performed validation in several layers at once. Bugs keep appearing at the seams: mixed-up identifiers,
-            empty orders reaching persistence, and transport models leaking into core business logic. Rust does not fix
-            this with framework ceremony. It gives you a calmer option: encode the business language directly into
-            types, keep invariants close to the aggregate root, and make boundary traits honest about what they load,
-            save, and publish.
+            An order platform coordinates pricing, inventory reservation, payment authorization, and fulfillment. The
+            business requirement is to encode business language and invariants directly in Rust types: domain identifiers,
+            value objects, aggregate methods, repository seams, and transport-independent error contracts.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -511,7 +507,7 @@ struct CustomerId(u64);`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: what changes by background</h4>
+            <h4 className="font-semibold text-foreground mb-3">what changes by background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -564,7 +560,7 @@ struct CustomerId(u64);`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

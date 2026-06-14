@@ -285,9 +285,9 @@ export function PageCh45CapstoneDistributedRustSystem() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          This capstone pulls the book together into one distributed Rust system: bounded async ingress, brokered work,
-          replay-safe workers, verifiable payloads, graph and matrix executors, optional acceleration, and rollout-ready
-          observability.
+          The capstone assembles a distributed Rust service with bounded ingress, brokered work, replay-safe workers,
+          verifiable payloads, compute executors, and observability. The business case is an auditable system that can be
+          operated under load.
         </p>
       </div>
 
@@ -336,12 +336,10 @@ export function PageCh45CapstoneDistributedRustSystem() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Your platform team needs one service that accepts work over an HTTP API, routes it through a broker, verifies
-            that worker inputs have not drifted, executes either graph search or matrix-heavy workloads, and optionally
-            sends the dense batch path to MPI or CUDA workers when the data size pays for it. Operators require bounded
-            queue age, replay-safe completion, traceable failures, and a packaging story that supports canary rollout and
-            rollback under pressure. The right Rust design is not “just use Tokio” or “just add a queue.” It is a set of
-            explicit contracts about ownership, retries, verification, execution lanes, and observability.
+            A platform service accepts work over HTTP, routes it through a broker, verifies worker inputs, executes graph
+            or matrix workloads, and optionally dispatches dense batches to MPI or CUDA lanes. The business requirement is
+            a replay-safe, observable, and deployable architecture with explicit ownership, queue budgets, verification,
+            and completion semantics.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -627,7 +625,7 @@ export function PageCh45CapstoneDistributedRustSystem() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

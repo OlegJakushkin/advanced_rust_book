@@ -404,6 +404,7 @@ fn main() {
     </div>
   )
 }
+/*
 ````
 
 ### File: `components/rust-book/pages/page-ch54-no-std-rust-constrained-runtime-derivatives-exercises.tsx`
@@ -817,3 +818,4 @@ fn main() {
     </div>
   )
 }
+*/

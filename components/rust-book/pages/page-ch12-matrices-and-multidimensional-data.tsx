@@ -176,8 +176,8 @@ export function PageCh12MatricesAndMultidimensionalData() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Dense numeric code in Rust is mostly about choosing the right storage contract: flat versus nested, owned versus
-          viewed, row-major versus column-major, fixed shape versus runtime shape.
+          Matrix and multidimensional workloads need explicit layout, shape, ownership, and traversal rules. This chapter
+          covers dense and sparse representations used for numeric pipelines and accelerator handoff.
         </p>
       </div>
 
@@ -210,12 +210,10 @@ export function PageCh12MatricesAndMultidimensionalData() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing a service that does three very different things with grid-shaped data: image pre-processing,
-            recommendation scoring, and sparse feature assembly for a downstream accelerator. One path stores dense data as
-            nested vectors. Another path copies submatrices into temporary buffers just to run a small kernel. A third path
-            hands a row-major buffer to a foreign column-major library and quietly gets nonsense back. Rust does not solve
-            these problems with one magic type. It gives you enough control to model the layout explicitly, which is the
-            real requirement.
+            A data-processing service handles image grids, recommendation scores, and sparse feature matrices for
+            accelerator handoff. The business requirement is explicit multidimensional layout: dense flat buffers for
+            numeric kernels, borrowed views for windows, sparse formats for nonzero-heavy traversal, and documented row or
+            column order at every interop boundary.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A reliable design order</h4>
@@ -335,7 +333,7 @@ export function PageCh12MatricesAndMultidimensionalData() {
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 Whether you use compiler auto-vectorization, explicit intrinsics, or an ecosystem SIMD abstraction, the
-                layout question arrives first. Syntax cannot rescue a bad stride pattern.
+                layout question arrives first. Syntax cannot fix a bad stride pattern.
               </p>
             </div>
           </div>
@@ -352,7 +350,7 @@ export function PageCh12MatricesAndMultidimensionalData() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                A useful senior-level rule is to separate build format from execution format. The easiest format to ingest
+                A useful rule is to separate build format from execution format. The easiest format to ingest
                 is not always the cheapest format to multiply or traverse.
               </p>
             </div>
@@ -394,7 +392,7 @@ export function PageCh12MatricesAndMultidimensionalData() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: how prior instincts translate</h4>
+            <h4 className="font-semibold text-foreground mb-3">How prior instincts translate</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -446,7 +444,7 @@ export function PageCh12MatricesAndMultidimensionalData() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -591,7 +589,7 @@ export function PageCh12MatricesAndMultidimensionalData() {
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            <li>A matrix in Rust is usually explicit storage plus explicit indexing policy, not a magical built-in abstraction.</li>
+            <li>A matrix in Rust is usually explicit storage plus explicit indexing policy, not a built-in abstraction.</li>
             <li>Row-major and column-major layouts change address calculation, traversal cost, and interop correctness.</li>
             <li>
               Dense matrices usually want flat{" "}

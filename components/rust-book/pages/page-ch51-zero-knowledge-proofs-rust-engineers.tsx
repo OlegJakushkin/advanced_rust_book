@@ -261,8 +261,8 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Zero-knowledge proofs are easiest to integrate in Rust when you treat them as explicit systems boundaries:
-          public statement, private witness, versioned artifacts, heavy proving lanes, and small verifier seams.
+          Zero-knowledge proof integration needs a public statement, private witness custody, versioned artifacts, proving
+          capacity, and small verifier APIs. This chapter maps those requirements into Rust service boundaries.
         </p>
       </div>
 
@@ -298,11 +298,9 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You run a service that accepts private billing or model-scoring inputs, but another system needs confidence in
-            a public claim such as “the hidden total stays below the published limit” or “this score came from a committed
-            model snapshot.” The engineering problem is not only learning proof-system vocabulary. It is deciding which
-            data becomes public statement, which data stays witness-only, where the prover runs, how artifacts are versioned,
-            and how a verifier checks the result without ever seeing the raw inputs.
+            A service must verify billing or scoring claims without exposing private inputs. The business requirement is
+            to separate public statements, private witnesses, constraints, proof artifacts, verifier metadata, and proving
+            capacity so the verifier learns only the intended claim.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">One practical proof pipeline</div>
@@ -520,7 +518,7 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

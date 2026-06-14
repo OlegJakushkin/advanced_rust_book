@@ -16,7 +16,7 @@ const mentalModelPoints = [
   },
   {
     title: "At-least-once delivery changes the profile",
-    body: "Retries, lease expiry, and replay are part of the cost model. A queue can look healthy on average while duplicate work and retry amplification quietly destroy tail latency.",
+    body: "Retries, lease expiry, and replay are part of the cost model. A queue can look healthy on average while duplicate work and retry amplification quietly inflate tail latency.",
   },
   {
     title: "One task ID should explain the whole trip",
@@ -42,7 +42,7 @@ const comparisonCallouts = [
 const latencyCards = [
   {
     title: "End-to-end latency",
-    body: "Measure from enqueue or publish time to durable completion. That keeps queue wait, worker run time, downstream calls, and completion commit in one honest budget.",
+    body: "Measure from enqueue or publish time to durable completion. That keeps queue wait, worker run time, downstream calls, and completion commit in one budget.",
   },
   {
     title: "Queue latency",
@@ -61,7 +61,7 @@ const stormCards = [
   },
   {
     title: "Tail latency",
-    body: "The p99 task often pays for the slow shard, the long queue, or the overloaded reducer. Averages can remain calm while one tenant or one stage is already melting down.",
+    body: "The p99 task often pays for the slow shard, the long queue, or the overloaded reducer. Averages can remain calm while one tenant or one stage is already overloaded.",
   },
 ]
 
@@ -197,8 +197,8 @@ export function PageCh36DistributedTasksProfiling() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Distributed task profiling gets useful when you separate queue wait, worker run time, retries, and graph
-          bottlenecks instead of calling the whole thing “slow work.”
+          Distributed task profiling separates queue wait, worker execution, retries, fan-out, and downstream pressure.
+          This chapter gives Rust services the metrics needed to assign bottlenecks to the right boundary.
         </p>
       </div>
 
@@ -237,10 +237,9 @@ export function PageCh36DistributedTasksProfiling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A media pipeline looks healthy at first glance. Mean handler time is flat. CPU is not pegged. But users are
-            still waiting. The real incident lives elsewhere: queue wait is rising, one slow class of retried tasks is
-            saturating specialized workers, and the final reducer queue is turning one fan-out graph into one long tail.
-            This is the reason to profile distributed tasks as a system rather than as one function.
+            A media pipeline reports stable handler time while users still wait for completion. The business requirement
+            is to profile the distributed path end to end: queue wait, lease claim delay, worker saturation, retry
+            amplification, reducer lag, and durable completion.
           </p>
           <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
             <code className="font-mono text-foreground">{`submit -> queue wait -> lease claim -> handler run -> downstream call -> durable completion
@@ -410,7 +409,7 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">How this looks coming from C++, C#, and Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -462,7 +461,7 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -533,7 +532,7 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
                 <h4 className="font-semibold text-foreground">Example 2: profile a task graph by critical path</h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   One graph stage can be locally fast and still sit on the longest path after queue time and dependency lag
-                  are counted honestly.
+                  are both counted.
                 </p>
               </div>
               {codes.distributed_profiling_task_graph !== DEFAULT_CODES.distributed_profiling_task_graph && (

@@ -16,7 +16,7 @@ const mentalModelPoints = [
   },
   {
     title: "The best Rust representation is usually flat levels, not pointer-heavy nodes",
-    body: "Merkle operations care about deterministic order and parent recomputation. They usually do not need `Rc` graphs or recursive ownership. A `Vec<Hash>` per level is often calmer than a tree of heap objects.",
+    body: "Merkle operations care about deterministic order and parent recomputation. They usually do not need `Rc` graphs or recursive ownership. A `Vec<Hash>` per level is often simpler than a tree of heap objects.",
   },
   {
     title: "Proof systems are mostly policy systems",
@@ -31,7 +31,7 @@ const comparisonCallouts = [
   },
   {
     title: "C# background",
-    body: "Do not model this as a hierarchy of node objects with ambient mutability by default. Rust is calmer when the commitment structure is an owned data buffer and proofs are small value types or DTOs.",
+    body: "Do not model this as a hierarchy of node objects with ambient mutability by default. Rust is simpler when the commitment structure is an owned data buffer and proofs are small value types or DTOs.",
   },
   {
     title: "Go background",
@@ -68,7 +68,7 @@ const proofChecklist = [
 const persistentCards = [
   {
     title: "Copy-on-write path updates",
-    body: "If one leaf changes in a mostly immutable tree, you often only need to recompute one root path rather than rebuild every level. That is the persistent snapshot story in one sentence.",
+    body: "If one leaf changes in a mostly immutable tree, you often only need to recompute one root path rather than rebuild every level. That is the persistent-snapshot idea in one sentence.",
   },
   {
     title: "Shared immutable snapshots",
@@ -145,7 +145,7 @@ const pitfalls = [
 
 const summaryPoints = [
   "Merkle trees turn many leaves into one commitment root and logarithmic inclusion proofs.",
-  "Rust representations are usually calmest when the tree is owned as flat levels and proofs are plain value types.",
+  "Rust representations are usually simplest when the tree is owned as flat levels and proofs are plain value types.",
   "Proof correctness depends on policy details such as canonical leaf encoding, domain separation, and odd-leaf handling.",
   "Persistent and append-friendly variants are workflow decisions layered on top of the same commitment idea.",
   "Parallel construction is straightforward per level, but only worth it when the level is large enough to amortize scheduling overhead.",
@@ -219,8 +219,8 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Merkle trees become useful in production the moment integrity, replay, and distributed verification stop being abstract
-          cryptography topics and become ordinary system boundaries.
+          Merkle-based systems support integrity checks, replay resistance, and distributed verification. This chapter
+          applies hash trees to production audit, challenge, and synchronization workflows.
         </p>
       </div>
 
@@ -255,10 +255,9 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are shipping three related features at once. A patch service wants content-addressed chunk storage. A multiplayer
-            game wants tamper-evident state checkpoints. A distributed verifier wants to reject bad data early without downloading
-            whole objects. The shared need is not “store a binary tree.” The shared need is this: commit to many leaves once, move
-            a small proof around later, and make both sides agree on exactly how that commitment was built.
+            A patch service, game-state system, and distributed verifier all need compact integrity evidence for large
+            data sets. The business requirement is one reproducible commitment policy: canonical leaf encoding, explicit
+            domain separation, versioned odd-leaf handling, and portable proof envelopes.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">One small tree, one compact root</div>
@@ -280,7 +279,7 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-lg font-semibold text-foreground mb-3">Review lens</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-3">Questions to ask in review</h3>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               <li>Could another service reproduce the same root from the same leaves without guessing?</li>
               <li>Is the proof envelope versioned strongly enough for cross-process or cross-language use?</li>
@@ -393,7 +392,7 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Notes for C++, C#, and Go backgrounds</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -445,7 +444,7 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
@@ -577,8 +576,7 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to implement a small Merkle API, verify an inclusion proof, reason about
-            canonical serialization, and design content-addressed, tamper-evident, and distributed verification systems with
-            visible scoring tracks.
+            canonical serialization, and design content-addressed, tamper-evident, and distributed verification systems.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 38 Exercises

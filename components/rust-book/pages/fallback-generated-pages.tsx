@@ -24,7 +24,7 @@ type ExercisePageConfig = {
 
 const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
   "ch09-smart-pointers-and-pinning": {
-    intro: "Review smart-pointer tradeoffs, shared ownership, and why Pin exists by running a pair of compact examples.",
+    intro: "Smart pointers encode ownership count, mutation authority, thread sharing, and address stability. This chapter uses Box, Rc, Arc, Weak, interior mutability, and Pin as production design choices.",
     exercisePageId: "ch09-smart-pointers-and-pinning-exercises",
     examples: [
       ["smart_pointers_tree", "Shared ownership with Rc and Weak"],
@@ -32,7 +32,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch10-arrays-slices-and-vectors": {
-    intro: "Arrays, slices, and vectors get simpler when the API shape matches the storage contract: fixed-size values, borrowed views, or owned growth.",
+    intro: "Contiguous storage choices affect allocation, cache locality, and API flexibility. This chapter defines arrays for fixed shape, slices for borrowed access, and vectors for owned growth.",
     exercisePageId: "ch10-arrays-slices-and-vectors-exercises",
     examples: [
       ["arrays_slices_vectors_slice_api", "Slice-first APIs over arrays and vectors"],
@@ -40,7 +40,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch11-hash-maps-and-sets": {
-    intro: "Use the examples on this page to revisit owned keys, borrowed lookup, and the Entry API.",
+    intro: "Hash maps and sets sit on critical lookup paths. This chapter covers key ownership, borrowed lookup, entry-based updates, deterministic output, and hashing policy for production data access.",
     exercisePageId: "ch11-hash-maps-and-sets-exercises",
     examples: [
       ["hash_maps_sets_entry_api", "Entry API and owned keys"],
@@ -48,7 +48,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch14-interfaces-in-rust-traits": {
-    intro: "Traits, bounds, and dyn Trait are easiest to review when the code stays small and the dispatch choice is explicit.",
+    intro: "Trait interfaces define capability contracts across library and service boundaries. This chapter covers bounds, associated types, generic dispatch, trait objects, and object safety as reviewable API choices.",
     exercisePageId: "ch14-interfaces-in-rust-traits-exercises",
     examples: [
       ["traits_bounds_associated_types", "Trait bounds and associated types"],
@@ -56,7 +56,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch13-arena-allocation": {
-    intro: "Arena allocation pays when lifetime grouping is real: one region owns many temporary values, and stable handles keep graph identity explicit.",
+    intro: "Arena allocation supports workloads that create many related values under one lifecycle. This chapter uses region ownership and stable handles to reduce allocation overhead and simplify teardown.",
     exercisePageId: "ch13-arena-allocation-exercises",
     examples: [
       ["arena_allocation_bump_scratch", "Request-scoped bump scratch buffer"],
@@ -64,7 +64,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch16-domain-driven-design-in-rust": {
-    intro: "Use these examples to revisit aggregate invariants, explicit value types, and event-sourced rehydration.",
+    intro: "Domain-driven Rust encodes business rules in types, constructors, aggregate boundaries, and repository interfaces. This chapter keeps invalid states and persistence concerns out of core domain code.",
     exercisePageId: "ch16-domain-driven-design-in-rust-exercises",
     examples: [
       ["ddd_order_aggregate", "Order aggregate invariants"],
@@ -72,7 +72,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch18-generics-instead-of-templates": {
-    intro: "Rust generics stay calm when the type contract is explicit and the code keys illustrate one clear dimension of variation at a time.",
+    intro: "Generics support reusable Rust APIs without sacrificing concrete contracts. This chapter covers trait bounds, associated types, const generics, and monomorphization costs for production libraries.",
     exercisePageId: "ch18-generics-instead-of-templates-exercises",
     examples: [
       ["generics_batch_bounds", "Generic batch with trait bounds"],
@@ -80,7 +80,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch19-serialization-and-data-contracts": {
-    intro: "Focus on versioned wire contracts and clear transport boundaries rather than on framework-specific serialization magic.",
+    intro: "Serialization defines the contract between Rust services, files, queues, and external clients. This chapter covers versioned payloads, schema ownership, compatibility, and explicit transport boundaries.",
     exercisePageId: "ch19-serialization-and-data-contracts-exercises",
     examples: [
       ["serialization_contracts_versioned_event", "Versioned event envelope"],
@@ -88,7 +88,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch22-multithreading-in-rust": {
-    intro: "These examples concentrate on owned work handoff, shared state, and scoped threads so the thread boundary stays explicit.",
+    intro: "Multithreaded Rust systems need clear ownership transfer, shared-state policy, and shutdown behavior. This chapter covers threads, scoped work, channels, and synchronization as production boundaries.",
     exercisePageId: "ch22-multithreading-in-rust-exercises",
     examples: [
       ["multithreading_owned_jobs_channel", "Owned jobs over a channel"],
@@ -97,7 +97,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch24-coroutines-futures-and-async-rust": {
-    intro: "Trace how futures behave as state machines and keep ownership honest across await points.",
+    intro: "Async Rust services depend on futures, executors, cancellation, and ownership across await points. This chapter defines the runtime contract behind coroutines and asynchronous state machines.",
     exercisePageId: "ch24-coroutines-futures-and-async-rust-exercises",
     examples: [
       ["async_rust_async_fn_await_block_on", "async fn plus block_on"],
@@ -105,7 +105,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch25-tokio": {
-    intro: "Use these Tokio examples to revisit bounded async work, spawn_blocking, and graceful network shutdown.",
+    intro: "Tokio provides the runtime layer for network services, timers, tasks, and blocking work isolation. This chapter covers backpressure, task ownership, shutdown, and runtime configuration.",
     exercisePageId: "ch25-tokio-exercises",
     examples: [
       ["tokio_tasks_backpressure_spawn_blocking", "Backpressure and spawn_blocking"],
@@ -113,7 +113,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch28-cpp-integration": {
-    intro: "Keep the interop seam boring: flatten ownership, pin the ABI, and translate errors before the rest of the codebase needs to care.",
+    intro: "Native-library integration is a production boundary with ABI, ownership, memory layout, unwind, and error translation requirements. This chapter defines Rust wrapper patterns for that boundary.",
     exercisePageId: "ch28-cpp-integration-exercises",
     examples: [
       ["cpp_integration_calling_c_abi", "Calling a C ABI symbol from Rust"],
@@ -121,7 +121,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch29-js-and-cpp-integration-for-wasm": {
-    intro: "Keep the WebAssembly boundary explicit: one browser-facing example and one flat C++ shim example.",
+    intro: "WebAssembly integration needs explicit host calls, memory ownership, data batching, and ABI rules. This chapter defines the boundary contracts for browser-facing modules and native shims.",
     exercisePageId: "ch29-js-and-cpp-integration-for-wasm-exercises",
     examples: [
       ["wasm_bindgen_string_array_boundary", "wasm-bindgen string and byte boundary"],
@@ -129,7 +129,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch30-amqp-and-message-brokers": {
-    intro: "Revisit routing, redelivery, and idempotent consumers with two compact broker-oriented examples.",
+    intro: "Message-broker systems need reliable routing, redelivery handling, idempotent consumers, dead-letter policy, and local backpressure. This chapter covers AMQP as an operational contract.",
     exercisePageId: "ch30-amqp-and-message-brokers-exercises",
     examples: [
       ["amqp_direct_exchange_routing", "Direct exchange routing"],
@@ -137,7 +137,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch33-performance-oriented-rust": {
-    intro: "These snippets focus on borrow-first hot paths and row-major locality before you reach for heavier optimizations.",
+    intro: "Performance work starts with allocation, data movement, cache behavior, and measurement. This chapter turns Rust optimization into a repeatable review process tied to workload evidence.",
     exercisePageId: "ch33-performance-oriented-rust-exercises",
     examples: [
       ["performance_allocation_borrowed_filter", "Borrowed filter on a hot request path"],
@@ -145,7 +145,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch35-performance-profiling": {
-    intro: "Profile from evidence: one example finds the hottest stage, the other summarizes one pipeline bottleneck.",
+    intro: "Performance profiling converts slow paths into verifiable bottlenecks with owners, budgets, and measurements. This chapter covers benchmarks, flame graphs, counters, and regression checks.",
     exercisePageId: "ch35-performance-profiling-exercises",
     examples: [
       ["performance_profiling_hot_stage_summary", "Hottest stage summary"],
@@ -153,7 +153,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch37-cuda-and-gpu-acceleration": {
-    intro: "The goal here is to keep host-side launch checks and transfer budgets explicit before any real kernel tuning starts.",
+    intro: "GPU acceleration is justified by throughput, transfer cost, memory layout, and launch overhead. This chapter covers Rust-side control of accelerator work without hiding those costs.",
     exercisePageId: "ch37-cuda-and-gpu-acceleration-exercises",
     examples: [
       ["cuda_gpu_kernel_launch_wrapper", "Safe kernel launch wrapper"],
@@ -161,15 +161,23 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch40-matrix-optimization-games": {
-    intro: "Keep one correct dense baseline and one sparse frontier example handy while reasoning about layout and tiling.",
+    intro: "Matrix optimization depends on layout, tiling, sparsity, SIMD, thread budgets, and accelerator boundaries. This chapter turns those factors into measurable Rust implementation choices.",
     exercisePageId: "ch40-matrix-optimization-games-exercises",
     examples: [
       ["matrix_games_tiled_matmul", "Tiled matrix multiplication"],
       ["matrix_games_sparse_frontier", "Sparse frontier advance"],
     ],
   },
+  "ch41-error-handling-in-large-systems": {
+    intro: "Large systems need error contracts that separate domain failures, infrastructure failures, retry policy, and operator context. This chapter covers Rust error handling as a production interface.",
+    exercisePageId: "ch41-error-handling-in-large-systems-exercises",
+    examples: [
+      ["error_handling_typed_contracts", "Typed error contracts"],
+      ["error_handling_async_context", "Async context propagation"],
+    ],
+  },
   "ch46-fastapi-style-web-apps-swagger-openapi-codegen": {
-    intro: "The code here shows how to keep HTTP transport concerns at the edge while the service and contract model stay typed and reviewable.",
+    intro: "Web API delivery needs typed handlers, documented contracts, generated transport code, and domain services isolated from HTTP concerns. This chapter builds that production boundary in Rust.",
     exercisePageId: "ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises",
     examples: [
       ["fastapi_style_handler_service_boundary", "Handler to service boundary"],
@@ -177,7 +185,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch52-zokrates-workflows-ethereum-verifiers": {
-    intro: "Treat ZoKrates like a staged toolchain and Ethereum verification like a separate artifact boundary.",
+    intro: "Proof workflows need controlled source programs, setup material, witness custody, generated verifiers, and deployment tracking. This chapter covers ZoKrates and Ethereum verification as staged production artifacts.",
     exercisePageId: "ch52-zokrates-workflows-ethereum-verifiers-exercises",
     examples: [
       ["zokrates_workflow_command_plan", "ZoKrates command plan"],
@@ -185,7 +193,7 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
     ],
   },
   "ch54-no-std-rust-constrained-runtime-derivatives": {
-    intro: "Design the smallest honest runtime surface first, then add alloc or std only where the target and the product boundary truly need it.",
+    intro: "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
     exercisePageId: "ch54-no-std-rust-constrained-runtime-derivatives-exercises",
     examples: [
       ["no_std_portable_surface", "Portable core/alloc/std surface split"],
@@ -268,7 +276,7 @@ const EXERCISE_PAGE_CONFIG: Record<string, ExercisePageConfig> = {
 const MAIN_REVIEW_POINTS = [
   "Run the examples and change the inputs until the transport, ownership, or performance boundary becomes obvious.",
   "Keep the default code as a working baseline while you test one idea at a time.",
-  "Use the companion exercise page to turn the chapter model into a deliberate review habit.",
+  "Use the companion exercise page to turn the chapter model into a repeatable review habit.",
 ]
 
 const EXERCISE_REVIEW_POINTS = [
@@ -405,7 +413,7 @@ function GenericExercisePage({ pageId }: { pageId: string }) {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested drills</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested practice</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>Rewrite one boundary in your own words before you change code.</li>
             <li>Identify what the caller or operator can still do after a failure or replay event.</li>

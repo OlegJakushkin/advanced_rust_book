@@ -470,7 +470,7 @@ function BookContent() {
 
       {/* Footer */}
       <p className="mt-6 text-sm text-muted-foreground text-center">
-       Run the worked examples, read the diagnostic notes, and keep moving chapter by chapter.<br/>
+       "Run" here is just for minor tests - it can not run cuda or anything complex. Please use real off-line rust runners.<br/>
        Copyright © 2026 Oleg Iakushkin. All rights reserved. 
       </p>
 

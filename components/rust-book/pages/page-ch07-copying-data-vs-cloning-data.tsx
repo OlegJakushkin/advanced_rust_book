@@ -72,7 +72,7 @@ const coreConceptCards = [
   },
   {
     title: "Implementing Clone manually",
-    body: "Manual `Clone` is for cases where `derive(Clone)` is not enough or when you want to document the exact duplication story. Clone owned fields explicitly. Copy plain scalar fields directly.",
+    body: "Manual `Clone` is for cases where `derive(Clone)` is not enough or when you want to document exactly how duplication works. Clone owned fields explicitly. Copy plain scalar fields directly.",
     code: `impl Clone for JobTemplate {\n    fn clone(&self) -> Self {\n        Self {\n            service: self.service.clone(),\n            steps: self.steps.clone(),\n            retries: self.retries,\n        }\n    }\n}`,
   },
   {
@@ -161,8 +161,8 @@ export function PageCh07CopyingDataVsCloningData() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust gets calmer once you stop treating every duplication as the same event. Moves transfer ownership, `Copy`
-          duplicates tiny value types implicitly, and `Clone` is the explicit price tag for real duplication.
+          Duplication policy affects latency, memory use, and API ownership. This chapter separates moves, Copy, Clone,
+          clone-on-write, and shared-reference cloning so reviews can identify intentional costs.
         </p>
       </div>
 
@@ -195,12 +195,9 @@ export function PageCh07CopyingDataVsCloningData() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing a service that parses requests, fans work out to several workers, and stores enough state to
-            retry failed jobs. The team has made the code compile, but the profiler now shows avoidable allocations in the
-            request path. The root cause is familiar: someone reached for `clone()` every time ownership felt slightly
-            awkward. Rust is not telling you “never clone.” It is asking for a cleaner boundary: which values should move,
-            which tiny values may copy, which data truly needs a second independent owner, and which paths should borrow
-            instead.
+            A request service fans work to several workers and keeps retry state for failed jobs. The business requirement
+            is a reviewable duplication policy: borrow read-only data on hot paths, move owned jobs at boundaries, copy
+            tiny values implicitly when safe, and clone only where independent ownership is required.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A fast decision order</h4>
@@ -282,7 +279,7 @@ export function PageCh07CopyingDataVsCloningData() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: prior instincts that help and mislead</h4>
+            <h4 className="font-semibold text-foreground mb-3">prior instincts that help and mislead</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -334,7 +331,7 @@ export function PageCh07CopyingDataVsCloningData() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -491,7 +488,7 @@ export function PageCh07CopyingDataVsCloningData() {
             <li>`Copy` is for small, boring value types. `Clone` is explicit because duplication may be meaningful or costly.</li>
             <li>Manual `Clone` should clone owned fields and copy plain scalar fields directly.</li>
             <li>`Rc` and `Arc` cloning add shared owners; they do not deep-copy the inner value.</li>
-            <li>Borrow by default, allocate at real boundaries, and choose `self`, `&self`, and `&mut self` to match the ownership story.</li>
+            <li>Borrow by default, allocate at real boundaries, and choose `self`, `&self`, and `&mut self` to match the ownership the method actually needs.</li>
           </ul>
         </section>
       </div>

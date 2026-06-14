@@ -20,7 +20,7 @@ const mentalModelPoints = [
   },
   {
     title: "Hybrid designs are normal, not exotic",
-    body: "A serious cluster job often uses MPI between ranks and threads inside each rank. Rust's ownership and Send/Sync rules still matter inside the rank, even though MPI itself is process-based.",
+    body: "A typical cluster job often uses MPI between ranks and threads inside each rank. Rust's ownership and Send/Sync rules still matter inside the rank, even though MPI itself is process-based.",
   },
 ]
 
@@ -42,7 +42,7 @@ const mpiConceptCards = [
 const processVsThreadCards = [
   {
     title: "MPI ranks are processes",
-    body: "A rank does not borrow memory from another rank. There is no cross-rank `&T`, `Arc<T>`, or `Mutex<T>` story. Inter-rank ownership is always explicit data movement.",
+    body: "A rank does not borrow memory from another rank. There is no cross-rank `&T`, `Arc<T>`, or `Mutex<T>`. Inter-rank ownership is always explicit data movement.",
   },
   {
     title: "Threads stay inside the rank",
@@ -141,7 +141,7 @@ const productionEnvironmentCards = [
     body: "Root logs are useful, but rank-tagged diagnostics and per-rank timers are often the only way to diagnose imbalance or topology mistakes.",
   },
   {
-    title: "Containers help only if the ABI story stays honest",
+    title: "Containers help only if the ABI assumptions still match",
     body: "A container can simplify environment management, but MPI launchers, network fabric, and host libraries still define the real deployment contract.",
   },
 ]
@@ -153,7 +153,7 @@ const comparisonCallouts = [
   },
   {
     title: "C# background",
-    body: "Think less in terms of runtime object graphs and more in terms of flat buffers, phases, and explicit ownership. HPC code is usually calmer when the runtime story is boring.",
+    body: "Think less in terms of runtime object graphs and more in terms of flat buffers, phases, and explicit ownership. HPC code is usually easier to reason about when the runtime behavior is simple and predictable.",
   },
   {
     title: "Go background",
@@ -221,8 +221,8 @@ export function PageCh32MpiAndHighPerformanceComputing() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          MPI in Rust is mostly about being explicit: process boundaries, flat buffers, collective contracts, and the
-          point where cluster reality begins to dominate local language taste.
+          High-performance cluster jobs need explicit process boundaries, collective operations, flat buffers, and failure
+          expectations. This chapter covers MPI-style computation from the Rust application layer.
         </p>
       </div>
 
@@ -258,11 +258,10 @@ export function PageCh32MpiAndHighPerformanceComputing() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are porting a climate or simulation workload from C++ into Rust. One part sweeps large dense arrays. One
-            part exchanges halo regions. One part reduces convergence scalars every iteration. The cluster team wants the
-            same MPI launch model, the same node topology discipline, and a path to hybrid per-rank threading. Rust can
-            do this well, but only if the program states what HPC code always cared about anyway: which rank owns which
-            rows, which buffers are contiguous, and which synchronization costs are global rather than local.
+            A simulation workload is being ported to Rust while keeping the cluster MPI launch model and hybrid per-rank
+            threading. The business requirement is explicit ownership by rank: partition flat buffers, use collectives for
+            structured exchange, keep serialization off hot numeric paths, and profile communication separately from
+            computation.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -450,7 +449,7 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Notes by background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -502,7 +501,7 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

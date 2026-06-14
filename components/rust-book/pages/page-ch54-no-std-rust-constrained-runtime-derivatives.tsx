@@ -259,8 +259,8 @@ export function PageCh54NoStdRustConstrainedRuntimeDerivatives() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          `no_std` Rust is about removing ambient runtime assumptions on purpose, then rebuilding only the allocation,
-          panic, IO, and host services your target can honestly support.
+          Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls.
+          This chapter covers no_std Rust as a portability and assurance strategy.
         </p>
       </div>
 
@@ -298,11 +298,9 @@ export function PageCh54NoStdRustConstrainedRuntimeDerivatives() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Imagine one Rust codebase that must serve four environments: a Cortex-M firmware image, a kernel-adjacent x86
-            boot stage, a tiny wasm guest running inside a host application, and a reusable parser library that should stay
-            usable from ordinary Linux services too. The senior-engineering question is not “how do I delete std?” It is
-            “which runtime services are real on each target, which APIs can stay in core, which helpers need alloc, and
-            which host integrations must remain outside the portable surface?”
+            A Rust component set must run across firmware, kernel-adjacent startup code, minimal Wasm guests, and ordinary
+            Linux services. The business requirement is to declare the smallest runtime surface for each layer: core-only
+            logic, alloc-gated ownership helpers, std-based host adapters, and explicit target build contracts.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">The runtime stack to keep in your head</div>
@@ -681,7 +679,7 @@ mod tests {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

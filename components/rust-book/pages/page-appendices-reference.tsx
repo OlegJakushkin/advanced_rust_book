@@ -4,7 +4,8 @@ import { useEffect } from "react"
 import { ArrowLeft, BookOpen, ListChecks } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
-import { CHAPTERS, PAGES } from "../types"
+import { RUNTIME_PROFILE_ROWS } from "../runtime-profiles"
+import { CHAPTERS, PAGES, chapterRuntimeProfile } from "../types"
 import { Button } from "@/components/ui/button"
 
 type LinkSpec = {
@@ -864,6 +865,38 @@ export function PageExerciseIndex() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
+          <h3 className="text-lg font-semibold text-foreground mb-3">Browser runtime profiles (c2w)</h3>
+          <p className="text-sm text-muted-foreground leading-6 mb-4">
+            Homework that uses the in-browser Cargo editor should load one prebuilt offline image per profile (each must stay
+            under roughly 1 GiB). Use <code className="text-foreground">?runtime=base|async|web|wasm|cpp</code> when embedding
+            the editor. Chapter 32 (MPI) uses the base profile plus the in-browser simulator until a dedicated MPI image fits
+            the size budget.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="py-2 pr-4 font-semibold text-foreground">Profile</th>
+                  <th className="py-2 pr-4 font-semibold text-foreground">Chapters</th>
+                  <th className="py-2 pr-4 font-semibold text-foreground">Image</th>
+                  <th className="py-2 font-semibold text-foreground">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RUNTIME_PROFILE_ROWS.map((row) => (
+                  <tr key={row.profile} className="border-b border-border/60 align-top">
+                    <td className="py-3 pr-4 font-medium text-foreground">{row.profile}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{row.chapters}</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">{row.image}</td>
+                    <td className="py-3 text-muted-foreground leading-6">{row.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Chapter-to-exercise map</h3>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-sm">
@@ -871,6 +904,7 @@ export function PageExerciseIndex() {
                 <tr className="border-b border-border text-left">
                   <th className="py-2 pr-4 font-semibold text-foreground">Ch.</th>
                   <th className="py-2 pr-4 font-semibold text-foreground">Topic</th>
+                  <th className="py-2 pr-4 font-semibold text-foreground">Runtime</th>
                   <th className="py-2 pr-4 font-semibold text-foreground">Primary skills</th>
                   <th className="py-2 font-semibold text-foreground">Jump</th>
                 </tr>
@@ -887,6 +921,9 @@ export function PageExerciseIndex() {
                       <td className="py-3 pr-4">
                         <div className="font-medium text-foreground">{lessonPage.title}</div>
                         <div className="text-xs text-muted-foreground">{exercisePage ? exercisePage.title : "Exercise page missing"}</div>
+                      </td>
+                      <td className="py-3 pr-4 font-mono text-xs text-muted-foreground">
+                        {chapterRuntimeProfile(chapter)}
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground leading-6">
                         {skills.join(" · ")}

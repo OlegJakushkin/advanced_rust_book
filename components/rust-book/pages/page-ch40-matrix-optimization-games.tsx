@@ -235,8 +235,8 @@ export function PageCh40MatrixOptimizationGames() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Matrix work is where Rust, cache behavior, SIMD, sparse formats, thread budgets, and GPU boundaries all stop
-          being separate topics and become one performance review.
+          Matrix optimization depends on layout, tiling, sparsity, SIMD, thread budgets, and accelerator boundaries. This
+          chapter turns those factors into measurable Rust implementation choices.
         </p>
       </div>
 
@@ -278,11 +278,9 @@ export function PageCh40MatrixOptimizationGames() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing one batch service that does dense scoring, one route planner that behaves like sparse
-            frontier expansion, and one research path that wants a GPU only when batch size grows past a real break-even
-            point. The wrong move is to argue from slogans like “SIMD all the things” or “put it on the GPU.” The right
-            move is to ask three boring questions first: how is the matrix stored, how is it walked, and how often does
-            the system cross ownership or device boundaries?
+            A batch scoring service, sparse route planner, and accelerator research path all depend on matrix-shaped data.
+            The business requirement is to make storage layout, traversal order, sparsity, tiling, thread ownership, and
+            accelerator boundary costs measurable before claiming an optimization win.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -542,7 +540,7 @@ for k in 0..tile_width {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

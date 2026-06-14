@@ -339,9 +339,8 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          This chapter is about the ZoKrates tooling workflow specifically: how Rust teams model proof-friendly inputs,
-          manage generated artifacts, and integrate Ethereum verifier contracts without pretending the whole flow is just one
-          handwritten Rust function.
+          Proof workflows need controlled source programs, setup material, witness custody, generated verifiers, and
+          deployment tracking. This chapter covers ZoKrates and Ethereum verification as staged production artifacts.
         </p>
       </div>
 
@@ -377,12 +376,10 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Suppose your team needs to prove one billing or compliance fact without revealing the full underlying data,
-            while another team wants that proof checked from an Ethereum-oriented system. The temptation is to think “the
-            proof library handles it.” In practice the real work is broader: choose a proof-friendly input model, compile
-            the ZoKrates program, control setup artifacts, generate witnesses and proofs in the right lane, export a
-            Solidity verifier, version every artifact, and keep private witness material out of verifier requests and
-            operator logs.
+            A proof-backed compliance service needs Ethereum-oriented verification of a statement without exposing witness
+            data. The business requirement is to manage the full ZoKrates artifact workflow: proof-friendly inputs,
+            compile and setup stages, witness custody, proof generation, generated verifier deployment, and versioned
+            verification requests.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">Workflow pipeline</div>
@@ -663,7 +660,7 @@ zokrates verify`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

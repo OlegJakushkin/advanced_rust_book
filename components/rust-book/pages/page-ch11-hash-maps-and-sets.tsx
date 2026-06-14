@@ -121,8 +121,8 @@ export function PageCh11HashMapsAndSets() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Maps and sets look familiar on the surface. In Rust, the interesting part is ownership of keys and values,
-          borrowed lookup, deterministic output choices, and how hashing policy changes production behavior.
+          Hash maps and sets sit on critical lookup paths. This chapter covers key ownership, borrowed lookup, entry-based
+          updates, deterministic output, and hashing policy for production data access.
         </p>
       </div>
 
@@ -154,12 +154,10 @@ export function PageCh11HashMapsAndSets() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing an ingress service that tracks per-route counters, deduplicates active feature flags,
-            enriches requests from in-memory indexes, and emits deterministic config dumps for operators. In one place,
-            the code allocates a fresh `String` on every lookup. In another, it uses `contains_key` and `insert` on the
-            same key path. In a third, test failures come from assuming hash iteration order is stable. Rust does not make
-            these issues mysterious. It makes them visible: who owns the key, how the lookup is borrowed, and whether
-            order is even part of the contract.
+            An ingress service maintains route counters, active feature flags, in-memory indexes, and deterministic
+            operator-facing configuration dumps. The business requirement is explicit key ownership and lookup policy:
+            own normalized keys in collections, borrow for read paths, update with one table access, and choose ordered
+            structures when output order is contractual.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A reliable review order</h4>
@@ -401,7 +399,7 @@ assert!(active.contains("worker"));`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -453,7 +451,7 @@ assert!(active.contains("worker"));`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -709,7 +707,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "You stop treating hash iteration order as stable.",
       "You propose either sorting at the boundary or using `BTreeMap` as the primary representation when order is always required.",
-      "You justify the tradeoff in terms of contract clarity, not only test appeasement.",
+      "You justify the tradeoff in terms of contract clarity, not only making tests pass.",
     ],
     hints: [
       "Stable order is a data-structure choice or a render-step choice. Pick one deliberately.",

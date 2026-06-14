@@ -111,7 +111,7 @@ const tokenStreamCards = [
     body: "Good proc macros produce precise compile-time errors near the bad token, with a message that explains the contract. Bad proc macros produce a riddle somewhere deep in generated code.",
   },
   {
-    title: "Emit the smallest honest expansion",
+    title: "Emit the smallest expansion that works",
     body: "Generated code should still look like normal Rust in spirit: explicit impls, explicit helpers, and explicit ownership. A macro that emits a maze is harder to debug than the boilerplate it replaced.",
   },
 ]
@@ -142,7 +142,7 @@ const hygieneCards = [
   },
   {
     title: "Use `$crate` for internal paths",
-    body: "If a public `macro_rules!` macro expands to items inside its defining crate, `$crate::path::to::item` is the calm way to keep path resolution honest for downstream callers.",
+    body: "If a public `macro_rules!` macro expands to items inside its defining crate, `$crate::path::to::item` is the reliable way to keep path resolution correct for downstream callers.",
   },
   {
     title: "Proc macros need more deliberate identifier handling",
@@ -172,7 +172,7 @@ const whenNotToUseCards = [
   },
   {
     title: "The real variability is type or behavior",
-    body: "Use generics, traits, or enums when the abstraction is about types or behavior sets, not syntax. Macros are a poor substitute for honest type design.",
+    body: "Use generics, traits, or enums when the abstraction is about types or behavior sets, not syntax. Macros are a poor substitute for deliberate type design.",
   },
   {
     title: "The generated surface is large or external",
@@ -243,8 +243,8 @@ export function PageCh20Metaprogramming() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Metaprogramming in Rust is about compile-time code generation with a cost model and a stability model. Use it
-          when syntax is the real problem, not when a function or a type would already tell the truth.
+          Metaprogramming is a build-time tool for removing repetitive syntax while preserving clear APIs. This chapter
+          covers macros and generated code as maintainable compile-time infrastructure.
         </p>
       </div>
 
@@ -280,12 +280,10 @@ export function PageCh20Metaprogramming() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are maintaining a service platform with dozens of wire DTOs, route definitions, repetitive compile-time
-            checks, and a few type-local contracts that should generate impls automatically. A normal function is not
-            enough because the duplication is structural: repeated items, repeated annotations, or repeated syntax around
-            Rust definitions themselves. Rust can help here, but it asks a useful discipline question first: is the
-            repeated shape local and token-like, or are you about to create a public mini-language with its own stability
-            cost?
+            A service platform contains repeated route declarations, DTO metadata, validation boilerplate, and generated
+            adapter code. The business requirement is to remove structural repetition without hiding runtime behavior:
+            use functions for value logic, declarative macros for small syntax patterns, procedural macros for item-level
+            generation, and build-time codegen for external schemas.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -334,7 +332,7 @@ export function PageCh20Metaprogramming() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                The sharp correction for senior engineers is this: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">macro_rules!</code> is not a type system escape hatch. It is a token-pattern expansion tool. Borrow checking, trait solving, and monomorphization still happen after expansion.
+                One correction to keep in mind: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">macro_rules!</code> is not a type system escape hatch. It is a token-pattern expansion tool. Borrow checking, trait solving, and monomorphization still happen after expansion.
               </p>
             </div>
           </div>
@@ -430,7 +428,7 @@ export function PageCh20Metaprogramming() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">Translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -473,7 +471,7 @@ export function PageCh20Metaprogramming() {
               <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 Macros compress source code, but they can expand maintenance cost. If the generated surface, diagnostics,
-                and review burden are worse than the original repetition, the metaprogramming win is imaginary.
+                and review burden are worse than the original repetition, the metaprogramming gave you nothing.
               </p>
             </div>
           </div>
@@ -482,7 +480,7 @@ export function PageCh20Metaprogramming() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -590,7 +588,7 @@ export function PageCh20Metaprogramming() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Escalation rule</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  If this grammar grew much larger, a proc macro or an offline generator might become the more honest tool.
+                  If this grammar grew much larger, a proc macro or an offline generator might become the better tool.
                 </p>
               </div>
             </div>
@@ -613,7 +611,7 @@ export function PageCh20Metaprogramming() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to choose between functions and macros honestly, write a small
+            The companion exercise page asks you to choose between functions and macros on the merits, write a small
             <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">macro_rules!</code>
             helper for repetitive checks, sketch a derive macro API, and map real production needs to declarative macros,
             procedural macros, or build-time code generation.

@@ -228,8 +228,8 @@ export function PageCh44PackagingAndDeployment() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust deployment work gets easier when you treat packaging as a product surface: one target, one artifact, one
-          runtime contract, and one release process operators can trust.
+          Deployment readiness requires reproducible builds, minimal runtime assumptions, artifact provenance, and
+          rollback policy. This chapter covers Rust packaging as an operations contract.
         </p>
       </div>
 
@@ -276,11 +276,9 @@ export function PageCh44PackagingAndDeployment() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Your team ships the same Rust codebase in four shapes: a static Linux service for one edge environment, a
-            multi-stage container image for the main platform, a browser-facing wasm bundle for an admin console, and a
-            native library consumed by another product. The temptation is to call all of that “the release.” The useful
-            engineering answer is narrower: each artifact has its own runtime assumptions, feature set, smoke tests,
-            security metadata, and rollback story.
+            One Rust codebase ships as a static Linux binary, container image, browser Wasm module, and native library.
+            The business requirement is to treat each artifact as its own runtime contract with target-specific features,
+            smoke tests, provenance, signatures, and rollback instructions.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -421,7 +419,7 @@ export function PageCh44PackagingAndDeployment() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

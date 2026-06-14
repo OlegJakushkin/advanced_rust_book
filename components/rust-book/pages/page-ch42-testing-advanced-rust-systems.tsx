@@ -218,8 +218,8 @@ export function PageCh42TestingAdvancedRustSystems() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Advanced Rust testing is not one giant `cargo test` command. It is a layered system of invariants, fixtures,
-          replay, time control, parser hardening, and production-aware budgets.
+          Advanced Rust testing protects invariants across parsers, concurrency, IO, time, and failure modes. This chapter
+          organizes tests around production risk rather than command coverage.
         </p>
       </div>
 
@@ -261,12 +261,9 @@ export function PageCh42TestingAdvancedRustSystems() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are shipping one service that does all the hard things at once: a binary parser with one small unsafe fast
-            path, an async worker boundary, a distributed queue with replay, generated text reports, and a latency budget
-            that must not drift silently. The first incident arrives. A malformed payload panics the parser in fuzzing, a
-            retry path duplicates a side effect, a snapshot diff hides one semantic regression, and a benchmark “pass”
-            masked queue wait that production still cares about. This is where senior-level Rust testing stops being
-            generic advice and becomes systems design.
+            A service combines an unsafe parser fast path, async workers, distributed replay, generated reports, and
+            latency budgets. The business requirement is a deterministic test strategy that proves local invariants,
+            hostile input handling, retry safety, output stability, and performance budgets at the cheapest reliable layer.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <p className="text-sm text-muted-foreground leading-6">
@@ -477,7 +474,7 @@ export function PageCh42TestingAdvancedRustSystems() {
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">How this compares to C++, C#, and Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -529,7 +526,7 @@ export function PageCh42TestingAdvancedRustSystems() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

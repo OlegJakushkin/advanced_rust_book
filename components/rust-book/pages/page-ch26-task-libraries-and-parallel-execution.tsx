@@ -150,7 +150,7 @@ const apiDesignRules = [
 ]
 
 const productionPatterns = [
-  "Use Tokio for waiting-heavy orchestration, Rayon for CPU-heavy batch work, and Crossbeam where thread-based coordination is the honest model.",
+  "Use Tokio for waiting-heavy orchestration, Rayon for CPU-heavy batch work, and Crossbeam where thread-based coordination is the natural fit.",
   "Use `JoinSet` when spawned Tokio tasks are the unit of ownership. Use `FuturesUnordered` when local futures are the unit of composition.",
   "Prefer bounded queues and explicit concurrency caps over unbounded spawn and hope-based backlog control.",
   "Treat `spawn_blocking` as a bridge, not as a place to hide an entire CPU pipeline forever. If the CPU stage dominates, give it a real pool and budget.",
@@ -202,8 +202,8 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust has several strong concurrency libraries because real workloads differ. This chapter is about choosing Tokio,
-          Rayon, Crossbeam, and futures utilities from the execution model and ownership boundary they actually fit.
+          Parallel execution requires matching the library to the workload: async IO, CPU-bound data parallelism, scoped
+          threads, or coordination primitives. This chapter compares those choices through ownership and scheduling.
         </p>
       </div>
 
@@ -238,11 +238,10 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building one service with three very different hot paths. The front door accepts thousands of sockets and
-            mostly waits. The enrichment stage compresses and scores batches of data on CPU cores. The control plane needs
-            bounded queues, cancellation, and careful retries so overload does not amplify itself. Reaching for one library
-            everywhere would be convenient, but it would also be dishonest. Rust&apos;s ecosystem is strongest when you let each
-            workload keep its own scheduling model.
+            A service has a socket-heavy front door, CPU-heavy enrichment, bounded control-plane queues, and retry
+            handling under overload. The business requirement is to match each execution lane to its workload: Tokio for
+            waiting, Rayon for CPU-parallel batches, Crossbeam for thread coordination, and futures combinators for local
+            async orchestration.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -377,7 +376,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Coming from C++, C#, or Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -429,7 +428,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -538,7 +537,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Thread pool choice</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  This is CPU work, so a work-stealing data-parallel pool is the honest boundary.
+                  This is CPU work, so a work-stealing data-parallel pool is the right boundary.
                 </p>
               </div>
             </div>

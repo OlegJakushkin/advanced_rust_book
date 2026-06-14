@@ -16,7 +16,6 @@ import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
-import { CrabStrategyGame } from "../crab-strategy-game"
 import { Button } from "@/components/ui/button"
 
 const comparisons = [
@@ -44,27 +43,27 @@ const diagnostics = [
   {
     code: "error[E0499]",
     title: "cannot borrow as mutable more than once",
-    meaning: "Rust is protecting exclusive mutation. Two active mutable paths to the same state would make the ownership story dishonest.",
-    fix: "Shorten the first borrow, split the state, or centralize mutation in one owner instead of trying to out-argue the rule.",
+    meaning: "Rust is protecting exclusive mutation. Two active mutable paths to the same state would violate Rust's exclusive-mutation rule.",
+    fix: "Shorten the first borrow, split the state, or centralize mutation in one owner instead of working around the borrow checker.",
   },
   {
     code: "error[E0277]",
     title: "type cannot be sent between threads safely",
     meaning: "The thread boundary demands stronger guarantees than the captured type can currently provide.",
-    fix: "Move owned data, share immutable data honestly, or introduce a thread-safe ownership model such as Arc at the boundary that actually needs it.",
+    fix: "Move owned data, share immutable data via shared references, or introduce a thread-safe ownership model such as Arc at the boundary that actually needs it.",
   },
 ]
 
 const productionPatterns = [
   "Turn parse-time bytes into owned domain values before queue, task, or thread boundaries where the caller can no longer guarantee lifetime.",
-  "Use borrowing for narrow read paths, not as a way to smuggle request-local state deeper into the system than it belongs.",
+  "Use borrowing for narrow read paths, not as a way to carry request-local state deeper into the system than it belongs.",
   "Prefer enums, Result, and explicit ownership transitions over sentinel values, ambient mutation, or class-shaped state machines.",
   "Start concrete, then generalize only after the second real implementation or boundary appears.",
 ]
 
 const pitfalls = [
   "Cloning to quiet the borrow checker before deciding whether the callee needed ownership at all.",
-  "Recreating inheritance or shared-mutable object graphs when a struct, enum, or one-owner workflow would have matched the problem more honestly.",
+  "Recreating inheritance or shared-mutable object graphs when a struct, enum, or one-owner workflow would have fit the problem better.",
   "Wrapping broad state in `Arc<Mutex<T>>` as the first move instead of deciding who should own mutation.",
   "Treating 'zero-cost abstraction' like 'zero work.' Iteration, hashing, parsing, allocation, and contention still cost what they cost.",
 ]
@@ -135,8 +134,8 @@ export function PageCh01WhyRustFeelsDifferent() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust feels different because it turns ownership, aliasing, cleanup, and thread safety into design-time
-          constraints instead of late runtime surprises.
+          Production Rust is valuable because ownership, failure handling, concurrency, and deployment rules become
+          explicit contracts that teams can review before release.
         </p>
       </div>
 
@@ -144,11 +143,9 @@ export function PageCh01WhyRustFeelsDifferent() {
         <section className="p-5 rounded-xl bg-card border border-border">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Imagine reviewing the same subsystem in three earlier incarnations. A C++ predecessor was fast, but every rare
-            ownership bug was expensive. A C# rewrite was easier to ship, but GC behavior now leaked into latency. A Go
-            rewrite simplified deployment, but shared state and allocation pressure slowly blurred ownership boundaries.
-            Rust feels different because it refuses to let those tradeoffs stay implicit. It asks you to name ownership,
-            mutation authority, and boundary failure before the code becomes large enough to hide them.
+            A payments platform is moving latency-sensitive services to Rust after repeated incidents in resource
+            ownership, failure recovery, and concurrent state updates. The business requirement is direct: make ownership,
+            mutation authority, and fallibility explicit enough for release review before the system grows.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">What Rust is asking you to state up front</h4>
@@ -159,31 +156,13 @@ export function PageCh01WhyRustFeelsDifferent() {
             </ul>
           </div>
           <div className="mt-4 rounded-lg border border-border bg-card p-4">
-            <h4 className="font-semibold text-foreground mb-2">A senior-engineer reading checklist</h4>
+            <h4 className="font-semibold text-foreground mb-2">A reading checklist</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               {decisionChecklist.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ol>
           </div>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-gradient-to-br from-sky-100/50 via-cyan-100/30 to-amber-100/40 p-5 dark:from-sky-950/30 dark:via-cyan-950/20 dark:to-amber-950/20">
-          <div className="mb-4 flex items-start justify-between gap-4 flex-col lg:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Page-one engagement lab · Teach a crab to survive</h3>
-              <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
-                Rust becomes memorable faster when the ownership story moves. This little beach game lets you write a
-                Rust-flavored strategy, compile it, and watch a Unicode crab collect fish, dodge octopuses, and survive
-                a 50-move tide run on a live canvas. The predators use A* pathfinding, fish respawn after collection,
-                and every turn lands in a replayable strategy log.
-              </p>
-            </div>
-            <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary shrink-0">
-              50-move strategy run
-            </div>
-          </div>
-          <CrabStrategyGame />
         </section>
 
         <section className="space-y-4">
@@ -272,7 +251,7 @@ export function PageCh01WhyRustFeelsDifferent() {
           </div>
 
           <div className="p-4 rounded-lg bg-card border border-border">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: what changes by background</h4>
+            <h4 className="font-semibold text-foreground mb-3">what changes by background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -383,7 +362,7 @@ export function PageCh01WhyRustFeelsDifferent() {
             <div className="flex items-start gap-3">
               <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                The borrow checker is not asking you to appease it. It is exposing an ownership protocol you have not
+                A borrow-checker error is not an obstacle to work around. It is exposing an ownership protocol you have not
                 stated clearly enough yet. Treat that as design feedback, especially in production code.
               </p>
             </div>
@@ -393,7 +372,7 @@ export function PageCh01WhyRustFeelsDifferent() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -494,7 +473,7 @@ export function PageCh01WhyRustFeelsDifferent() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page contains progressive drills for warm-up comprehension, code reading,
+            The companion exercise page contains exercises for warm-up comprehension, code reading,
             implementation, debugging, and production design. One exercise explicitly asks you to interpret three
             compiler diagnostics and propose repairs.
           </p>

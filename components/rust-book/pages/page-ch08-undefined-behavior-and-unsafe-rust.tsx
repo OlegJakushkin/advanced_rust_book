@@ -19,11 +19,11 @@ import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Unsafe narrows the compiler's proof; it does not suspend reality",
+    title: "Unsafe narrows the compiler's proof; it does not relax the requirements",
     body: "An `unsafe` block lets you perform operations the compiler cannot prove correct on its own. It does not make those operations correct. The safety obligations still exist; they simply move into human-audited invariants.",
   },
   {
-    title: "Undefined behavior is optimizer-facing poison, not a guaranteed crash",
+    title: "Undefined behavior lets the optimizer assume the code is impossible, not a guaranteed crash",
     body: "If code reaches UB, the language no longer promises sensible results. You might see a crash, silent corruption, or behavior that changes between optimization levels and platforms. 'It worked in testing' is not a defense.",
   },
   {
@@ -43,7 +43,7 @@ const ubCards = [
   },
   {
     title: "Data races",
-    body: "In Rust, a data race is UB. Safe Rust prevents it. Unsafe code can recreate it by smuggling aliased mutable access or unsafely shared state across threads.",
+    body: "In Rust, a data race is UB. Safe Rust prevents it. Unsafe code can recreate it by aliasing mutable access or sharing state across threads without synchronization.",
   },
   {
     title: "Uninitialized or invalid values",
@@ -140,9 +140,8 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust gives you an explicit escape hatch for representation-sensitive work, but it also makes the liability
-          visible: once you cross into `unsafe`, you are responsible for restoring the guarantees safe Rust normally
-          provides for free.
+          Unsafe Rust is justified only when a small boundary must enforce invariants the compiler cannot verify. This
+          chapter defines the audit obligations for raw pointers, initialization, aliasing, FFI, and safe wrappers.
         </p>
       </div>
 
@@ -177,13 +176,9 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are shipping a packet-processing service that already performs well in safe Rust, but one boundary still
-            matters: parsing a fixed header, passing it through a C library, and reusing buffers in a hot path without
-            accidental extra initialization. In C++, you would likely accept raw pointers and review carefully. In C#,
-            you would cross into `unsafe` or P/Invoke territory and rely on runtime conventions around pinning and
-            marshalling. Rust makes the same low-level work possible, but it asks for a sharper discipline: which exact
-            invariant makes each raw pointer access valid, which thread-safety story still holds, and which part of the
-            public API should remain safe even if the implementation is not?
+            A packet-processing service validates fixed headers, calls a native library, and reuses buffers on a measured
+            hot path. The business requirement is a narrow unsafe boundary with written invariants for pointer validity,
+            initialization, aliasing, thread safety, and safe wrapper behavior.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful rule before writing unsafe code</h4>
@@ -219,9 +214,9 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">What Rust considers undefined behavior</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
-              Treat the list below as the operational map, not as a claim of complete language-lawyer exhaustiveness.
-              The important idea for senior engineers is that UB is exactly where the optimizer is allowed to assume
-              impossible states and make your mental model invalid.
+              Treat the list below as the operational map, not as a claim of complete exhaustiveness.
+              The key idea is that UB is exactly where the optimizer is allowed to assume the
+              impossible states cannot occur, so reasoning based on what the hardware happens to do no longer holds.
             </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {ubCards.map((card) => (
@@ -301,7 +296,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
             <p className="text-sm text-muted-foreground leading-6">
               In Rust, a data race is not merely a bug; it is undefined behavior. Safe Rust prevents it by construction
               through ownership transfer, borrowing rules, and `Send`/`Sync` requirements at thread boundaries. Unsafe
-              code can still manufacture conflicting unsynchronized accesses. That is why shared mutability, raw pointers,
+              code can still create conflicting unsynchronized accesses. That is why shared mutability, raw pointers,
               and concurrency belong in the same audit conversation, not in separate review queues.
             </p>
           </div>
@@ -315,8 +310,8 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <div className="font-medium text-foreground mb-2">What goes wrong</div>
                 <p className="text-sm text-muted-foreground leading-6">
-                  Uninitialized memory is not a value waiting politely offstage. Reading it as a real `T` is UB. The
-                  same is true for manufacturing invalid bit patterns for types that have invariants, such as references,
+                  Uninitialized memory is not a valid value of any type. Reading it as a real `T` is UB. The
+                  same is true for constructing invalid bit patterns for types that have invariants, such as references,
                   many enums, and `bool`.
                 </p>
               </div>
@@ -327,7 +322,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
                   sanctioned way to represent storage that does not yet contain a valid `T`. Write every required field
                   or element first. Only then call{" "}
                   <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">assume_init</code>. The type exists
-                  so the invalid state is modeled explicitly rather than smuggled through fake values.
+                  so the invalid state is modeled explicitly rather than hidden behind fake values.
                 </p>
               </div>
             </div>
@@ -383,7 +378,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: how prior instincts translate</h4>
+            <h4 className="font-semibold text-foreground mb-3">How prior instincts translate</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -425,7 +420,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
             <div className="flex items-start gap-3">
               <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                Unsafe Rust is not a power-up. It is a liability budget. Spend it where the representation win is real,
+                Unsafe Rust is a cost, not a shortcut. Use it where the representation win is real,
                 document the invariant where reviewers can see it, and keep the surface area small enough that future
                 maintainers can still re-derive the proof.
               </p>
@@ -436,7 +431,7 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -541,8 +536,8 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Why `MaybeUninit`</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  It models the not-yet-valid state honestly, which is far better than pretending arbitrary bytes already
-                  represent a valid value.
+                  It models the not-yet-valid state explicitly, which is far better than treating arbitrary bytes as if
+                  they already represent a valid value.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">

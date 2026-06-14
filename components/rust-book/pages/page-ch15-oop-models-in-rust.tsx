@@ -16,7 +16,7 @@ const mentalModelPoints = [
   },
   {
     title: "Open polymorphism and closed polymorphism are different tools",
-    body: "Traits and trait objects are for open sets of behavior. Enums are for closed sets of variants. Senior Rust design often gets simpler the moment this distinction becomes explicit.",
+    body: "Traits and trait objects are for open sets of behavior. Enums are for closed sets of variants. Rust design often gets simpler the moment this distinction becomes explicit.",
   },
   {
     title: "The best OOP translation is often not a translation",
@@ -109,7 +109,7 @@ const productionPatterns = [
   "Start from structs, enums, and modules. Add traits only where multiple implementations are semantically real or a boundary truly benefits from polymorphism.",
   "Prefer composition for shared behavior and shared helpers. If two services share logic, compose a reusable component rather than inventing a base service.",
   "Use enums for closed domain variants such as workflow state, command types, AST nodes, and transport kinds. Use trait objects for plugin registries and runtime-selected behavior.",
-  "Keep runtime trait-object interfaces small and honest. If a boundary wants `dyn Trait`, design for object safety up front instead of repairing it after the fact.",
+  "Keep runtime trait-object interfaces small and focused. If a boundary wants `dyn Trait`, design for object safety up front instead of repairing it after the fact.",
   "If a state machine is operationally important, model transitions explicitly with enums or typestate so invalid states stop leaking into logs, queues, and persistence.",
 ]
 
@@ -212,9 +212,8 @@ export function PageCh15OopModelsInRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust does not reject OOP ideas. It decomposes them: composition instead of inheritance, traits instead of
-          base-class interfaces, enums for closed hierarchies, and explicit state models where class trees once hid the
-          real workflow.
+          Rust object modeling uses composition, traits, enums, and explicit state transitions to represent domain
+          behavior. This chapter maps those choices to maintainable service and library APIs.
         </p>
       </div>
 
@@ -246,13 +245,10 @@ export function PageCh15OopModelsInRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You inherit a service platform built around a classical hierarchy: `BaseDocument`, `ApprovalDocument`,
-            `PublishedDocument`, visitor classes for reporting, and plugin subclasses for transport-specific behavior.
-            The system works, but state bugs leak through flag combinations, new operations require touching multiple class
-            trees, and a shared mutable graph has become expensive to reason about. Rust does not ask for one grand OOP
-            abstraction in return. It asks a sharper set of questions: is this variant set closed or open, is the shared
-            behavior about data reuse or capability reuse, and should invalid states be ruled out with types rather than
-            conventions?
+            A document-workflow platform has approval, publication, reporting, and transport plugin behavior. The
+            business requirement is to separate closed workflow states from open extension points: use enums for the finite
+            document lifecycle, composition for shared state, and trait objects only where runtime plugins are genuinely
+            required.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -347,8 +343,8 @@ export function PageCh15OopModelsInRust() {
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  The senior-engineer translation is this: the public surface is the contract. The internal layout is still
-                  allowed to change. Rust&apos;s module system often gives calmer encapsulation than a deep protected-member
+                  The translation is this: the public surface is the contract. The internal layout is still
+                  allowed to change. Rust&apos;s module system often gives tighter encapsulation than a deep protected-member
                   hierarchy because the exported API is narrower and more deliberate.
                 </p>
               </div>
@@ -462,13 +458,13 @@ export function PageCh15OopModelsInRust() {
               <p className="text-sm text-muted-foreground leading-6">
                 Rust often improves on classical visitor-heavy designs because enums and exhaustiveness make closed trees
                 easier to traverse. But when operations or node families stay open across crates, visitor-like trait seams
-                can still be the honest model.
+                can still be the right model.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: C++, C#, and Go instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">C++, C#, and Go instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -548,7 +544,7 @@ export function PageCh15OopModelsInRust() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -685,7 +681,7 @@ export function PageCh15OopModelsInRust() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to replace inheritance with composition, choose between traits and enums
-            honestly, and refactor a state machine into a more Rust-native model.
+            for a given variant set, and refactor a state machine into a more Rust-native model.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 15 Exercises

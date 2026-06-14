@@ -15,7 +15,7 @@ const mentalModelPoints = [
     body: "Rust does not make graphs hard because of algorithms. It makes you state who owns nodes, how edges refer to nodes, and which traversal should borrow, mutate, or parallelize the frontier.",
   },
   {
-    title: "Stable indices are often calmer than borrowed references",
+    title: "Stable indices are often simpler than borrowed references",
     body: "A graph stored in a `Vec<Node>` plus `NodeId` handles is usually easier to mutate, serialize, queue, and profile than a pointer-rich object graph with many long-lived borrows or ref-counted owners.",
   },
   {
@@ -81,7 +81,7 @@ const ownershipCards = [
   },
   {
     title: "When shared ownership is still real",
-    body: "If several subsystems truly co-own long-lived graph nodes, `Arc<T>` or `Rc<T>` may still be honest. But most search problems only need one owner plus small handles.",
+    body: "If several subsystems truly co-own long-lived graph nodes, `Arc<T>` or `Rc<T>` may still be the right model. But most search problems only need one owner plus small handles.",
   },
 ]
 
@@ -117,17 +117,15 @@ const comparisonCallouts = [
 
 const challengeTracks = [
   {
-    title: "Bronze · Maze solver",
-    points: "10 pts",
-    body: "Build one grid search that finds shortest unweighted steps, renders the winning path, and reports explored frontier width.",
+    title: "Maze solver",
+    body: "Build one grid search that finds shortest unweighted steps, renders the path, and reports explored frontier width.",
     extensions: [
       "Add walls and diagonals as explicit policy choices.",
       "Switch between BFS and A* on the same maze and compare explored nodes.",
     ],
   },
   {
-    title: "Silver · Dependency resolver",
-    points: "15 pts",
+    title: "Dependency resolver",
     body: "Build one directed graph resolver that emits a valid build order, reports one cycle witness, and supports stable node IDs through refactors.",
     extensions: [
       "Add version conflict reporting or optional edges.",
@@ -135,11 +133,10 @@ const challengeTracks = [
     ],
   },
   {
-    title: "Gold · Distributed graph search",
-    points: "20 pts",
+    title: "Distributed graph search",
     body: "Partition one large search frontier across bounded workers, dedupe discoveries explicitly, and trace queue wait, expansion time, and merge lag.",
     extensions: [
-      "Add retry budget and poison-frontier handling.",
+      "Add retry budget and dead-frontier handling.",
       "Track critical-path or oldest-frontier age under load.",
     ],
   },
@@ -214,8 +211,8 @@ export function PageCh39GraphSearchGames() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Graph work in Rust gets calmer when you separate graph ownership from graph traversal, then choose the search
-          and concurrency model from the real workload instead of from a favorite algorithm.
+          Graph search workloads need clear graph ownership, traversal state, memory layout, and concurrency policy. This
+          chapter covers search algorithms as production data-processing components.
         </p>
       </div>
 
@@ -253,11 +250,9 @@ export function PageCh39GraphSearchGames() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building three graph-shaped features at once: a maze solver for a game backend, a dependency
-            resolver for build and deployment order, and a distributed frontier search over a large service topology.
-            The algorithms are well known. The design questions are not. Which graph representation matches the density?
-            Who owns the nodes? Are edges references, indices, or queue messages? When does the search become a thread
-            or distributed-work problem rather than a local loop?
+            A platform team is building a maze solver, a dependency resolver, and a distributed topology search. The
+            business requirement is to choose graph ownership, representation, and traversal policy from the workload
+            before adding parallelism or distributed execution.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -350,8 +345,8 @@ export function PageCh39GraphSearchGames() {
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A reliable correction for senior engineers is this: do not use a more general weighted search when the
-                workload is unweighted. BFS often gives the simplest correct answer and the calmest implementation.
+                A common correction: do not use a more general weighted search when the workload is unweighted. BFS
+                often gives the simplest correct answer and the simplest implementation.
               </p>
             </div>
           </div>
@@ -368,8 +363,8 @@ export function PageCh39GraphSearchGames() {
             </div>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                This is one of the main places Rust differs from many C++ or C# designs: the calm graph is often one
-                owner plus handles, not a web of objects each pretending to be an independent owner.
+                This is one of the main places Rust differs from many C++ or C# designs: the simpler graph is often one
+                owner plus handles, not a web of objects each acting as an independent owner.
               </p>
             </div>
           </div>
@@ -416,7 +411,7 @@ struct Graph {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Notes for C++, C#, and Go engineers</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -431,18 +426,17 @@ struct Graph {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Challenge tracks</h3>
+            <h3 className="text-lg font-semibold text-foreground">Practice projects</h3>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {challengeTracks.map((track) => (
               <div key={track.title} className="rounded-xl border border-border bg-card p-5">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="font-semibold text-foreground">{track.title}</div>
-                  <span className="text-xs uppercase tracking-[0.2em] text-primary">{track.points}</span>
                 </div>
                 <p className="text-sm text-muted-foreground leading-6">{track.body}</p>
                 <div className="mt-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Extension track</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Extensions</div>
                   <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                     {track.extensions.map((item) => (
                       <li key={item}>{item}</li>
@@ -495,7 +489,7 @@ struct Graph {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

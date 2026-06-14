@@ -88,7 +88,7 @@ const lockFreePatterns = [
   "Start with atomics for flags, counters, and sequence numbers. That already covers many hot-path needs.",
   "Full lock-free queues, maps, and intrusive structures usually involve unsafe code, memory reclamation, ABA risk, and much sharper testing requirements.",
   "An uncontended mutex is often cheaper and calmer than a hand-rolled lock-free structure.",
-  "Prefer proven ecosystem implementations for serious lock-free structures rather than building one from scratch inside application code.",
+  "Prefer proven ecosystem implementations for lock-free structures rather than building one from scratch inside application code.",
 ]
 
 const deadlockRules = [
@@ -190,8 +190,8 @@ export function PageCh23SynchronizationPrimitives() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Synchronization primitives are where ownership, visibility, and scheduling become operational. Pick them from the
-          state model, not from habit.
+          Synchronization primitives protect shared state and coordinate progress under contention. This chapter covers
+          mutexes, read-write locks, atomics, barriers, and channels as explicit workload choices.
         </p>
       </div>
 
@@ -225,10 +225,10 @@ export function PageCh23SynchronizationPrimitives() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing a service with three distinct needs. A retry table is truly shared mutable state. A config
-            snapshot is read constantly and updated rarely. A worker queue should really have one owner, with other threads
-            only publishing work. Rust does not want one primitive to blur those cases together. It wants the state model to
-            be explicit first, then the primitive to follow.
+            A retry service has one shared table, one read-mostly configuration snapshot, and one worker queue that should
+            be owned by a single consumer. The business requirement is to select synchronization primitives from state
+            ownership: mutexes for short shared mutation, read-write locks for read-heavy snapshots, atomics for narrow
+            flags, condvars for predicates, and channels for ownership transfer.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful decision order</h4>
@@ -277,10 +277,10 @@ export function PageCh23SynchronizationPrimitives() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                A useful correction for senior engineers is this: an
+                A common misconception is worth correcting: an
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">RwLock</code>
                 is not “a faster mutex.” It is a different fairness and contention trade. If writes are frequent or the read
-                section is tiny, a plain mutex is often the calmer answer.
+                section is tiny, a plain mutex is often the simpler answer.
               </p>
             </div>
           </div>
@@ -353,7 +353,7 @@ export function PageCh23SynchronizationPrimitives() {
             </ul>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                In real systems, serious lock-free structures usually imply unsafe code somewhere in the implementation,
+                In real systems, lock-free structures usually imply unsafe code somewhere in the implementation,
                 plus a memory reclamation story. That is why “avoid all locks” is not a mature design principle by itself.
               </p>
             </div>
@@ -384,7 +384,7 @@ export function PageCh23SynchronizationPrimitives() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Comparing C++, C#, and Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -436,7 +436,7 @@ export function PageCh23SynchronizationPrimitives() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

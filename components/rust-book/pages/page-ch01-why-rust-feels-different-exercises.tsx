@@ -147,7 +147,7 @@ const reviewQuestions = [
 const workingLoop = [
   "Restate the exercise in ownership language before you write code.",
   "Decide whether the boundary wants borrowing, ownership transfer, or explicit cloning.",
-  "Run the lab, then explain the result in terms of rules rather than compiler mood.",
+  "Run the lab, then explain the result by naming the ownership or borrowing rule involved.",
   "Write down one tradeoff you accepted: allocation, duplication, indirection, or API complexity.",
 ]
 
@@ -184,7 +184,7 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Deliberate practice for senior engineers: turn “Rust feels strict” into a repeatable review habit around
+          Exercises to turn “Rust feels strict” into a repeatable review habit around
           ownership, diagnostics, and production design.
         </p>
       </div>
@@ -226,9 +226,6 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Progressive drill
-                </span>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -297,7 +294,7 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
         />
 
         <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Diagnostic reading rubric</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">Questions to ask for each error</h3>
           <div className="grid gap-3 lg:grid-cols-3">
             {diagnosticRubric.map((item) => (
               <div key={item.code} className="rounded-lg border border-border bg-muted/30 p-4">

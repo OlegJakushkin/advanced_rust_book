@@ -254,8 +254,8 @@ export function PageCh30AmqpAndMessageBrokers() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          AMQP systems become calm when you treat the broker as a real system boundary: routing, retries, dead letters,
-          idempotency, and local backpressure all belong in the design up front.
+          Message-broker systems need reliable routing, redelivery handling, idempotent consumers, dead-letter policy, and
+          local backpressure. This chapter covers AMQP as an operational contract.
         </p>
       </div>
 
@@ -293,12 +293,9 @@ export function PageCh30AmqpAndMessageBrokers() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are splitting a synchronous order pipeline into several independently deployable pieces: checkout,
-            billing, search indexing, and notification. Direct calls would couple deploys and failure timing too tightly,
-            but a broker introduces new truths: messages can arrive twice, poison payloads need isolation, queue growth can
-            hide overload, and one consumer crash should not silently erase committed work. Rust fits this well once the
-            ownership model stays explicit: own the decoded message, commit the business effect, record idempotency, then
-            ack.
+            An order pipeline is being split into checkout, billing, search indexing, and notification services. The
+            business requirement is reliable asynchronous handoff: route messages by contract, preserve idempotency, ack
+            only after durable effects, isolate poison messages, and expose queue depth and retry pressure.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -535,7 +532,7 @@ export function PageCh30AmqpAndMessageBrokers() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

@@ -281,8 +281,8 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Build a senior-level mental model for EZKL-style ZKML pipelines, verifiable LLM inference boundaries, and the
-          workload-dependent reality of GPU-backed proving in Rust systems.
+          Verifiable ML inference needs model artifacts, input commitments, proving capacity, accelerator budgets, and
+          verifier integration. This chapter covers EZKL-style ZKML pipelines as production service architecture.
         </p>
       </div>
 
@@ -322,12 +322,10 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Imagine a multi-tenant inference gateway where customers want more than a normal API response. They want
-            evidence that a published model artifact and a published inference policy were actually used for one result,
-            without exposing raw prompts or full intermediate state. The first prototype proves small analytics models
-            locally. The next milestone adds an LLM-scoring step, GPU-backed proving, a verifier API, and an audit trail.
-            The hard part is no longer “can we call a model?” It is how to keep tokenization, quantization, witnesses,
-            proofs, verification, and artifact versions aligned under real latency and resource pressure.
+            A multi-tenant inference gateway must provide audit evidence that a published model artifact and inference
+            policy produced a result while private prompts and intermediate state remain restricted. The business
+            requirement is an artifact pipeline with versioned tokenization, quantization, witness custody, bounded proving
+            lanes, verifier APIs, and resource telemetry.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -539,7 +537,7 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

@@ -71,12 +71,12 @@ const ownershipDesignRules = [
   "Accept borrowed input for read-only work when the caller already owns the data: `&str`, `&[u8]`, `&Path`, and focused borrowed structs.",
   "Return owned values when the result should survive independently of the input or cross a subsystem boundary.",
   "Keep mutable borrows short. A helper function often shortens the exclusive borrow enough to unblock the rest of the flow.",
-  "Use cloning deliberately when duplication is semantically real or operationally cheap enough. Do not treat cloning as the default compiler appeasement strategy.",
+  "Use cloning deliberately when duplication is semantically real or operationally cheap enough. Do not treat cloning as the default way to get past a borrow-checker error.",
 ]
 
 const productionPatterns = [
   "Borrow within parsing, validation, and formatting hot paths when the owner is nearby and the borrowed view stays local.",
-  "Convert to owned domain values before worker queues, caches, retries, or background tasks. Those are ownership boundaries, not convenient places to smuggle references.",
+  "Convert to owned domain values before worker queues, caches, retries, or background tasks. Those are ownership boundaries, not convenient places to carry references deeper.",
   "Prefer APIs that accept borrowed data but return owned results for normalized strings, cache keys, error messages, and protocol envelopes.",
   "Store owned data in long-lived structs unless the type is intentionally a view. Borrow from stored data later; do not make the entire object graph lifetime-heavy without a real payoff.",
 ]
@@ -125,8 +125,8 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust becomes much calmer once ownership is the first question, borrowing is the second, and lifetimes are read
-          as proofs about references rather than as mysterious syntax.
+          Ownership, borrowing, and lifetimes define who may read, mutate, retain, or transfer data at every API boundary.
+          This chapter applies those rules to production interfaces and resource management.
         </p>
       </div>
 
@@ -155,12 +155,9 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are refactoring an ingress service that parses HTTP request data, derives a routing key, emits audit
-            labels, and queues owned jobs for downstream workers. The C++ version once returned references into temporary
-            buffers during a logging fast path. The Go version reused byte slices aggressively enough that ownership
-            became implicit and easy to misuse. In Rust, the central design question is sharper: which layer owns the
-            request bytes, which layers only borrow them temporarily, and which results should become owned values before
-            the next subsystem boundary?
+            An ingress service parses HTTP data, derives routing keys, emits audit labels, and queues work for downstream
+            processors. The business requirement is explicit data ownership at each layer: request bytes stay borrowed only
+            while local, and derived outputs become owned when they cross queues, caches, or worker boundaries.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A reliable order for asking the questions</h4>
@@ -318,7 +315,7 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: what prior instincts help and where they mislead</h4>
+            <h4 className="font-semibold text-foreground mb-3">Where prior-language instincts help and where they mislead</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -370,7 +367,7 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -496,7 +493,7 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>Ownership is the main abstraction. Borrowing and lifetimes refine it; they do not replace it.</li>
             <li>Shared references permit many readers. Mutable references require exclusive access for the duration of mutation.</li>
-            <li>Lifetimes describe valid reference relationships. They do not extend object lifetime or rescue dead owners.</li>
+            <li>Lifetimes describe valid reference relationships. They do not extend object lifetime or keep a dropped owner&apos;s data alive.</li>
             <li>Elision handles common cases, but multiple input borrows often require an explicit output relationship.</li>
             <li>Good production APIs often accept borrowed input and return owned data at subsystem boundaries.</li>
           </ul>

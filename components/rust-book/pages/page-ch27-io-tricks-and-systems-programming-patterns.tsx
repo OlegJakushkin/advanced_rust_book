@@ -162,8 +162,8 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Senior Rust IO work is usually not about one magical API. It is about buffering, batching, handle ownership,
-          backpressure, and knowing which copy or syscall is still on the hot path.
+          Systems IO performance depends on buffering, batching, file descriptor ownership, syscall count, and copy
+          avoidance. This chapter applies those constraints to Rust IO and process-boundary code.
         </p>
       </div>
 
@@ -204,11 +204,10 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are reviewing a service that tails files, parses line-oriented events, proxies small TCP responses, and
-            bursts work through a bounded internal pipeline. The p99 is worse than the CPU profile suggests. The real costs
-            are elsewhere: too many small writes, unbounded queues, a confused handle handoff, and a “zero-copy” claim that
-            removed the wrong copy. Rust gives you the pieces to fix that, but it only helps when the operational model is
-            explicit.
+            A log and event pipeline tails files, parses line-oriented records, proxies small TCP responses, and moves
+            bursts through an internal queue. The business requirement is to reduce syscall churn, copies, and unbounded
+            buffering by assigning clear ownership to bytes and handles, then choosing buffering, batching, vectored IO, or
+            async orchestration from measured cost.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -322,9 +321,9 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
             </div>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                One senior-level correction is worth stating plainly: blocking versus async is not a moral choice. It is a
-                queueing and scheduling choice. Low-concurrency dedicated workers often want blocking simplicity. Large
-                waiting-heavy front doors often want async orchestration. CPU work wants its own budget either way.
+                Blocking versus async is not a style preference. It is a queueing and scheduling choice. Low-concurrency
+                dedicated workers often want blocking simplicity. Large waiting-heavy front doors often want async
+                orchestration. CPU work wants its own budget either way.
               </p>
             </div>
           </div>
@@ -341,7 +340,7 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">How this maps from other languages</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -393,7 +392,7 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -527,7 +526,7 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to compare buffered and unbuffered reads, reason about file-descriptor
             ownership, design a backpressure-aware IO pipeline, and choose when vectored IO, memory mapping, or async
-            orchestration are the honest tools.
+            orchestration are the right tool.
           </p>
           <Button onClick={() => setCurrentPage(53)} className="gap-2">
             Open Chapter 27 Exercises

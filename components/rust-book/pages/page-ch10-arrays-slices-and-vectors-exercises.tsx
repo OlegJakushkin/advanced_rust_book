@@ -1,5 +1,10 @@
 "use client"
 
+export { PageCh10ArraysSlicesAndVectorsExercises } from "./example-exercise-pages"
+
+/*
+"use client"
+
 import { useEffect } from "react"
 import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
@@ -490,7 +495,7 @@ fn main() {
 -## Exercise coverage
 +The exercise page and examples align with the requested Chapter 10 source sections:
  
--The exercise page includes progressive drills covering:
+-The exercise page includes exercises covering:
 -
 -- pointer-type selection
 -- breaking an `Rc` graph back-edge with `Weak`
@@ -518,6 +523,8 @@ fn main() {
  - Cross-links only target chapters that already exist in the repository.
 -- I did not create markdown files because they would not be used by the existing app template.
 -- I kept the build/navigation model consistent with the prior completed chapters.
+ - Cross-links only target chapters that already exist in the repository.
 +- I did not create standalone markdown chapter files because this repository renders book content from TSX pages, not mdbook-style markdown.
 +- I preserved the existing build and navigation model and made only the focused additions required to complete Task 10.
+*/
 ````

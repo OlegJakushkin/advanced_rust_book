@@ -247,9 +247,8 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Secure Rust services are not only about turning TLS on. They are about choosing where TLS ends, what identity is
-          trusted, how credentials rotate, and which HTTP defaults stay safe once the system is under proxies, queues, and
-          long-lived clients.
+          Service security requires clear TLS termination, identity policy, credential rotation, proxy behavior, and safe
+          HTTP defaults. This chapter covers HTTPS and TLS as reviewable service boundaries.
         </p>
       </div>
 
@@ -296,11 +295,9 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You own a Rust API that serves browsers, gRPC clients, and long-lived admin connections. Public traffic enters
-            through a load balancer. Internal service-to-service calls require workload identity. Operators want cert
-            rotation automated, cookie defaults hardened, and local HTTPS tests that do not teach the team bad habits. The
-            real question is not “does the framework support TLS?” The real question is where the trust boundary lives and
-            how the app behaves after the handshake is over.
+            A Rust API serves browsers, service clients, and long-lived admin sessions across public and internal
+            networks. The business requirement is to define TLS termination, certificate custody, peer identity, proxy
+            trust, secure HTTP defaults, local test trust, and rotation policy as one reviewable boundary.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">HTTPS flow as an operational model</div>
@@ -506,7 +503,7 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

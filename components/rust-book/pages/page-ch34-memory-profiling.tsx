@@ -162,7 +162,7 @@ const productionPatterns = [
   "Start with one concrete symptom: rising RSS, OOM, latency under burst, allocator churn, or queue-age growth. Then measure the memory story that matches it.",
   "Keep a small local instrumentation path in the codebase for clone counters, queue depth, and per-request bytes. Heavy external tools are strongest after the first narrow clue exists.",
   "Profile clone pressure and async backlog before assuming a leak. A surprising number of memory incidents are really retention-by-design bugs.",
-  "Use heap profilers to compare snapshots across time, not only to admire one large object graph once.",
+  "Use heap profilers to compare snapshots across time, not only to inspect one large object graph once.",
   "Correlate memory with throughput, queue age, and task counts. A memory graph without a workload graph is often misleading.",
 ]
 
@@ -226,8 +226,8 @@ export function PageCh34MemoryProfiling() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Memory profiling in Rust is usually a design review with measurements attached: which boundary allocates, which
-          boundary retains, and which queue or graph keeps data alive longer than the author intended.
+          Memory profiling identifies where allocations, retention, and queue growth affect cost and reliability. This
+          chapter connects Rust ownership decisions to measurable memory behavior.
         </p>
       </div>
 
@@ -266,11 +266,9 @@ export function PageCh34MemoryProfiling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service passes correctness tests and CPU benchmarks, but its resident set grows during a burst test and never
-            returns to the old floor. One engineer suspects a leak. Another suspects fragmentation. A third finds a new
-            async fan-out path with unbounded queueing and several deep clones per message. Rust gives you strong tools
-            here, but only if the investigation stays operational: measure allocations, inspect retained owners, and
-            separate backlog from unreachable memory.
+            A burst test shows resident memory growth after a service release. The business requirement is to distinguish
+            allocation churn, retained heap, allocator fragmentation, ref-count cycles, arena retention, and async backlog
+            before changing capacity or rewriting code.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical triage order</h4>
@@ -444,7 +442,7 @@ export function PageCh34MemoryProfiling() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Notes by language background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -497,7 +495,7 @@ export function PageCh34MemoryProfiling() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -557,7 +555,7 @@ export function PageCh34MemoryProfiling() {
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="font-semibold text-foreground">Example 2: find an Rc cycle before you call it a leak mystery</h4>
+                <h4 className="font-semibold text-foreground">Example 2: find an Rc cycle before you call it a leak</h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   The first half creates a strong cycle. The second half repairs the parent edge with `Weak`, which turns
                   the retained graph into an observational link instead of another owner.

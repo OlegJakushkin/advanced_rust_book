@@ -253,8 +253,8 @@ export function PageCh22MultithreadingInRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Multithreading in Rust is where ownership, aliasing, and operational realism meet. The language does not ask you
-          to trust that shared state is probably fine. It asks you to model the thread boundary explicitly.
+          Multithreaded Rust systems need clear ownership transfer, shared-state policy, and shutdown behavior. This
+          chapter covers threads, scoped work, channels, and synchronization as production boundaries.
         </p>
       </div>
 
@@ -289,11 +289,10 @@ export function PageCh22MultithreadingInRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are refactoring a service that performs CPU-heavy request preprocessing, maintains a live metrics index,
-            and pushes background jobs to worker threads. One part wants borrowed slice processing over request-local data.
-            Another part wants a shared read-mostly config. A third part wants one owner for mutable state with results
-            sent back to the caller. Rust does not force one concurrency style. It forces one useful question first: what
-            exactly is the ownership model at each thread boundary?
+            A request-processing service performs CPU-heavy preprocessing, updates a metrics index, and dispatches
+            background jobs to worker threads. The business requirement is to define each thread boundary by ownership:
+            move owned jobs, share immutable configuration with Arc, synchronize only truly shared mutation, and use
+            scoped threads for local borrowed slices.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">One correction before we go further</h4>
@@ -568,7 +567,7 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

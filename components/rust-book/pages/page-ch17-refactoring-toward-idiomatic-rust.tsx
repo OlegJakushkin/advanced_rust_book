@@ -12,11 +12,11 @@ import { Button } from "@/components/ui/button"
 const mentalModelPoints = [
   {
     title: "Refactoring in Rust is usually a boundary correction first",
-    body: "The code gets more idiomatic when ownership, borrowing, error flow, and variant shape become honest. Syntax polish matters less than telling the truth about who owns data and which boundary may fail.",
+    body: "The code gets more idiomatic when ownership, borrowing, error flow, and variant shape match what the program actually does. Syntax polish matters less than stating clearly who owns data and which boundary may fail.",
   },
   {
     title: "Translate intent, not the old language surface",
-    body: "A direct port from C++, C#, or Go often preserves the wrong abstraction. Rust wants separate tools for data shape, behavior, visibility, and concurrency boundaries. The refactor succeeds when those concerns stop pretending to be one mechanism.",
+    body: "A direct port from C++, C#, or Go often preserves the wrong abstraction. Rust wants separate tools for data shape, behavior, visibility, and concurrency boundaries. The refactor succeeds when those concerns stop being collapsed into one mechanism.",
   },
   {
     title: "Good idiomatic refactors usually get simpler and more testable together",
@@ -26,7 +26,7 @@ const mentalModelPoints = [
 
 const refactorPasses = [
   {
-    title: "Pass 1 · Make ownership and errors honest",
+    title: "Pass 1 · Make ownership and errors explicit",
     body: "Replace implicit or panic-based control flow with explicit ownership transfer and `Result`-based failure. This is where most lifetime noise and clone pressure begin to fall away.",
   },
   {
@@ -35,7 +35,7 @@ const refactorPasses = [
   },
   {
     title: "Pass 3 · Tighten the operational boundary",
-    body: "Once the data and error model are honest, improve ergonomics, decide what truly becomes async, and leave a thin seam for tests, observability, and production profiling.",
+    body: "Once the data and error model are explicit, improve ergonomics, decide what truly becomes async, and leave a thin seam for tests, observability, and production profiling.",
   },
 ]
 
@@ -119,7 +119,7 @@ fn build_label(service: &str, route: &str) -> String {
     bullets: [
       "Keep bounds, contiguity, aliasing, and lifetime checks outside the unsafe block when possible.",
       "If the caller must uphold the contract, make the function `unsafe fn` and document it explicitly.",
-      "Do not export a safe API that secretly depends on undocumented unsafe preconditions.",
+      "Do not export a safe API that depends on undocumented unsafe preconditions.",
     ],
     code: `pub fn write_header(buf: &mut [u8]) -> Result<(), HeaderError> {
     if buf.len() < 4 {
@@ -145,7 +145,7 @@ fn build_label(service: &str, route: &str) -> String {
   },
   {
     title: "Refactoring synchronous code into async code",
-    body: "Do not start by sprinkling `async` across pure logic. First make the sync boundary honest: owned inputs where work crosses tasks, owned outputs where results cross `await`, and explicit error types. Then make the IO boundary async and keep pure parsing, validation, and domain logic synchronous where possible.",
+    body: "Do not start by sprinkling `async` across pure logic. First make the sync boundary explicit: owned inputs where work crosses tasks, owned outputs where results cross `await`, and explicit error types. Then make the IO boundary async and keep pure parsing, validation, and domain logic synchronous where possible.",
     bullets: [
       "Return owned values across `await` boundaries rather than borrowed references into repository or request storage.",
       "Add `Send` only when the future or captured data must cross threads on a multithreaded executor; add `Sync` only when shared references must be thread-safe.",
@@ -212,7 +212,7 @@ const productionPatterns = [
   "Refactor in passes: ownership and errors first, data model second, async and ergonomics third.",
   "Prefer owned domain values at storage, cache, queue, retry, and async boundaries.",
   "Use traits and `dyn Trait` separately: generic trait bounds for internal reusable logic, `dyn Trait` for actual runtime heterogeneity.",
-  "Keep unsafe refactors honest by shrinking the unsafe surface and moving checks into the safe wrapper.",
+  "Keep unsafe refactors verifiable by shrinking the unsafe surface and moving checks into the safe wrapper.",
   "Profile after the refactor. Removing clones, narrowing errors, and flattening object hierarchies should be validated with allocation, latency, and readability wins, not only intuition.",
 ]
 
@@ -230,7 +230,7 @@ const summaryPoints = [
   "C++-style, C#-style, and Go-style ports usually improve when plain structs, enums, traits, and explicit `Result` boundaries replace inherited or implicit control flow.",
   "Removing clones and reducing lifetime noise usually comes from better ownership boundaries, not from clever annotations.",
   "Safe wrappers over unsafe internals, slice-first or `&str`-first APIs, and thin async shells are all ergonomics moves with real operational payoff.",
-  "A good refactor should make the code easier to test, easier to profile, and easier for another senior engineer to review quickly.",
+  "A good refactor should make the code easier to test, easier to profile, and easier to review quickly.",
 ]
 
 export function PageCh17RefactoringTowardIdiomaticRust() {
@@ -277,8 +277,8 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Refactoring toward idiomatic Rust is rarely about style alone. It is about correcting ownership, error flow,
-          data shape, and runtime boundaries until the code reads the way Rust actually executes.
+          Idiomatic Rust refactoring reduces operational risk by clarifying ownership, error flow, data shape, and
+          execution boundaries. This chapter turns review findings into small, verifiable code changes.
         </p>
       </div>
 
@@ -319,12 +319,9 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You inherit a service written by several experienced engineers, each translating from a different mental
-            model. One part looks like C++ with many objects, pointers, and manual-seeming state transitions. Another
-            part looks like Go with panic-heavy parsing and sentinel values. A third part looks like C# with interface
-            graphs, public mutable fields, and broad runtime dispatch. The code compiles, but it is hard to reason about,
-            hard to test, and expensive to evolve. Rust asks for a more useful refactor target: make ownership obvious,
-            make fallibility explicit, make state shape honest, and then let ergonomics follow.
+            A mature service has accumulated pointer-heavy objects, panic-based parsing, sentinel failures, public mutable
+            records, and broad runtime dispatch. The business requirement is a staged refactor that makes ownership,
+            fallibility, state shape, and test seams explicit before optimizing syntax or async structure.
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             {refactorPasses.map((pass) => (
@@ -379,7 +376,7 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: what to unlearn by background</h4>
+            <h4 className="font-semibold text-foreground mb-3">What to unlearn by background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -461,7 +458,7 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -571,7 +568,7 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Runtime honesty</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Static dispatch</div>
                 <p className="text-xs text-muted-foreground leading-5">
                   The generic processor keeps dispatch static until a real runtime plugin boundary actually appears.
                 </p>

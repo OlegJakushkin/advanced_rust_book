@@ -257,9 +257,8 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Build Rust web APIs with a FastAPI-like developer experience while keeping the real production seams visible:
-          typed handlers, OpenAPI as contract, generated code as transport tooling, and domain services that stay free of
-          HTTP gravity.
+          Web API delivery needs typed handlers, documented contracts, generated transport code, and domain services
+          isolated from HTTP concerns. This chapter builds that production boundary in Rust.
         </p>
       </div>
 
@@ -303,12 +302,10 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Your team has a Python FastAPI prototype that product and client teams love because the handler signatures are
-            readable and the docs surface is immediate. Now the service is moving to Rust because the real workload needs
-            tighter control over latency, concurrency, and failure handling. The wrong migration is to port route code
-            mechanically and let framework request types leak into business logic. The right migration is calmer: preserve
-            the typed experience at the edge, but keep the domain model and application services independent of HTTP,
-            generated docs, and framework-specific transport machinery.
+            An API prototype is being moved to Rust for tighter latency, concurrency, and failure-control requirements
+            while preserving typed handlers and usable documentation. The business requirement is to keep HTTP DTOs,
+            generated OpenAPI artifacts, and framework extractors at the transport edge while domain services remain
+            independent and testable.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">Transport-to-domain pipeline</div>
@@ -529,7 +526,7 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

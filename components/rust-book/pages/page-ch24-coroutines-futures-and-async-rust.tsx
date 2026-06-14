@@ -229,8 +229,8 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust async is futures, state machines, and executors, not goroutines in disguise. The design work is still
-          ownership, borrowing, cancellation, and boundary honesty.
+          Async Rust services depend on futures, executors, cancellation, and ownership across await points. This chapter
+          defines the runtime contract behind coroutines and asynchronous state machines.
         </p>
       </div>
 
@@ -527,7 +527,7 @@ executor polls again
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

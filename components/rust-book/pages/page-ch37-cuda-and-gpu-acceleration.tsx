@@ -276,8 +276,8 @@ export function PageCh37CudaAndGpuAcceleration() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          GPU acceleration in Rust becomes much calmer once you treat CUDA as a throughput boundary with explicit memory,
-          launch, and scheduling cost rather than as a magical faster loop.
+          GPU acceleration is justified by throughput, transfer cost, memory layout, and launch overhead. This chapter
+          covers Rust-side control of accelerator work without hiding those costs.
         </p>
       </div>
 
@@ -315,11 +315,9 @@ export function PageCh37CudaAndGpuAcceleration() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are adding a GPU-backed batch scorer to an existing Rust service. The CPU version already works, the
-            queueing layer is already observable, and the operators already know what a healthy p99 looks like. The
-            temptation is to launch one kernel per request and declare victory. The production answer is calmer: batch
-            move is calmer: batch enough work to amortize the boundary, move owned host data into a checked GPU wrapper, and keep queue wait,
-            transfer, launch, and kernel time visible as separate costs.
+            A batch-scoring service is adding a GPU-backed execution lane beside an existing CPU path. The business
+            requirement is to prove the accelerator boundary pays for itself by measuring queue wait, host-device
+            transfer, launch overhead, kernel time, synchronization, and fallback behavior.
           </p>
         </section>
 
@@ -564,7 +562,7 @@ export function PageCh37CudaAndGpuAcceleration() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

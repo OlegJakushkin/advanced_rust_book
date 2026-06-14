@@ -172,13 +172,13 @@ const explicitMetadataMatrix = [
   {
     need: "Plugin names, capabilities, and config details",
     tool: "Explicit `PluginMetadata` struct",
-    note: "Make important metadata a normal API, not an inferred runtime trick.",
+    note: "Make important metadata a normal API, not a value inferred at runtime.",
   },
 ]
 
 const productionPatterns = [
-  "Use `Any` and `TypeId` only where erased heterogeneous storage is the honest model: request extensions, typed registries, and similar narrow seams.",
-  "If erased storage crosses threads, make the boundary honest with `dyn Any + Send + Sync` or another explicitly thread-safe owner.",
+  "Use `Any` and `TypeId` only where erased heterogeneous storage is genuinely the right model: request extensions, typed registries, and similar narrow seams.",
+  "If erased storage crosses threads, make the boundary explicitly thread-safe with `dyn Any + Send + Sync` or another `Send`/`Sync` owner.",
   "Prefer trait methods and explicit descriptor structs for plugin systems, admin surfaces, and operator-facing metadata.",
   "Generate schemas and descriptors at compile time from transport types when the source shape is already known.",
   "Keep protocol keys, storage keys, and migration identifiers explicit. Never derive them from `TypeId` or `type_name()`.",
@@ -234,8 +234,8 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust has limited runtime reflection on purpose. The language prefers explicit metadata, trait methods, and
-          compile-time generation over broad runtime field inspection.
+          Runtime introspection is limited in Rust, so production systems need explicit metadata and generated
+          descriptors. This chapter covers trait-based inspection, registries, and schema surfaces.
         </p>
       </div>
 
@@ -266,11 +266,10 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building a service platform with three competing demands. The request pipeline wants a typed context
-            bag for per-request extensions. The plugin layer wants names, capabilities, and a small amount of
-            specialized inspection. The admin surface wants schemas and field labels for docs and configuration forms.
-            In C# or Go, teams may reach for general reflection. In Rust, the better question is narrower: do you need
-            type identity, safe downcasting, compile-time generation, or explicit metadata?
+            A service platform needs typed request extensions, plugin capability metadata, and admin-facing schema
+            descriptors. The business requirement is narrow introspection: use TypeId and Any only for type-keyed
+            registries, expose plugin metadata as ordinary trait methods, and generate schema artifacts where field
+            structure must be documented.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -352,7 +351,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                Downcasting is precise, not magical. You only recover a concrete type you already know how to name. That
+                Downcasting is precise and explicit. You only recover a concrete type you already know how to name. That
                 is why it is useful as an edge tool and weak as a general application architecture.
               </p>
             </div>
@@ -483,7 +482,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 If the code only works after many downcasts, the system is probably missing an explicit contract. Rust
-                reflection tools are strongest when they stay narrow and honest.
+                reflection tools are strongest when they stay narrow and explicit.
               </p>
             </div>
           </div>
@@ -492,7 +491,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -545,7 +544,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Good fit</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Request extensions and typed registries are calmer than trying to reflect arbitrary structs.
+                  Request extensions and typed registries are simpler than trying to reflect arbitrary structs.
                 </p>
               </div>
             </div>
@@ -586,7 +585,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Metadata first</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Names and kinds are ordinary trait data, not inferred runtime magic.
+                  Names and kinds are ordinary trait data, not values inferred at runtime.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">

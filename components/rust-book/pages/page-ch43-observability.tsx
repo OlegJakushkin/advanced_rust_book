@@ -231,8 +231,8 @@ export function PageCh43Observability() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Observability is how a Rust service explains itself under load: structured events, bounded metrics, causal traces,
-          and profiling data that still make sense once work crosses tasks, queues, and machines.
+          Observability gives Rust services diagnosable behavior under load. This chapter covers structured logs, metrics,
+          traces, spans, and profiles tied to service-level objectives.
         </p>
       </div>
 
@@ -274,11 +274,9 @@ export function PageCh43Observability() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A queue-backed scoring service starts missing its latency SLO after a routine rollout. CPU usage is ordinary.
-            Handler p50 is calm. But oldest visible message age is rising, one retry lane is amplifying load, and traces
-            stop at the spawned worker boundary so nobody can tell whether the queue or the handler actually owns the delay.
-            The fix is not “add more logs.” The fix is to instrument the right boundary with the right signal and then refactor
-            from evidence instead of folklore.
+            A queue-backed scoring service misses its latency SLO after a rollout while CPU and handler medians remain
+            healthy. The business requirement is to instrument the ownership and execution boundaries that can explain the
+            incident: queue age, retry rate, worker saturation, trace propagation, and cost profiles.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical incident loop</h4>
@@ -485,7 +483,7 @@ e2e_p95_ms < 400`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Notes for C++, C#, and Go backgrounds</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -538,7 +536,7 @@ e2e_p95_ms < 400`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

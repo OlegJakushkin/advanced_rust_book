@@ -167,8 +167,8 @@ export function PageCh02TheRustMentalModelExercises() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Deliberate drills for reasoning about moves, drops, allocation shape, expression-oriented code, and lifetime
-          constraints without hand-waving.
+          Exercises for reasoning about moves, drops, allocation shape, expression-oriented code, and lifetime
+          constraints.
         </p>
       </div>
 
@@ -209,9 +209,6 @@ export function PageCh02TheRustMentalModelExercises() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Ownership drill
-                </span>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">

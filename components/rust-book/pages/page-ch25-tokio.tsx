@@ -146,7 +146,7 @@ const productionPatterns = [
   "Use `tokio::spawn` for concurrent async work, and use `spawn_blocking` or a dedicated thread boundary for CPU-heavy or legacy blocking work.",
   "Prefer bounded channels and explicit concurrency caps over unbounded task fan-out.",
   "Treat graceful shutdown as part of the design, not as a signal handler glued on after the service already works.",
-  "Own values across task boundaries. Borrow locally, but do not smuggle request-local references into spawned work that may outlive the stack frame.",
+  "Own values across task boundaries. Borrow locally, but do not pass request-local references into spawned work that may outlive the stack frame.",
   "Instrument queue depth, shutdown latency, accept errors, and blocking-pool usage before calling the service production-ready.",
 ]
 
@@ -196,8 +196,8 @@ export function PageCh25Tokio() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Tokio is the dominant async runtime in Rust service code. The hard part is not the keyword count. The hard part
-          is choosing honest task boundaries, blocking boundaries, shutdown paths, and backpressure policy.
+          Tokio provides the runtime layer for network services, timers, tasks, and blocking work isolation. This chapter
+          covers backpressure, task ownership, shutdown, and runtime configuration.
         </p>
       </div>
 
@@ -229,12 +229,10 @@ export function PageCh25Tokio() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building an ingress service that accepts TCP traffic, pushes owned jobs into internal queues, touches
-            the filesystem for snapshots, listens on UDP for peer health, and must shut down without dropping in-flight
-            work. One engineer wants to turn every function into `async fn`. Another wants to sprinkle `tokio::spawn`
-            everywhere. A third quietly leaves CPU-heavy parsing on runtime workers. Tokio gives you the tools, but it
-            rewards a calmer order: decide which work is waiting, which work is blocking, which work is owned by one task,
-            and where backpressure belongs.
+            An ingress service accepts TCP traffic, sends owned jobs through internal queues, reads filesystem snapshots,
+            handles UDP health messages, and must shut down without losing in-flight work. The business requirement is to
+            use Tokio where work is waiting, isolate blocking or CPU-heavy stages, bound internal queues, and make graceful
+            shutdown part of the runtime contract.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">Repository note</h4>
@@ -438,7 +436,7 @@ tokio::spawn(async move {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

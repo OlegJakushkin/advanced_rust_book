@@ -1,0 +1,1307 @@
+{
+  "chapters": [
+    {
+      "id": "ch01-why-rust-feels-different",
+      "title": "Chapter 01 · Why Rust Feels Different",
+      "pages": [
+        {
+          "id": "ch01-why-rust-feels-different",
+          "title": "Why Rust Feels Different",
+          "desc": "Control without unsafety by default, zero-cost abstractions, and compiler-guided design",
+          "codes": [
+            "why_rust_pipeline",
+            "why_rust_thread_handoff"
+          ]
+        },
+        {
+          "id": "ch01-why-rust-feels-different-exercises",
+          "title": "Chapter 01 Exercises",
+          "desc": "Progressive drills on diagnostics, tradeoffs, and Rust-first design",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch02-the-rust-mental-model",
+      "title": "Chapter 02 · The Rust Mental Model",
+      "pages": [
+        {
+          "id": "ch02-the-rust-mental-model",
+          "title": "The Rust Mental Model",
+          "desc": "Values, bindings, moves, drops, stack versus heap, expressions, RAII, and lifetimes",
+          "codes": [
+            "mental_model_move_drop",
+            "mental_model_blocks_heap"
+          ]
+        },
+        {
+          "id": "ch02-the-rust-mental-model-exercises",
+          "title": "Chapter 02 Exercises",
+          "desc": "Predict ownership behavior, reason about allocation, and practice expression-oriented Rust",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch03-project-structure-and-tooling",
+      "title": "Chapter 03 · Project Structure and Tooling",
+      "pages": [
+        {
+          "id": "ch03-project-structure-and-tooling",
+          "title": "Project Structure and Tooling",
+          "desc": "Cargo, crates, workspaces, modules, features, dependencies, and a practical workflow",
+          "codes": [
+            "project_structure_module_visibility",
+            "project_structure_feature_flags"
+          ]
+        },
+        {
+          "id": "ch03-project-structure-and-tooling-exercises",
+          "title": "Chapter 03 Exercises",
+          "desc": "Design workspace layout, feature matrices, dependency policy, and the command pack for CI",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch04-ownership-borrowing-and-lifetimes",
+      "title": "Chapter 04 · Ownership, Borrowing, and Lifetimes",
+      "pages": [
+        {
+          "id": "ch04-ownership-borrowing-and-lifetimes",
+          "title": "Ownership, Borrowing, and Lifetimes",
+          "desc": "Ownership as the core design tool, borrowing rules, lifetimes, elision, and ownership-shaped APIs",
+          "codes": [
+            "ownership_borrowing_shared_mutable",
+            "ownership_borrowing_lifetimes"
+          ]
+        },
+        {
+          "id": "ch04-ownership-borrowing-and-lifetimes-exercises",
+          "title": "Chapter 04 Exercises",
+          "desc": "Repair borrow-checker failures, annotate lifetimes only where needed, and design borrowed-input APIs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch05-ownership-inside-structs",
+      "title": "Chapter 05 · Pointers, References, and Ownership Inside Structs",
+      "pages": [
+        {
+          "id": "ch05-ownership-inside-structs",
+          "title": "Pointers, References, and Ownership Inside Structs",
+          "desc": "Owned fields, borrowed fields, Box/Rc/Arc, owned buffers with views, and safe alternatives to self-references",
+          "codes": [
+            "ownership_structs_owned_views",
+            "ownership_structs_pointer_choices"
+          ]
+        },
+        {
+          "id": "ch05-ownership-inside-structs-exercises",
+          "title": "Chapter 05 Exercises",
+          "desc": "Choose field ownership, avoid lifetime-heavy structs, expose safe views, and replace self-references with stable layouts",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch06-ownership-inside-vectors",
+      "title": "Chapter 06 · Pointers, References, and Ownership Inside Vectors",
+      "pages": [
+        {
+          "id": "ch06-ownership-inside-vectors",
+          "title": "Pointers, References, and Ownership Inside Vectors",
+          "desc": "Vec<T> ownership, reference invalidation, reallocation hazards, index handles, stable-address patterns, slices, and safe mutation while iterating",
+          "codes": [
+            "ownership_vectors_indices",
+            "ownership_vectors_boxed_stable"
+          ]
+        },
+        {
+          "id": "ch06-ownership-inside-vectors-exercises",
+          "title": "Chapter 06 Exercises",
+          "desc": "Repair reallocation hazards, switch from references to indices, and mutate vectors safely under production constraints",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch07-copying-data-vs-cloning-data",
+      "title": "Chapter 07 · Copying Data vs Cloning Data",
+      "pages": [
+        {
+          "id": "ch07-copying-data-vs-cloning-data",
+          "title": "Copying Data vs Cloning Data",
+          "desc": "Move semantics, Copy vs Clone, clone-on-write, Rc/Arc cloning costs, allocation discipline, and receiver choices",
+          "codes": [
+            "copying_data_moves_copy_clone",
+            "copying_data_cow_arc"
+          ]
+        },
+        {
+          "id": "ch07-copying-data-vs-cloning-data-exercises",
+          "title": "Chapter 07 Exercises",
+          "desc": "Classify move/copy/clone operations, implement Clone manually, remove unnecessary clones, and choose Copy safely",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch08-undefined-behavior-and-unsafe-rust",
+      "title": "Chapter 08 · Undefined Behavior and Unsafe Rust",
+      "pages": [
+        {
+          "id": "ch08-undefined-behavior-and-unsafe-rust",
+          "title": "Undefined Behavior and Unsafe Rust",
+          "desc": "What Rust considers UB, the role of unsafe, raw pointers, aliasing, data races, uninitialized memory, FFI, and safe abstractions over unsafe internals",
+          "codes": [
+            "unsafe_rust_fill_window",
+            "unsafe_rust_maybe_uninit"
+          ]
+        },
+        {
+          "id": "ch08-undefined-behavior-and-unsafe-rust-exercises",
+          "title": "Chapter 08 Exercises",
+          "desc": "Audit unsafe abstractions, identify UB risks in raw-pointer code, repair MaybeUninit misuse, and design safe wrappers around unsafe boundaries",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch09-smart-pointers-and-pinning",
+      "title": "Chapter 09 · Smart Pointers and Pinning",
+      "pages": [
+        {
+          "id": "ch09-smart-pointers-and-pinning",
+          "title": "Smart Pointers and Pinning",
+          "desc": "Box, Rc, Arc, Cell, RefCell, Mutex, Weak, Pin, and the ownership tradeoffs behind them",
+          "codes": [
+            "smart_pointers_tree",
+            "smart_pointers_pin_poll"
+          ]
+        },
+        {
+          "id": "ch09-smart-pointers-and-pinning-exercises",
+          "title": "Chapter 09 Exercises",
+          "desc": "Choose pointer types deliberately, break cycles with Weak, and explain why pinned futures exist",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch10-arrays-slices-and-vectors",
+      "title": "Chapter 10 · Arrays, Slices, and Vectors",
+      "pages": [
+        {
+          "id": "ch10-arrays-slices-and-vectors",
+          "title": "Arrays, Slices, and Vectors",
+          "desc": "Fixed-size arrays, slice-first APIs, Vec<T> internals, capacity planning, mutation patterns, and contiguous-storage tradeoffs",
+          "codes": [
+            "arrays_slices_vectors_slice_api",
+            "arrays_slices_vectors_capacity"
+          ]
+        },
+        {
+          "id": "ch10-arrays-slices-and-vectors-exercises",
+          "title": "Chapter 10 Exercises",
+          "desc": "Practice slice-first APIs, preallocation decisions, and choosing array, slice, Vec, or inline-first storage under production constraints",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch11-hash-maps-and-sets",
+      "title": "Chapter 11 · Hash Maps and Sets",
+      "pages": [
+        {
+          "id": "ch11-hash-maps-and-sets",
+          "title": "Hash Maps and Sets",
+          "desc": "HashMap and HashSet fundamentals, borrowed lookups, Entry API, BTreeMap tradeoffs, stable ordering, and hasher choices",
+          "codes": [
+            "hash_maps_sets_entry_api",
+            "hash_maps_sets_borrowed_lookup_ordered"
+          ]
+        },
+        {
+          "id": "ch11-hash-maps-and-sets-exercises",
+          "title": "Chapter 11 Exercises",
+          "desc": "Use Entry API deliberately, implement borrowed lookups, and choose between HashMap, HashSet, and ordered tree variants",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch12-matrices-and-multidimensional-data",
+      "title": "Chapter 12 · Matrices and Multidimensional Data",
+      "pages": [
+        {
+          "id": "ch12-matrices-and-multidimensional-data",
+          "title": "Matrices and Multidimensional Data",
+          "desc": "Dense flat storage, row-major vs column-major layout, views, const generics, sparse formats, and HPC interop boundaries",
+          "codes": [
+            "matrices_row_major_dense",
+            "matrices_views_const_generics"
+          ]
+        },
+        {
+          "id": "ch12-matrices-and-multidimensional-data-exercises",
+          "title": "Chapter 12 Exercises",
+          "desc": "Implement a row-major matrix wrapper, replace nested vectors, design no-copy views, and choose dense or sparse layouts deliberately",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch13-arena-allocation",
+      "title": "Chapter 13 · Arena Allocation and Region-Based Memory",
+      "pages": [
+        {
+          "id": "ch13-arena-allocation",
+          "title": "Arena Allocation and Region-Based Memory",
+          "desc": "Bump allocators, arena-backed ASTs, region lifetimes, generational handles, slabs, and locality tradeoffs",
+          "codes": [
+            "arena_allocation_bump_scratch",
+            "arena_allocation_index_ast"
+          ]
+        },
+        {
+          "id": "ch13-arena-allocation-exercises",
+          "title": "Chapter 13 Exercises",
+          "desc": "Build a tiny arena-backed AST, compare Rc graphs with arena handles, and reason about lifetime-grouped memory",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch14-interfaces-in-rust-traits",
+      "title": "Chapter 14 · Interfaces in Rust: Traits",
+      "pages": [
+        {
+          "id": "ch14-interfaces-in-rust-traits",
+          "title": "Interfaces in Rust: Traits",
+          "desc": "Traits as Rust's interface system, trait bounds, associated types, dyn Trait, dispatch choices, and object safety",
+          "codes": [
+            "traits_bounds_associated_types",
+            "traits_dyn_plugin_pipeline"
+          ]
+        },
+        {
+          "id": "ch14-interfaces-in-rust-traits-exercises",
+          "title": "Chapter 14 Exercises",
+          "desc": "Translate familiar interfaces into traits, choose static or dynamic dispatch, and repair object-safety mistakes",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch15-oop-models-in-rust",
+      "title": "Chapter 15 · OOP Models in Rust",
+      "pages": [
+        {
+          "id": "ch15-oop-models-in-rust",
+          "title": "OOP Models in Rust",
+          "desc": "Composition over inheritance, traits and dyn Trait, enums, state patterns, visitors, and Rust-native encapsulation",
+          "codes": [
+            "oop_models_composition_traits",
+            "oop_models_enum_state_machine"
+          ]
+        },
+        {
+          "id": "ch15-oop-models-in-rust-exercises",
+          "title": "Chapter 15 Exercises",
+          "desc": "Replace inheritance with composition, choose enum or trait-based polymorphism, and refactor state machines into Rust-native designs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch16-domain-driven-design-in-rust",
+      "title": "Chapter 16 · Domain-Driven Design in Rust",
+      "pages": [
+        {
+          "id": "ch16-domain-driven-design-in-rust",
+          "title": "Domain-Driven Design in Rust",
+          "desc": "Entities, value objects, aggregates, repositories, invariants, event sourcing, and DDD boundaries",
+          "codes": [
+            "ddd_order_aggregate",
+            "ddd_event_sourced_account"
+          ]
+        },
+        {
+          "id": "ch16-domain-driven-design-in-rust-exercises",
+          "title": "Chapter 16 Exercises",
+          "desc": "Implement newtypes, encode aggregate invariants, and design repository seams for sync and async workloads",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch17-refactoring-toward-idiomatic-rust",
+      "title": "Chapter 17 · Refactoring Toward Idiomatic Rust",
+      "pages": [
+        {
+          "id": "ch17-refactoring-toward-idiomatic-rust",
+          "title": "Refactoring Toward Idiomatic Rust",
+          "desc": "Refactor C++-style, C#-style, and Go-style Rust into clearer ownership, errors, traits, enums, async seams, and testable APIs",
+          "codes": [
+            "refactoring_result_owned_api",
+            "refactoring_traits_enums_testable"
+          ]
+        },
+        {
+          "id": "ch17-refactoring-toward-idiomatic-rust-exercises",
+          "title": "Chapter 17 Exercises",
+          "desc": "Refactor panic-based code into Result-based code, reduce lifetime noise, remove unnecessary clones, and improve test seams",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch18-generics-instead-of-templates",
+      "title": "Chapter 18 · Generics Instead of Templates",
+      "pages": [
+        {
+          "id": "ch18-generics-instead-of-templates",
+          "title": "Generics Instead of Templates",
+          "desc": "Rust generics vs templates, monomorphization, trait bounds, where clauses, associated types, const generics, and performance tradeoffs",
+          "codes": [
+            "generics_batch_bounds",
+            "generics_associated_types_const"
+          ]
+        },
+        {
+          "id": "ch18-generics-instead-of-templates-exercises",
+          "title": "Chapter 18 Exercises",
+          "desc": "Translate template-style helpers into Rust generics, simplify traits with associated types, and implement const-generic fixed-size types",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch19-serialization-and-data-contracts",
+      "title": "Chapter 19 · Serialization and Data Contracts",
+      "pages": [
+        {
+          "id": "ch19-serialization-and-data-contracts",
+          "title": "Serialization and Data Contracts",
+          "desc": "Serde fundamentals, wire formats, schema evolution, custom serializers, zero-copy deserialization, and boundary contracts for distributed systems, WASM, and FFI",
+          "codes": [
+            "serialization_contracts_versioned_event",
+            "serialization_contracts_custom_zero_copy"
+          ]
+        },
+        {
+          "id": "ch19-serialization-and-data-contracts-exercises",
+          "title": "Chapter 19 Exercises",
+          "desc": "Round-trip versioned events, add custom serializers, design zero-copy boundaries, and choose format strategies deliberately",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch20-metaprogramming",
+      "title": "Chapter 20 · Metaprogramming",
+      "pages": [
+        {
+          "id": "ch20-metaprogramming",
+          "title": "Metaprogramming",
+          "desc": "Declarative and procedural macros, token streams, compile-time DSLs, code generation strategies, and when not to use macros",
+          "codes": [
+            "metaprogramming_macro_rules_hygiene",
+            "metaprogramming_compile_time_dsl"
+          ]
+        },
+        {
+          "id": "ch20-metaprogramming-exercises",
+          "title": "Chapter 20 Exercises",
+          "desc": "Choose the right metaprogramming tool, write a small macro_rules helper, and sketch derive and attribute macro APIs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch21-reflection-and-type-introspection",
+      "title": "Chapter 21 · Reflection and Type Introspection",
+      "pages": [
+        {
+          "id": "ch21-reflection-and-type-introspection",
+          "title": "Reflection and Type Introspection",
+          "desc": "Why Rust limits runtime reflection, Any and TypeId, downcasting, macro-based introspection, schema generation, and explicit metadata systems",
+          "codes": [
+            "reflection_any_typeid_registry",
+            "reflection_plugin_metadata_downcast"
+          ]
+        },
+        {
+          "id": "ch21-reflection-and-type-introspection-exercises",
+          "title": "Chapter 21 Exercises",
+          "desc": "Build a small TypeId registry, downcast safely from erased values, and design explicit metadata for plugin boundaries",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch22-multithreading-in-rust",
+      "title": "Chapter 22 · Multithreading in Rust",
+      "pages": [
+        {
+          "id": "ch22-multithreading-in-rust",
+          "title": "Multithreading in Rust",
+          "desc": "Rust's thread safety model, Send and Sync, spawning and scoped threads, shared state, channels, work stealing, and cross-language tradeoffs",
+          "codes": [
+            "multithreading_owned_jobs_channel",
+            "multithreading_shared_state_metrics",
+            "multithreading_scoped_threads_sum"
+          ]
+        },
+        {
+          "id": "ch22-multithreading-in-rust-exercises",
+          "title": "Chapter 22 Exercises",
+          "desc": "Classify Send and Sync, move owned data into worker threads, and compare channel-based and shared-state designs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch23-synchronization-primitives",
+      "title": "Chapter 23 · Synchronization Primitives",
+      "pages": [
+        {
+          "id": "ch23-synchronization-primitives",
+          "title": "Synchronization Primitives",
+          "desc": "Mutex, RwLock, Condvar, atomics, memory ordering, barriers, channels, lock-free patterns, deadlock prevention, and choosing the right primitive",
+          "codes": [
+            "synchronization_mutex_condvar_queue",
+            "synchronization_rwlock_barrier",
+            "synchronization_atomics_ordering"
+          ]
+        },
+        {
+          "id": "ch23-synchronization-primitives-exercises",
+          "title": "Chapter 23 Exercises",
+          "desc": "Replace a Mutex with RwLock where appropriate, reason about Acquire and Release ordering, and repair deadlock-prone designs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch24-coroutines-futures-and-async-rust",
+      "title": "Chapter 24 · Coroutines, Futures, and Async Rust",
+      "pages": [
+        {
+          "id": "ch24-coroutines-futures-and-async-rust",
+          "title": "Coroutines, Futures, and Async Rust",
+          "desc": "Coroutines vs futures, async fn and await, compiler-generated state machines, Pin, executors, cancellation, structured concurrency, async traits, and lifetime pitfalls",
+          "codes": [
+            "async_rust_async_fn_await_block_on",
+            "async_rust_manual_future_state_machine"
+          ]
+        },
+        {
+          "id": "ch24-coroutines-futures-and-async-rust-exercises",
+          "title": "Chapter 24 Exercises",
+          "desc": "Trace async state machines, repair Send-bound spawn problems, and model cancellation and cleanup explicitly",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch25-tokio",
+      "title": "Chapter 25 · Tokio",
+      "pages": [
+        {
+          "id": "ch25-tokio",
+          "title": "Tokio",
+          "desc": "Runtime architecture, tasks and scheduling, spawn vs spawn_blocking, timers, async TCP and UDP, async fs, channels, graceful shutdown, backpressure, and production Tokio patterns",
+          "codes": [
+            "tokio_tasks_backpressure_spawn_blocking",
+            "tokio_tcp_graceful_shutdown"
+          ]
+        },
+        {
+          "id": "ch25-tokio-exercises",
+          "title": "Chapter 25 Exercises",
+          "desc": "Build a small Tokio TCP service, add graceful shutdown, and move blocking CPU work behind spawn_blocking",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch26-task-libraries-and-parallel-execution",
+      "title": "Chapter 26 · Task Libraries and Parallel Execution",
+      "pages": [
+        {
+          "id": "ch26-task-libraries-and-parallel-execution",
+          "title": "Task Libraries and Parallel Execution",
+          "desc": "Tokio tasks, Rayon, Crossbeam, futures orchestration, CPU vs IO workloads, thread pools, backpressure, cancellation, retry, and task API design",
+          "codes": [
+            "task_libraries_tokio_orchestration",
+            "task_libraries_rayon_crossbeam"
+          ]
+        },
+        {
+          "id": "ch26-task-libraries-and-parallel-execution-exercises",
+          "title": "Chapter 26 Exercises",
+          "desc": "Choose Tokio, Rayon, Crossbeam, or futures utilities; implement a bounded worker queue; and add cancellation and retry policy to task orchestration",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch27-io-tricks-and-systems-programming-patterns",
+      "title": "Chapter 27 · IO Tricks and Systems Programming Patterns",
+      "pages": [
+        {
+          "id": "ch27-io-tricks-and-systems-programming-patterns",
+          "title": "IO Tricks and Systems Programming Patterns",
+          "desc": "Buffered IO, zero-copy concepts, memory-mapped files, scatter/gather IO, blocking vs async IO, descriptor ownership, socket tuning, backpressure, and IO profiling",
+          "codes": [
+            "io_patterns_buffered_backpressure",
+            "io_patterns_scatter_gather_socket"
+          ]
+        },
+        {
+          "id": "ch27-io-tricks-and-systems-programming-patterns-exercises",
+          "title": "Chapter 27 Exercises",
+          "desc": "Compare buffered and unbuffered reads, design a backpressure-aware IO pipeline, and reason clearly about descriptor ownership",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch28-cpp-integration",
+      "title": "Chapter 28 · C++ Integration",
+      "pages": [
+        {
+          "id": "ch28-cpp-integration",
+          "title": "C++ Integration",
+          "desc": "Rust FFI fundamentals, C ABI seams, ownership, status-code error handling, unwind policy, and interop testing",
+          "codes": [
+            "cpp_integration_calling_c_abi",
+            "cpp_integration_export_rust_c_abi"
+          ]
+        },
+        {
+          "id": "ch28-cpp-integration-exercises",
+          "title": "Chapter 28 Exercises",
+          "desc": "Flatten Rust types into a C ABI-safe surface, map ownership across the seam, and choose an interop strategy deliberately",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch29-js-and-cpp-integration-for-wasm",
+      "title": "Chapter 29 · JavaScript and C++ Integration for WASM",
+      "pages": [
+        {
+          "id": "ch29-js-and-cpp-integration-for-wasm",
+          "title": "JavaScript and C++ Integration for WASM",
+          "desc": "Rust to WebAssembly, wasm-bindgen, JS interop, boundary data choices, C++ shims, WASI, performance limits, serialization, and debugging",
+          "codes": [
+            "wasm_bindgen_string_array_boundary",
+            "wasm_cpp_ffi_boundary"
+          ]
+        },
+        {
+          "id": "ch29-js-and-cpp-integration-for-wasm-exercises",
+          "title": "Chapter 29 Exercises",
+          "desc": "Export Rust to JavaScript with wasm-bindgen, choose serialization and memory boundaries, and reason about JS/WASM copying costs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch30-amqp-and-message-brokers",
+      "title": "Chapter 30 · AMQP and Message Brokers",
+      "pages": [
+        {
+          "id": "ch30-amqp-and-message-brokers",
+          "title": "AMQP and Message Brokers",
+          "desc": "Broker fundamentals, AMQP exchanges and queues, RabbitMQ with Rust, acknowledgments, retries, dead-letter queues, idempotency, backpressure, serialization, and observability",
+          "codes": [
+            "amqp_direct_exchange_routing",
+            "amqp_idempotent_consumer"
+          ]
+        },
+        {
+          "id": "ch30-amqp-and-message-brokers-exercises",
+          "title": "Chapter 30 Exercises",
+          "desc": "Model an idempotent consumer, add retry and dead-letter handling, and design versioned message contracts",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch31-distributed-task-execution",
+      "title": "Chapter 31 · Distributed Task Execution",
+      "pages": [
+        {
+          "id": "ch31-distributed-task-execution",
+          "title": "Distributed Task Execution",
+          "desc": "Task queues, work distribution models, delivery semantics, leasing, retries, failure isolation, result aggregation, task graphs, tracing, and profiling for distributed workloads",
+          "codes": [
+            "distributed_tasks_lease_idempotent",
+            "distributed_tasks_graph_trace"
+          ]
+        },
+        {
+          "id": "ch31-distributed-task-execution-exercises",
+          "title": "Chapter 31 Exercises",
+          "desc": "Design a lease-based distributed worker, model at-least-once execution with idempotency, and trace distributed task graphs end to end",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch32-mpi-and-high-performance-computing",
+      "title": "Chapter 32 · MPI and High-Performance Computing",
+      "pages": [
+        {
+          "id": "ch32-mpi-and-high-performance-computing",
+          "title": "MPI and High-Performance Computing",
+          "desc": "MPI process model, collectives, data layout, Rust MPI crates, hybrid MPI plus threads, profiling, and HPC production environments",
+          "codes": [
+            "mpi_partition_dense_rows",
+            "mpi_collective_counts_and_allreduce"
+          ]
+        },
+        {
+          "id": "ch32-mpi-and-high-performance-computing-exercises",
+          "title": "Chapter 32 Exercises",
+          "desc": "Partition matrix rows across ranks, choose collective-friendly layouts, and reason about hybrid MPI plus threads and communication profiling",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch33-performance-oriented-rust",
+      "title": "Chapter 33 · Performance-Oriented Rust",
+      "pages": [
+        {
+          "id": "ch33-performance-oriented-rust",
+          "title": "Performance-Oriented Rust",
+          "desc": "Rust's performance model, allocation awareness, cache locality, branch prediction, static dispatch, iterator tradeoffs, benchmarking methodology, and release profile choices",
+          "codes": [
+            "performance_allocation_borrowed_filter",
+            "performance_row_major_scan"
+          ]
+        },
+        {
+          "id": "ch33-performance-oriented-rust-exercises",
+          "title": "Chapter 33 Exercises",
+          "desc": "Write a benchmark plan, refactor for locality, compare loops and iterators responsibly, and make measurement discipline explicit",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch34-memory-profiling",
+      "title": "Chapter 34 · Memory Profiling",
+      "pages": [
+        {
+          "id": "ch34-memory-profiling",
+          "title": "Memory Profiling",
+          "desc": "Measuring allocations, heap profiling, clone pressure, cycle leaks, fragmentation, arena retention, async memory usage, allocator behavior, and footprint reduction",
+          "codes": [
+            "memory_profiling_clone_pressure_counter",
+            "memory_profiling_rc_cycle_leak"
+          ]
+        },
+        {
+          "id": "ch34-memory-profiling-exercises",
+          "title": "Chapter 34 Exercises",
+          "desc": "Find clone pressure, diagnose Rc and Arc leaks, choose profiling tools, and build a memory profiling checklist",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch35-performance-profiling",
+      "title": "Chapter 35 · Performance Profiling",
+      "pages": [
+        {
+          "id": "ch35-performance-profiling",
+          "title": "Performance Profiling",
+          "desc": "CPU profiling, flame graphs, sampling vs instrumentation, Criterion benchmarks, async and lock profiling, serialization and IO analysis, and WASM and FFI profiling boundaries",
+          "codes": [
+            "performance_profiling_hot_stage_summary",
+            "performance_profiling_pipeline_bottleneck"
+          ]
+        },
+        {
+          "id": "ch35-performance-profiling-exercises",
+          "title": "Chapter 35 Exercises",
+          "desc": "Interpret flame graphs, design Criterion benchmarks, separate CPU and waiting bottlenecks, and profile async, WASM, and FFI boundaries deliberately",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch36-distributed-tasks-profiling",
+      "title": "Chapter 36 · Distributed Tasks Profiling",
+      "pages": [
+        {
+          "id": "ch36-distributed-tasks-profiling",
+          "title": "Distributed Tasks Profiling",
+          "desc": "End-to-end latency, queue latency, worker saturation, retry storms, tail latency, distributed tracing, metrics design, task-graph profiling, and capacity planning",
+          "codes": [
+            "distributed_profiling_latency_window",
+            "distributed_profiling_task_graph"
+          ]
+        },
+        {
+          "id": "ch36-distributed-tasks-profiling-exercises",
+          "title": "Chapter 36 Exercises",
+          "desc": "Design saturation metrics, trace tail-latency incidents, identify retry storms, and capacity-plan distributed workers",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch37-cuda-and-gpu-acceleration",
+      "title": "Chapter 37 · CUDA and GPU Acceleration",
+      "pages": [
+        {
+          "id": "ch37-cuda-and-gpu-acceleration",
+          "title": "CUDA and GPU Acceleration",
+          "desc": "When GPU acceleration pays, safe launch wrappers, device-memory ownership, transfer and launch overhead, profiling, and async or distributed integration",
+          "codes": [
+            "cuda_gpu_kernel_launch_wrapper",
+            "cuda_gpu_transfer_budget"
+          ]
+        },
+        {
+          "id": "ch37-cuda-and-gpu-acceleration-exercises",
+          "title": "Chapter 37 Exercises",
+          "desc": "Estimate transfer cost, sketch a safe kernel wrapper, and choose CPU, Rayon, MPI, or CUDA from workload shape",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch38-merkle-tree-games-and-challenges",
+      "title": "Chapter 38 · Merkle Tree Games and Challenges",
+      "pages": [
+        {
+          "id": "ch38-merkle-tree-games-and-challenges",
+          "title": "Merkle Tree Games and Challenges",
+          "desc": "Hash trees, ownership-aware construction, inclusion proofs, persistent variants, parallel construction, serialization, and production challenges around content-addressed storage and distributed verification",
+          "codes": [
+            "merkle_tree_basic_proof",
+            "merkle_parallel_levels"
+          ]
+        },
+        {
+          "id": "ch38-merkle-tree-games-and-challenges-exercises",
+          "title": "Chapter 38 Exercises",
+          "desc": "Implement a Merkle tree API, verify inclusion proofs, and design parallel, tamper-evident, and distributed verification systems",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch39-graph-search-games",
+      "title": "Chapter 39 · Graph Search Games",
+      "pages": [
+        {
+          "id": "ch39-graph-search-games",
+          "title": "Graph Search Games",
+          "desc": "Graph representations in Rust, BFS and DFS, Dijkstra and A*, ownership-friendly graph models, arena-backed graphs, parallel traversal, and challenge tracks for mazes, dependency resolution, and distributed search",
+          "codes": [
+            "graph_search_bfs_handles",
+            "graph_search_dijkstra_astar"
+          ]
+        },
+        {
+          "id": "ch39-graph-search-games-exercises",
+          "title": "Chapter 39 Exercises",
+          "desc": "Implement BFS with stable indices, compare graph representations, and design maze, dependency, and distributed graph-search challenges",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch40-matrix-optimization-games",
+      "title": "Chapter 40 · Matrix Optimization Games",
+      "pages": [
+        {
+          "id": "ch40-matrix-optimization-games",
+          "title": "Matrix Optimization Games",
+          "desc": "Matrix storage layouts, cache-aware multiplication, SIMD opportunities, sparse vs dense tradeoffs, blocking and tiling, parallel matrix operations, GPU offload, and optimization challenge tracks",
+          "codes": [
+            "matrix_games_tiled_matmul",
+            "matrix_games_sparse_frontier"
+          ]
+        },
+        {
+          "id": "ch40-matrix-optimization-games-exercises",
+          "title": "Chapter 40 Exercises",
+          "desc": "Implement naive and tiled multiplication variants, choose sparse or dense representations, and design a fair CPU vs GPU benchmark tournament",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch41-error-handling-in-large-systems",
+      "title": "Chapter 41 · Error Handling in Large Systems",
+      "pages": [
+        {
+          "id": "ch41-error-handling-in-large-systems",
+          "title": "Error Handling in Large Systems",
+          "desc": "Result and Option, typed error enums, thiserror and anyhow, context propagation, async and FFI boundaries, logging discipline, and error-contract design for production systems",
+          "codes": [
+            "error_handling_typed_contracts",
+            "error_handling_async_context"
+          ]
+        },
+        {
+          "id": "ch41-error-handling-in-large-systems-exercises",
+          "title": "Chapter 41 Exercises",
+          "desc": "Convert panic-based logic into typed errors, separate domain and infrastructure failures, and add context to async propagation",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch42-testing-advanced-rust-systems",
+      "title": "Chapter 42 · Testing Advanced Rust Systems",
+      "pages": [
+        {
+          "id": "ch42-testing-advanced-rust-systems",
+          "title": "Testing Advanced Rust Systems",
+          "desc": "Unit tests, integration tests, property testing, fuzzing, unsafe and async testing, distributed-system harnesses, golden files, snapshot testing, and benchmark regression budgets",
+          "codes": [
+            "testing_property_invariant_harness",
+            "testing_async_idempotent_delivery_harness"
+          ]
+        },
+        {
+          "id": "ch42-testing-advanced-rust-systems-exercises",
+          "title": "Chapter 42 Exercises",
+          "desc": "Choose the right test layer, design property and fuzz strategies, build async integration plans, and create a production-grade testing matrix",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch43-observability",
+      "title": "Chapter 43 · Observability",
+      "pages": [
+        {
+          "id": "ch43-observability",
+          "title": "Observability",
+          "desc": "Logging, metrics, tracing, structured logs, OpenTelemetry, async and distributed tracing, profiling in production, alerting, SLOs, and observability-driven refactoring",
+          "codes": [
+            "observability_tracing_tokio_spans",
+            "observability_metrics_slo_window"
+          ]
+        },
+        {
+          "id": "ch43-observability-exercises",
+          "title": "Chapter 43 Exercises",
+          "desc": "Instrument Tokio work with spans, design backpressure and latency metrics, and connect logs, metrics, and traces in incident narratives",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch44-packaging-and-deployment",
+      "title": "Chapter 44 · Packaging and Deployment",
+      "pages": [
+        {
+          "id": "ch44-packaging-and-deployment",
+          "title": "Packaging and Deployment",
+          "desc": "Static binaries, cross-compilation, Docker images, minimal runtime containers, wasm and native-library packaging, CI/CD, supply-chain security, feature-gated builds, and release engineering",
+          "codes": [
+            "packaging_target_matrix",
+            "packaging_release_bundle"
+          ]
+        },
+        {
+          "id": "ch44-packaging-and-deployment-exercises",
+          "title": "Chapter 44 Exercises",
+          "desc": "Build a packaging matrix, design a feature-gated release workflow, add supply-chain checks to CI, and write a production-ready release plan",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch45-capstone-distributed-rust-system",
+      "title": "Chapter 45 · Capstone: A Distributed Rust System",
+      "pages": [
+        {
+          "id": "ch45-capstone-distributed-rust-system",
+          "title": "Capstone: A Distributed Rust System",
+          "desc": "Compose an end-to-end distributed Rust system: typed task envelopes, brokered work, replay-safe completion, Merkle verification, specialized graph and matrix lanes, optional acceleration, and rollout discipline",
+          "codes": [
+            "capstone_task_envelope_routing",
+            "capstone_worker_pool_workloads"
+          ]
+        },
+        {
+          "id": "ch45-capstone-distributed-rust-system-exercises",
+          "title": "Chapter 45 Exercises",
+          "desc": "Review the capstone like a staff engineer: architecture, milestones, queue budgets, replay safety, profiling evidence, and rollout gates",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch46-fastapi-style-web-apps-swagger-openapi-codegen",
+      "title": "Chapter 46 · FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen",
+      "pages": [
+        {
+          "id": "ch46-fastapi-style-web-apps-swagger-openapi-codegen",
+          "title": "FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen",
+          "desc": "Design typed Rust web APIs with extractors, state, OpenAPI and Swagger workflows, generated clients, auth, idempotency, and graceful shutdown—without leaking HTTP into the domain",
+          "codes": [
+            "fastapi_style_handler_service_boundary",
+            "fastapi_style_openapi_codegen_scaffold"
+          ]
+        },
+        {
+          "id": "ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises",
+          "title": "Chapter 46 Exercises",
+          "desc": "Translate FastAPI-style ergonomics into Rust seams, choose an OpenAPI workflow, and prevent documentation or codegen drift",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch47-grpc-services-with-protobuf-and-service-api-codegen",
+      "title": "Chapter 47 · gRPC Services with Protobuf and Service API Codegen",
+      "pages": [
+        {
+          "id": "ch47-grpc-services-with-protobuf-and-service-api-codegen",
+          "title": "gRPC Services with Protobuf and Service API Codegen",
+          "desc": "Treat protobuf as the contract: unary and streaming gRPC shapes, generated code, transport-to-domain mapping, deadlines, retries, metadata, and polyglot compatibility",
+          "codes": [
+            "grpc_transport_to_domain_mapping",
+            "grpc_status_deadline_retry"
+          ]
+        },
+        {
+          "id": "ch47-grpc-services-with-protobuf-and-service-api-codegen-exercises",
+          "title": "Chapter 47 Exercises",
+          "desc": "Choose the right RPC shape, contain generated types to the edge, and test schema evolution, deadlines, and streaming backpressure",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch48-websockets-long-lived-connections",
+      "title": "Chapter 48 · WebSockets and Long-Lived Connections",
+      "pages": [
+        {
+          "id": "ch48-websockets-long-lived-connections",
+          "title": "WebSockets and Long-Lived Connections",
+          "desc": "Model long-lived connection systems with explicit read/write ownership, bounded fan-out, versioned envelopes, reconnect policy, and graceful shutdown",
+          "codes": [
+            "websocket_connection_io_split",
+            "websocket_bounded_fanout_slow_consumers"
+          ]
+        },
+        {
+          "id": "ch48-websockets-long-lived-connections-exercises",
+          "title": "Chapter 48 Exercises",
+          "desc": "Select the right live transport, bound slow consumers, design reconnect semantics, and test connection storms and drains",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch49-https-tls-secure-service-boundaries",
+      "title": "Chapter 49 · HTTPS, TLS, and Secure Service Boundaries",
+      "pages": [
+        {
+          "id": "ch49-https-tls-secure-service-boundaries",
+          "title": "HTTPS, TLS, and Secure Service Boundaries",
+          "desc": "Engineer secure service edges: TLS termination, rustls vs platform TLS, mTLS, certificate rotation, hardened cookies/CORS/HSTS, and safe debugging",
+          "codes": [
+            "https_tls_topology_policy",
+            "https_tls_security_defaults"
+          ]
+        },
+        {
+          "id": "ch49-https-tls-secure-service-boundaries-exercises",
+          "title": "Chapter 49 Exercises",
+          "desc": "Choose TLS ownership, harden edge defaults, design cert rotation and mTLS, and debug trust failures without weakening verification",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch50-libp2p-peer-to-peer-rust-systems",
+      "title": "Chapter 50 · libp2p and Peer-to-Peer Rust Systems",
+      "pages": [
+        {
+          "id": "ch50-libp2p-peer-to-peer-rust-systems",
+          "title": "libp2p and Peer-to-Peer Rust Systems",
+          "desc": "Compose peer identity, discovery, request-response/pub-sub, relay policy, sync, and observability into a reviewable Rust P2P architecture",
+          "codes": [
+            "libp2p_swarm_state_machine",
+            "libp2p_state_sync_conflicts"
+          ]
+        },
+        {
+          "id": "ch50-libp2p-peer-to-peer-rust-systems-exercises",
+          "title": "Chapter 50 Exercises",
+          "desc": "Model swarm loops, bound discovery, plan NAT/relay fallback, and decide when P2P beats brokers or service APIs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch51-zero-knowledge-proofs-rust-engineers",
+      "title": "Chapter 51 · Zero-Knowledge Proofs for Rust Engineers",
+      "pages": [
+        {
+          "id": "ch51-zero-knowledge-proofs-rust-engineers",
+          "title": "Zero-Knowledge Proofs for Rust Engineers",
+          "desc": "Separate statements, witnesses, constraints, transcripts, keys, proofs, and service boundaries so ZK systems stay reviewable in Rust",
+          "codes": [
+            "zkp_statement_witness_proof",
+            "zkp_transcript_domain_separation"
+          ]
+        },
+        {
+          "id": "ch51-zero-knowledge-proofs-rust-engineers-exercises",
+          "title": "Chapter 51 Exercises",
+          "desc": "Keep public and private material distinct, isolate proving from verification, and threat-model proof-backed APIs",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch52-zokrates-workflows-ethereum-verifiers",
+      "title": "Chapter 52 · ZoKrates Workflows and Ethereum Verifiers",
+      "pages": [
+        {
+          "id": "ch52-zokrates-workflows-ethereum-verifiers",
+          "title": "ZoKrates Workflows and Ethereum Verifiers",
+          "desc": "Run ZoKrates like a toolchain: compile/setup/witness/proof/export/verify stages, artifact custody, Ethereum verifier integration, and upgrade discipline",
+          "codes": [
+            "zokrates_workflow_command_plan",
+            "zokrates_ethereum_verifier_boundary"
+          ]
+        },
+        {
+          "id": "ch52-zokrates-workflows-ethereum-verifiers-exercises",
+          "title": "Chapter 52 Exercises",
+          "desc": "Split build/release/runtime responsibilities, version artifacts, keep verifier requests witness-free, and plan audits and rollouts",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch53-ezkl-verifiable-llm-inference-gpu-zkml",
+      "title": "Chapter 53 · EZKL, Verifiable LLM Inference, and GPU-Aware ZKML",
+      "pages": [
+        {
+          "id": "ch53-ezkl-verifiable-llm-inference-gpu-zkml",
+          "title": "EZKL, Verifiable LLM Inference, and GPU-Aware ZKML",
+          "desc": "Productize verifiable inference with explicit model artifacts, tokenization and quantization policy, bounded proving lanes, GPU-aware profiling, and verifier-safe APIs",
+          "codes": [
+            "zkml_verification_boundary_types",
+            "zkml_proving_queue_profile"
+          ]
+        },
+        {
+          "id": "ch53-ezkl-verifiable-llm-inference-gpu-zkml-exercises",
+          "title": "Chapter 53 Exercises",
+          "desc": "Classify ZKML artifacts, separate proving from verification, profile bottlenecks honestly, and plan versioned rollout",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch54-no-std-rust-constrained-runtime-derivatives",
+      "title": "Chapter 54 · no-std Rust and Constrained Runtime Derivatives",
+      "pages": [
+        {
+          "id": "ch54-no-std-rust-constrained-runtime-derivatives",
+          "title": "no-std Rust and Constrained Runtime Derivatives",
+          "desc": "Design portable Rust surfaces across core, alloc, and std: fixed-capacity memory, DMA/MMIO ownership, embedded layering, and host-testable no_std crates",
+          "codes": [
+            "no_std_portable_surface",
+            "no_std_fixed_capacity_dma"
+          ]
+        },
+        {
+          "id": "ch54-no-std-rust-constrained-runtime-derivatives-exercises",
+          "title": "Chapter 54 Exercises",
+          "desc": "Choose the right runtime surface, design fixed-capacity paths, audit constrained unsafe code, and keep portable logic testable from the host",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "appendices-and-integration",
+      "title": "Appendices · Reference and Integration",
+      "pages": [
+        {
+          "id": "appendix-a-rust-syntax-for-cpp-developers",
+          "title": "Appendix A · Rust Syntax for C++ Developers",
+          "desc": "Quick translation guide for C++ engineers moving into Rust ownership, traits, generics, and error handling",
+          "codes": []
+        },
+        {
+          "id": "appendix-b-rust-syntax-for-csharp-developers",
+          "title": "Appendix B · Rust Syntax for C# Developers",
+          "desc": "Quick translation guide for C# engineers moving into Rust ownership, typed errors, and async boundaries",
+          "codes": []
+        },
+        {
+          "id": "appendix-c-rust-syntax-for-go-developers",
+          "title": "Appendix C · Rust Syntax for Go Developers",
+          "desc": "Quick translation guide for Go engineers moving into Rust ownership, traits, and transport boundaries",
+          "codes": []
+        },
+        {
+          "id": "appendix-d-ownership-error-cheat-sheet",
+          "title": "Appendix D · Ownership Error Cheat Sheet",
+          "desc": "Repair patterns for the most common ownership, borrowing, lifetime, and async boundary mistakes",
+          "codes": []
+        },
+        {
+          "id": "appendix-e-unsafe-rust-audit-checklist",
+          "title": "Appendix E · Unsafe Rust Audit Checklist",
+          "desc": "A compact review checklist for unsafe blocks, wrappers, FFI, MMIO, and allocator boundaries",
+          "codes": []
+        },
+        {
+          "id": "appendix-f-trait-object-and-generics-decision-guide",
+          "title": "Appendix F · Trait Object and Generics Decision Guide",
+          "desc": "When to stay concrete, use enums, use generics, or use dyn Trait from the real boundary",
+          "codes": []
+        },
+        {
+          "id": "appendix-g-async-rust-troubleshooting-guide",
+          "title": "Appendix G · Async Rust Troubleshooting Guide",
+          "desc": "A symptom-first reference for Send, cancellation, blocking, queue growth, and task-boundary bugs",
+          "codes": []
+        },
+        {
+          "id": "appendix-h-ffi-checklist",
+          "title": "Appendix H · FFI Checklist",
+          "desc": "ABI, ownership, panic, nullability, and test-lane checks for foreign boundaries",
+          "codes": []
+        },
+        {
+          "id": "appendix-i-performance-checklist",
+          "title": "Appendix I · Performance Checklist",
+          "desc": "A concise review checklist for measurement, layout, allocations, queueing, and validation",
+          "codes": []
+        },
+        {
+          "id": "appendix-j-recommended-crates-by-topic",
+          "title": "Appendix J · Recommended Crates by Topic",
+          "desc": "Common crate starting points to evaluate by topic and boundary shape",
+          "codes": []
+        },
+        {
+          "id": "appendix-k-glossary-of-rust-terms",
+          "title": "Appendix K · Glossary of Rust Terms",
+          "desc": "Compact glossary of Rust terms used repeatedly across the book",
+          "codes": []
+        },
+        {
+          "id": "appendix-l-suggested-reading-path-by-background",
+          "title": "Appendix L · Suggested Reading Path by Background",
+          "desc": "Recommended chapter routes for C++, C#, and Go backgrounds",
+          "codes": []
+        },
+        {
+          "id": "appendix-m-rust-web-services-and-api-contract-checklist",
+          "title": "Appendix M · Rust Web Services and API Contract Checklist",
+          "desc": "A compact contract and rollout checklist for Rust HTTP and gRPC service surfaces",
+          "codes": []
+        },
+        {
+          "id": "appendix-n-zkp-zokrates-and-zkml-production-caveats",
+          "title": "Appendix N · ZKP, ZoKrates, and ZKML Production Caveats",
+          "desc": "Operational caveats for proof-backed systems, generated verifiers, and verifiable ML pipelines",
+          "codes": []
+        },
+        {
+          "id": "appendix-o-no-std-rust-portability-and-audit-checklist",
+          "title": "Appendix O · no-std Rust Portability and Audit Checklist",
+          "desc": "A portability and audit checklist for core, alloc, std, and constrained-runtime Rust",
+          "codes": []
+        },
+        {
+          "id": "exercise-index",
+          "title": "Exercise Index",
+          "desc": "Map every numbered chapter to its exercise page and primary skills for faster practice planning",
+          "codes": []
+        }
+      ]
+    }
+  ],
+  "intros": {
+    "ch09-smart-pointers-and-pinning": "Smart pointers encode ownership count, mutation authority, thread sharing, and address stability. This chapter uses Box, Rc, Arc, Weak, interior mutability, and Pin as production design choices.",
+    "ch10-arrays-slices-and-vectors": "Contiguous storage choices affect allocation, cache locality, and API flexibility. This chapter defines arrays for fixed shape, slices for borrowed access, and vectors for owned growth.",
+    "ch11-hash-maps-and-sets": "Hash maps and sets sit on critical lookup paths. This chapter covers key ownership, borrowed lookup, entry-based updates, deterministic output, and hashing policy for production data access.",
+    "ch14-interfaces-in-rust-traits": "Trait interfaces define capability contracts across library and service boundaries. This chapter covers bounds, associated types, generic dispatch, trait objects, and object safety as reviewable API choices.",
+    "ch13-arena-allocation": "Arena allocation supports workloads that create many related values under one lifecycle. This chapter uses region ownership and stable handles to reduce allocation overhead and simplify teardown.",
+    "ch16-domain-driven-design-in-rust": "Domain-driven Rust encodes business rules in types, constructors, aggregate boundaries, and repository interfaces. This chapter keeps invalid states and persistence concerns out of core domain code.",
+    "ch18-generics-instead-of-templates": "Generics support reusable Rust APIs without sacrificing concrete contracts. This chapter covers trait bounds, associated types, const generics, and monomorphization costs for production libraries.",
+    "ch19-serialization-and-data-contracts": "Serialization defines the contract between Rust services, files, queues, and external clients. This chapter covers versioned payloads, schema ownership, compatibility, and explicit transport boundaries.",
+    "ch22-multithreading-in-rust": "Multithreaded Rust systems need clear ownership transfer, shared-state policy, and shutdown behavior. This chapter covers threads, scoped work, channels, and synchronization as production boundaries.",
+    "ch24-coroutines-futures-and-async-rust": "Async Rust services depend on futures, executors, cancellation, and ownership across await points. This chapter defines the runtime contract behind coroutines and asynchronous state machines.",
+    "ch25-tokio": "Tokio provides the runtime layer for network services, timers, tasks, and blocking work isolation. This chapter covers backpressure, task ownership, shutdown, and runtime configuration.",
+    "ch28-cpp-integration": "Native-library integration is a production boundary with ABI, ownership, memory layout, unwind, and error translation requirements. This chapter defines Rust wrapper patterns for that boundary.",
+    "ch29-js-and-cpp-integration-for-wasm": "WebAssembly integration needs explicit host calls, memory ownership, data batching, and ABI rules. This chapter defines the boundary contracts for browser-facing modules and native shims.",
+    "ch30-amqp-and-message-brokers": "Message-broker systems need reliable routing, redelivery handling, idempotent consumers, dead-letter policy, and local backpressure. This chapter covers AMQP as an operational contract.",
+    "ch33-performance-oriented-rust": "Performance work starts with allocation, data movement, cache behavior, and measurement. This chapter turns Rust optimization into a repeatable review process tied to workload evidence.",
+    "ch35-performance-profiling": "Performance profiling converts slow paths into verifiable bottlenecks with owners, budgets, and measurements. This chapter covers benchmarks, flame graphs, counters, and regression checks.",
+    "ch37-cuda-and-gpu-acceleration": "GPU acceleration is justified by throughput, transfer cost, memory layout, and launch overhead. This chapter covers Rust-side control of accelerator work without hiding those costs.",
+    "ch40-matrix-optimization-games": "Matrix optimization depends on layout, tiling, sparsity, SIMD, thread budgets, and accelerator boundaries. This chapter turns those factors into measurable Rust implementation choices.",
+    "ch41-error-handling-in-large-systems": "Large systems need error contracts that separate domain failures, infrastructure failures, retry policy, and operator context. This chapter covers Rust error handling as a production interface.",
+    "ch46-fastapi-style-web-apps-swagger-openapi-codegen": "Web API delivery needs typed handlers, documented contracts, generated transport code, and domain services isolated from HTTP concerns. This chapter builds that production boundary in Rust.",
+    "ch52-zokrates-workflows-ethereum-verifiers": "Proof workflows need controlled source programs, setup material, witness custody, generated verifiers, and deployment tracking. This chapter covers ZoKrates and Ethereum verification as staged production artifacts.",
+    "ch54-no-std-rust-constrained-runtime-derivatives": "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
+    "ch09-smart-pointers-and-pinning-exercises": "Practice choosing Box, Rc, Arc, Weak, and Pin from real ownership and runtime constraints.",
+    "ch10-arrays-slices-and-vectors-exercises": "Drill slice-first APIs, capacity planning, and when a Vec should stay contiguous rather than turn into a looser shape.",
+    "ch13-arena-allocation-exercises": "Use this page to think in region lifetimes, stable handles, and arena ownership instead of raw pointer convenience.",
+    "ch14-interfaces-in-rust-traits-exercises": "Practice choosing trait bounds, dyn Trait, and object-safe surfaces from the real runtime boundary.",
+    "ch16-domain-driven-design-in-rust-exercises": "Focus on aggregates, value objects, invariants, and repository seams that stay honest under refactoring.",
+    "ch18-generics-instead-of-templates-exercises": "Practice explicit capability bounds, associated types, and const generics without recreating template sprawl.",
+    "ch19-serialization-and-data-contracts-exercises": "Design transport DTOs, schema evolution, and zero-copy boundaries deliberately instead of letting serialization leak inward.",
+    "ch24-coroutines-futures-and-async-rust-exercises": "Trace futures, Send bounds, cancellation, and cleanup by following the actual state machine boundary.",
+    "ch25-tokio-exercises": "Use these drills to reason about runtime ownership, spawn_blocking, bounded queues, and graceful shutdown together.",
+    "ch28-cpp-integration-exercises": "Keep ABI, ownership, and error translation boring and explicit at the FFI seam.",
+    "ch29-js-and-cpp-integration-for-wasm-exercises": "Practice choosing Wasm boundary shapes, batching calls, and keeping JS, Rust, and C++ ownership rules explicit.",
+    "ch30-amqp-and-message-brokers-exercises": "Focus on routing, idempotency, retries, and dead-letter policy the way production incidents will force you to later.",
+    "ch35-performance-profiling-exercises": "Use the profiling drills to separate CPU hotspots from queueing, locking, IO, or serialization before optimizing the wrong thing.",
+    "ch40-matrix-optimization-games-exercises": "Practice choosing dense or sparse layouts, tiling strategy, and fair benchmark boundaries before claiming a matrix win.",
+    "ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises": "Keep HTTP DTOs, service commands, generated docs, and codegen drift under explicit review.",
+    "ch52-zokrates-workflows-ethereum-verifiers-exercises": "Review artifact custody, verifier inputs, rollout policy, and toolchain drift before a proof workflow becomes a production dependency.",
+    "ch54-no-std-rust-constrained-runtime-derivatives-exercises": "Practice designing core/alloc/std boundaries, fixed-capacity data paths, and constrained-runtime audits without losing testability."
+  },
+  "example_titles": {
+    "ch09-smart-pointers-and-pinning": {},
+    "ch10-arrays-slices-and-vectors": {},
+    "ch11-hash-maps-and-sets": {},
+    "ch14-interfaces-in-rust-traits": {},
+    "ch13-arena-allocation": {},
+    "ch16-domain-driven-design-in-rust": {},
+    "ch18-generics-instead-of-templates": {},
+    "ch19-serialization-and-data-contracts": {},
+    "ch22-multithreading-in-rust": {},
+    "ch24-coroutines-futures-and-async-rust": {},
+    "ch25-tokio": {},
+    "ch28-cpp-integration": {},
+    "ch29-js-and-cpp-integration-for-wasm": {},
+    "ch30-amqp-and-message-brokers": {},
+    "ch33-performance-oriented-rust": {},
+    "ch35-performance-profiling": {},
+    "ch37-cuda-and-gpu-acceleration": {},
+    "ch40-matrix-optimization-games": {},
+    "ch41-error-handling-in-large-systems": {},
+    "ch46-fastapi-style-web-apps-swagger-openapi-codegen": {},
+    "ch52-zokrates-workflows-ethereum-verifiers": {},
+    "ch54-no-std-rust-constrained-runtime-derivatives": {}
+  }
+}

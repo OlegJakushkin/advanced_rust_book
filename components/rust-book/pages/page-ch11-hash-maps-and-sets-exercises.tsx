@@ -103,7 +103,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "You stop treating hash iteration order as stable.",
       "You propose either sorting at the boundary or using `BTreeMap` as the primary representation when order is always required.",
-      "You justify the tradeoff in terms of contract clarity, not only test appeasement.",
+      "You justify the tradeoff in terms of contract clarity, not only making tests pass.",
     ],
     hints: [
       "Stable order is a data-structure choice or a render-step choice. Pick one deliberately.",

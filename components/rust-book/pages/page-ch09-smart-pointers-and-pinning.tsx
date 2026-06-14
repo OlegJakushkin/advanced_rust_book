@@ -136,8 +136,8 @@ export function PageCh09SmartPointersAndPinning() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Rust smart pointers are really ownership tools: who owns, who shares, who mutates, which thread is involved,
-          and whether movement itself is still allowed.
+          Smart pointers encode ownership count, mutation authority, thread sharing, and address stability. This chapter
+          uses Box, Rc, Arc, Weak, interior mutability, and Pin as production design choices.
         </p>
       </div>
 
@@ -169,11 +169,9 @@ export function PageCh09SmartPointersAndPinning() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are refactoring a service that has three awkward ownership shapes at once. A parser builds a recursive
-            syntax tree. A single-threaded planning phase shares read-mostly nodes between passes. A runtime phase shares
-            immutable schemas across worker threads while a small mutable control plane coordinates retries. On top of
-            that, some async work is polled through futures whose internal state must not move after polling begins. Rust
-            will not let one pointer type blur those cases together. That is a strength, not friction.
+            A service combines recursive parser state, shared planning data, cross-thread schemas, mutable retry
+            coordination, and pinned async work. The business requirement is to encode each ownership and movement rule in
+            the pointer type: single owner, shared owner, synchronized mutation, non-owning back edge, or immovable state.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A good review order</h4>
@@ -424,7 +422,7 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -476,7 +474,7 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -1157,7 +1155,7 @@ The chapter content maps directly to the requested source sections:
 
 ## Exercise coverage
 
-The exercise page includes progressive drills covering:
+The exercise page includes exercises covering:
 
 - pointer-type selection
 - breaking an `Rc` graph back-edge with `Weak`

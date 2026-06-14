@@ -44,6 +44,8 @@ import { DEFAULT_CODES_CH51 } from "./default-codes-ch51"
 import { DEFAULT_CODES_CH52 } from "./default-codes-ch52"
 import { DEFAULT_CODES_CH53 } from "./default-codes-ch53"
 import { DEFAULT_CODES_CH54 } from "./default-codes-ch54"
+import type { RustRuntimeProfile } from "./runtime-profiles"
+import { runtimeProfileForChapterId } from "./runtime-profiles"
 
 export interface PageConfig {
   id: string
@@ -59,6 +61,12 @@ export interface ChapterConfig {
   title: string
   icon: string
   pages: PageConfig[]
+  /** c2w browser runtime profile; derived from chapter id when omitted. */
+  runtimeProfile?: RustRuntimeProfile
+}
+
+export function chapterRuntimeProfile(chapter: ChapterConfig): RustRuntimeProfile {
+  return chapter.runtimeProfile ?? runtimeProfileForChapterId(chapter.id)
 }
 
 export const CHAPTERS: ChapterConfig[] = [

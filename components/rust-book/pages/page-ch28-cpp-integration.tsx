@@ -182,8 +182,8 @@ export function PageCh28CppIntegration() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          C++ integration in Rust gets calmer when you stop thinking about language friendship and start thinking about ABI,
-          ownership, unwind policy, and wrapper design.
+          Native-library integration is a production boundary with ABI, ownership, memory layout, unwind, and error
+          translation requirements. This chapter defines Rust wrapper patterns for that boundary.
         </p>
       </div>
 
@@ -216,11 +216,9 @@ export function PageCh28CppIntegration() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are replacing one hot C++ subsystem with Rust without forcing the rest of the product to move all at once.
-            The existing host process, plugin loader, and test harness all expect a native boundary. The question is not
-            “can Rust call C++?” The question is sharper: what is the narrowest contract another compiler can trust, who
-            owns memory on each side, and how do you keep panics, exceptions, and ABI drift from turning one integration
-            layer into a permanent incident generator?
+            A product is replacing one hot native subsystem with Rust while keeping an existing host process, plugin
+            loader, and native test harness. The business requirement is a narrow ABI contract with explicit layout,
+            pointer validity, memory ownership, status-code errors, and no cross-language unwinding.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A reliable decision order</h4>
@@ -437,7 +435,7 @@ export function PageCh28CppIntegration() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

@@ -55,7 +55,7 @@ const exercises: Exercise[] = [
       "If the clone stays, what makes it economically justified rather than a reflex?",
     ],
     acceptanceCriteria: [
-      "You distinguish semantic duplication from compiler appeasement.",
+      "You distinguish semantic duplication from borrow-checker work-around.",
       "You propose borrowing as the first repair when the data only needs read access.",
       "You justify any remaining clone in terms of API shape or operational cost.",
     ],
@@ -123,7 +123,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "Your repair ends the borrow before the mutable operation, or deliberately converts to owned data for a justified reason.",
       "You do not default to cloning without explaining why independent ownership is needed.",
-      "You explain the conflict as overlapping borrow duration, not as compiler mood.",
+      "You explain the conflict as overlapping borrow duration, not as ownership or borrowing rule involved.",
     ],
     hints: [
       "Ask when the immutable borrow is last used.",

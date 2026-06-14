@@ -28,7 +28,7 @@ const mentalModelPoints = [
   },
   {
     title: "Choose the handle before you choose the syntax",
-    body: "When the collection shape is fixed, references and slices are excellent. When the collection may grow, shrink, or reshuffle, indices, IDs, `Box<T>`, or arena-like storage are usually the calmer design.",
+    body: "When the collection shape is fixed, references and slices are excellent. When the collection may grow, shrink, or reshuffle, indices, IDs, `Box<T>`, or arena-like storage are usually the more robust design.",
   },
 ]
 
@@ -90,7 +90,7 @@ const productionPatterns = [
 const pitfalls = [
   "Keeping `&T` or `&mut T` from a vector, then calling `push`, `insert`, `reserve`, or another operation that may relocate or reshuffle elements.",
   "Replacing every borrow problem with `Vec<Box<T>>` or `Arc<T>` before deciding whether stable addresses or shared ownership are actually required.",
-  "Using raw pointers or `unsafe` to outsmart vector invalidation in ordinary application code. Most of the time the representation, not the compiler, is the thing to change.",
+  "Using raw pointers or `unsafe` to work around vector invalidation in ordinary application code. Most of the time the representation, not the compiler, is the thing to change.",
   "Assuming an index remains a stable identity after `swap_remove`, sorting, or compaction. Index-based designs still need a policy for reordering.",
   "Mutating vector shape from inside iteration because it looks small in code. Production bugs here are often intermittent and expensive to diagnose in other languages.",
 ]
@@ -132,8 +132,8 @@ export function PageCh06OwnershipInsideVectors() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          The question is rarely whether Rust allows a reference into a vector. The real question is whether the
-          vector&apos;s shape stays stable long enough for that reference to remain the right tool.
+          Vector-backed systems need stable access patterns across growth, mutation, and iteration. This chapter uses
+          indices, handles, slices, and stable storage to keep collection APIs safe under changing data size.
         </p>
       </div>
 
@@ -162,12 +162,9 @@ export function PageCh06OwnershipInsideVectors() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are maintaining a registry of live worker connections. The system scans the vector, marks a few entries,
-            appends new workers during scaling events, and occasionally removes unhealthy ones. In C++, a borrowed pointer
-            into the registry once outlived a `push_back` and became a rare but expensive bug. In Go, an `append` changed
-            the backing array and left old assumptions floating around the code review. Rust asks a sharper question:
-            should this code hold an element reference at all, or should it use an index, an ID, or a separately
-            allocated element with explicit stability?
+            A worker registry tracks live connections, appends new workers during scaling, scans readiness, and removes
+            unhealthy entries. The business requirement is a stable handle policy: use short borrows only while the vector
+            shape is fixed, and use indices, IDs, boxed storage, or arena handles when growth and reordering are normal.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical review order</h4>
@@ -303,7 +300,7 @@ export function PageCh06OwnershipInsideVectors() {
                 A precise note on <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin</code>: pinning
                 can matter for address-sensitive pointees such as certain async or self-referential low-level machinery,
                 but it does not make references into a plain <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;T&gt;</code>{" "}
-                magically stable. For ordinary collection design, indices, boxes, or arena-style handles are the usual tools.
+                stable on its own. For ordinary collection design, indices, boxes, or arena-style handles are the usual tools.
               </p>
             </div>
           </div>
@@ -346,7 +343,7 @@ export function PageCh06OwnershipInsideVectors() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: how old instincts translate</h4>
+            <h4 className="font-semibold text-foreground mb-3">How C++, C#, and Go habits translate</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -399,7 +396,7 @@ export function PageCh06OwnershipInsideVectors() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -435,7 +432,7 @@ export function PageCh06OwnershipInsideVectors() {
               onRevert={() => resetCode("ownership_vectors_indices")}
             />
             <p className="text-xs text-muted-foreground mt-2 leading-5">
-              Quick check: keep the handle as an index, then change task names or add more pushes. The design remains calm
+              Quick check: keep the handle as an index, then change task names or add more pushes. The design stays correct
               because the vector is allowed to grow without carrying old element borrows through the mutation.
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -508,7 +505,7 @@ export function PageCh06OwnershipInsideVectors() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Tradeoff</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Extra allocation buys a stronger address-stability story. Use it when the model needs it, not by reflex.
+                  Extra allocation buys stronger address stability. Use it when the model needs it, not by reflex.
                 </p>
               </div>
             </div>

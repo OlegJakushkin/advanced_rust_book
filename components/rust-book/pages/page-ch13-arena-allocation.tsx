@@ -174,8 +174,8 @@ export function PageCh13ArenaAllocation() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Arena allocation is how you make batch lifetime explicit: many values come into existence together, stay valid
-          together, and disappear together.
+          Arena allocation supports workloads that create many related values under one lifecycle. This chapter uses
+          region ownership and stable handles to reduce allocation overhead and simplify teardown.
         </p>
       </div>
 
@@ -210,12 +210,9 @@ export function PageCh13ArenaAllocation() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building a query service that parses a request, constructs an AST, resolves names, builds a query
-            plan, and then executes it. The whole parse-and-plan graph dies once the request finishes. In C++, you might
-            reach for a region allocator. In C#, you might tolerate short-lived GC pressure. In Go, you might accept many
-            small allocations and hope escape analysis plus the runtime stay kind. Rust gives you a more deliberate
-            option: allocate the whole working set inside one region, traverse it with explicit handles or arena-tied
-            references, then drop or reset the region in one step.
+            A query service parses requests, builds ASTs, resolves names, creates plans, and discards the working graph
+            when each request finishes. The business requirement is region ownership: allocate phase-local data together,
+            traverse it through arena references or stable handles, and release the whole region predictably.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">Why arena allocation matters</h4>
@@ -380,7 +377,7 @@ request ends
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -433,7 +430,7 @@ request ends
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

@@ -77,7 +77,7 @@ const pointerChoices = [
     title: "Arc<T>",
     pointer: "Arc<T>",
     bestFit: "Shared ownership across threads",
-    body: "`Arc<T>` uses atomic reference counting. It enables shared ownership across threads when `T` itself is thread-safe. It does not create mutable safety out of thin air, and it is not a substitute for a clean concurrency design.",
+    body: "`Arc<T>` uses atomic reference counting. It enables shared ownership across threads when `T` itself is thread-safe. It does not by itself make shared mutation safe, and it is not a substitute for a clean concurrency design.",
   },
 ]
 
@@ -110,7 +110,7 @@ const safeAlternatives = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Owning fields and `Box<T>` will feel close to RAII plus unique ownership. The surprise is that Rust does not let you casually embed references into the same object that owns the backing storage and hope discipline will carry the day.",
+    body: "Owning fields and `Box<T>` will feel close to RAII plus unique ownership. The surprise is that Rust does not let you embed references into the same object that owns the backing storage and rely on discipline to keep them valid.",
   },
   {
     title: "C# background",
@@ -125,7 +125,7 @@ const comparisonCallouts = [
 const productionPatterns = [
   "Use borrowed structs for request parsing, protocol decoding, and local inspection where the owner is clearly outside and nearby.",
   "Convert borrowed input into owned domain structs before queues, retries, caches, async tasks, or thread handoff.",
-  "Keep shared ownership honest. Use `Rc<T>` or `Arc<T>` because the model truly has multiple owners, not because you want to silence moves.",
+  "Use `Rc<T>` or `Arc<T>` only when the model truly has multiple owners, not to work around a move error.",
   "Prefer `Box<T>` for recursive or indirection-heavy layouts when you still want one clear owner rather than a shared graph.",
   "If a struct owns a buffer and exposes views, make the views derived from `&self` each time or from stored ranges. Do not try to store references into the same buffer inside the struct.",
 ]
@@ -134,7 +134,7 @@ const pitfalls = [
   "Making long-lived domain types borrow from request buffers because it seems allocation-free. The lifetime coupling usually spreads farther than the allocation savings justify.",
   "Putting `Rc<T>` into code that later wants a thread boundary. `Rc<T>` is single-thread only; replacing it with `Arc<T>` late can reveal a deeper model problem.",
   "Treating `Arc<T>` as a universal answer. Shared ownership is a semantic commitment and an atomic-cost tradeoff, not a default container.",
-  "Trying to build a self-referential struct like `struct Parsed<'a> { raw: String, first: &'a str }`. Safe Rust rejects the ordinary form because moving the owner would invalidate the internal borrow story.",
+  "Trying to build a self-referential struct like `struct Parsed<'a> { raw: String, first: &'a str }`. Safe Rust rejects the ordinary form because moving the owner would invalidate the internal reference.",
   "Overusing lifetime parameters on service structs, then discovering everything from tests to caches to async tasks now carries avoidable lifetime complexity.",
   "Creating `Rc<RefCell<T>>` or `Arc<Mutex<T>>` graphs with back-edges and forgetting about cycles or contention. If shared graphs are real, design the ownership edges deliberately and use `Weak` for non-owning back references.",
 ]
@@ -176,8 +176,8 @@ export function PageCh05OwnershipInsideStructs() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          The hard part is rarely “how do I make a struct compile?” The hard part is deciding whether the struct owns
-          the thing, borrows it, or shares it through explicit indirection.
+          Struct design fixes ownership policy in public data models. This chapter covers owned fields, borrowed views,
+          shared pointers, and stable representations for systems that must expose safe state without hidden aliasing.
         </p>
       </div>
 
@@ -206,12 +206,9 @@ export function PageCh05OwnershipInsideStructs() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            You are designing a service that parses inbound text commands, normalizes metadata, stores a few records,
-            and ships work to background processors. At the input edge, borrowed views are attractive because they avoid
-            unnecessary copying. A few layers later, those same borrowed fields start infecting caches, queues, and test
-            fixtures with lifetime parameters. The central question is not whether Rust “allows references in structs.”
-            It does. The real question is whether this struct should be a transient view or an independently owned piece
-            of state.
+            A command-processing service converts request text into normalized records, stores selected data, and sends
+            background work to processors. The business requirement is to classify every struct as a transient view or
+            owned state, so lifetimes stay local and durable data remains easy to store, test, and move.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A durable design order</h4>
@@ -333,7 +330,7 @@ export function PageCh05OwnershipInsideStructs() {
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">
                   examples/ch05_ownership_inside_structs/owned_buffer_views.rs
                 </code>{" "}
-                mirrors the first worked example below.
+                mirrors the first example below.
               </p>
             </div>
           </div>
@@ -375,7 +372,7 @@ export function PageCh05OwnershipInsideStructs() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout: translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">Translating from C++, C#, and Go</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -427,7 +424,7 @@ export function PageCh05OwnershipInsideStructs() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">
@@ -464,7 +461,7 @@ export function PageCh05OwnershipInsideStructs() {
             <p className="text-xs text-muted-foreground mt-2 leading-5">
               Quick check: run the baseline, then change the raw line passed to{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">LogLine::new</code>. The output
-              changes, but the ownership story stays simple: one owner, many short borrows.
+              changes, but the ownership stays simple: one owner, many short borrows.
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-3">

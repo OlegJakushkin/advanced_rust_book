@@ -304,8 +304,8 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegen() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Build Rust gRPC services the way they survive a polyglot fleet: protobuf as contract, generated transport code as
-          adapter surface, domain mapping by hand, and deadlines, retries, metadata, and tracing kept explicit.
+          gRPC services need stable protobuf contracts, generated transport adapters, explicit domain mapping, deadlines,
+          retries, metadata, and tracing. This chapter covers those contracts in Rust.
         </p>
       </div>
 
@@ -344,12 +344,9 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegen() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            Your platform already has Go and C# services speaking gRPC, and a C++ client still owns one latency-sensitive
-            integration. The Rust service joining that fleet must not only compile; it must preserve contract compatibility,
-            expose useful codegen surfaces, keep domain rules out of generated transport types, and remain operable when
-            deadlines, retries, or streaming backpressure go wrong. The easiest design mistake is to let generated code
-            define the architecture. The calm design is smaller: generated types at the edge, domain types inside, and
-            transport policy visible in one place.
+            A new Rust service is joining an existing gRPC fleet with shared protobuf contracts. The business requirement
+            is to preserve compatibility, expose useful generated clients and server adapters, keep domain rules out of
+            generated transport types, and make deadlines, retries, metadata, and streaming backpressure explicit.
           </p>
         </section>
 
@@ -541,7 +538,7 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegen() {
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
+            <h4 className="font-semibold text-foreground mb-3">Coming from Go, C#, or C++</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -593,7 +590,7 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegen() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

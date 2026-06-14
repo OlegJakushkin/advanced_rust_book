@@ -322,8 +322,8 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          libp2p is most useful when you stop treating peer-to-peer networking as “just sockets” and start treating it as
-          one owned swarm loop plus explicit protocol, connectivity, security, and convergence policy.
+          Peer-to-peer systems need one controlled swarm loop, explicit protocols, connectivity policy, identity
+          management, and convergence rules. This chapter covers libp2p from those production requirements.
         </p>
       </div>
 
@@ -376,12 +376,9 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
             <h3 className="text-lg font-semibold text-foreground">Opening scenario</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
-            You are building a field-deployed coordination system where nodes may sit behind NAT, may lose their central
-            control plane temporarily, and still need to exchange state, verify data, and fan out updates without routing
-            every packet through one permanent hub. A simple client-server API works for the first prototype, but it turns
-            every network split into total loss of service. A broker helps with durability, but it does not solve direct
-            peer reachability or decentralized discovery. This is where libp2p is interesting: not as a crypto-themed
-            novelty, but as a structured way to compose identities, transports, discovery, and protocols in Rust.
+            A field-deployed coordination system must continue exchanging state when nodes lose central connectivity or sit
+            behind restrictive networks. The business requirement is to compose identity, transport, secure channels,
+            discovery, relay policy, request-response, pub-sub, and state convergence inside one bounded peer event loop.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">libp2p-style architecture sketch</div>
@@ -646,7 +643,7 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Worked examples</h3>
+            <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

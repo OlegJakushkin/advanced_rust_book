@@ -1,14 +1,13 @@
 FROM node:22-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then \
-      npm ci; \
-    else \
-      npm install; \
-    fi
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
@@ -20,7 +19,7 @@ ARG PAGES_BASE_PATH=
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV GITHUB_PAGES=${GITHUB_PAGES}
 ENV PAGES_BASE_PATH=${PAGES_BASE_PATH}
-RUN npm run build
+RUN pnpm run build
 
 FROM base AS artifact
 WORKDIR /app
