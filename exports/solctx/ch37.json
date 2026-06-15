@@ -1,0 +1,215 @@
+{
+ "chapterKey": "ch37",
+ "num": 37,
+ "title": "CUDA and GPU Acceleration",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose CPU, Rayon, MPI, or CUDA from the workload",
+   "objective": "Practice selecting the execution model that matches the dominant cost instead of treating acceleration tools as interchangeable.",
+   "starterPrompt": "Classify four workloads: a tiny request-local transform over one 4 KB buffer, a one-node dense batch score over host memory, a multi-node domain-decomposed solver, and a dense batched tensor operation with high arithmetic intensity.",
+   "prompts": [
+    "Which workload should stay on CPU because transfer and launch would dominate?",
+    "Which workload wants Rayon because the data already lives on one node?",
+    "Which workload wants MPI because the dominant partition is already process-level?",
+    "Which workload wants CUDA because dense math can amortize the host-device boundary?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one workload for CPU, one for Rayon, one for MPI, and one for CUDA.",
+    "You justify the GPU case with transfer or launch amortization, not only with the word 'parallel'.",
+    "You keep CPU-bound and waiting-bound questions separate."
+   ],
+   "hints": [
+    "Start with arithmetic intensity and batch size.",
+    "Then ask whether the real boundary is host memory, one node, or many nodes."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Estimate transfer cost before discussing the kernel",
+   "objective": "Translate one matrix job into bytes on the bus before you start tuning arithmetic.",
+   "starterPrompt": "A service offloads one `f32` matrix multiply with A, B, and C each sized 4096 by 4096, transferring A and B to the device and C back once.",
+   "prompts": [
+    "How many bytes does one 4096 by 4096 `f32` matrix occupy?",
+    "What is the total HtoD plus DtoH traffic for the whole call?",
+    "Why is this boundary less painful for GEMM than for tiny vector add?"
+   ],
+   "acceptanceCriteria": [
+    "You compute or approximate the total traffic at about 201,326,592 bytes, or about 192 MiB.",
+    "You explain why dense high-intensity math amortizes the boundary better than tiny low-intensity work.",
+    "You still name launch or synchronization overhead as a separate cost category."
+   ],
+   "hints": [
+    "A matrix has `rows * cols` elements and each `f32` is 4 bytes.",
+    "The point is not exact decimal formatting. The point is whether the workload can pay for the transfer."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Sketch a safe Rust wrapper around a launch boundary",
+   "objective": "Build the host-side wrapper that validates shape and launch config before one small unsafe region.",
+   "starterPrompt": "Implement a small `build_config` and `validate_buffers` pair, then call one `unsafe fn raw_launch(...)` only after those checks succeed.",
+   "prompts": [
+    "Reject mismatched buffer lengths.",
+    "Reject zero-length launches and zero threads per block.",
+    "Return a Rust `Result` from the checked boundary.",
+    "Keep the unsafe region smaller than the validation logic around it."
+   ],
+   "acceptanceCriteria": [
+    "The wrapper checks buffer shape before the unsafe call.",
+    "The wrapper computes block count from length and threads per block.",
+    "The wrapper returns a Rust `Result` rather than a vague boolean.",
+    "The runnable lab prints the expected blocks, threads, and success flag."
+   ],
+   "hints": [
+    "This is the same wrapper discipline used around FFI and unsafe elsewhere in the book.",
+    "The GPU boundary is not special here. The invariants still belong in the safe wrapper."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a tiny-kernel service path that lost to the CPU",
+   "objective": "Refactor a design that launches too often, copies too much, and synchronizes too eagerly.",
+   "starterPrompt": "A service copies one small vector to the device, launches one kernel, waits immediately, copies the result back, and repeats that whole cycle per request item.",
+   "prompts": [
+    "Which fix should come first: batch work, fuse kernels, reuse device buffers, or keep the path on CPU?",
+    "What signal would tell you the path is launch-bound rather than kernel-bound?",
+    "When is the best repair to not use the GPU at all for this route?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one batching or fusion repair and one CPU fallback condition.",
+    "You explain the path in terms of transfer, launch, and synchronization overhead rather than only 'GPU is faster'.",
+    "You mention at least one profiling signal such as launch count, queue wait, or transfer time."
+   ],
+   "hints": [
+    "The simplest win is often fewer launches.",
+    "The second simplest win is not offloading work that is too small to amortize the trip."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Profile a CUDA workload before rewriting the kernel",
+   "objective": "Separate transfer-bound, launch-bound, sync-bound, and kernel-bound cases clearly.",
+   "starterPrompt": "A profiling report says kernel time is 2 ms, host-device copies are 11 ms, queue wait is 6 ms, and total wall time is 24 ms for one batch scorer.",
+   "prompts": [
+    "Which category dominates the first diagnosis?",
+    "Which rewrite is probably premature because the report points elsewhere?",
+    "What next measurement would you take inside the dominant category?"
+   ],
+   "acceptanceCriteria": [
+    "You identify transfer or admission cost, not kernel math, as the dominant issue.",
+    "You reject at least one likely but wrong optimization target such as low-level kernel tuning first.",
+    "You propose one next measurement and one validation metric after the fix."
+   ],
+   "hints": [
+    "If copies and queue wait dominate, shaving kernel arithmetic is not the first win.",
+    "Wall time should drive the next question first."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Integrate a GPU worker into an async and distributed service",
+   "objective": "Make queue budget, retry policy, and device ownership explicit when the GPU becomes a shared specialist subsystem.",
+   "starterPrompt": "You are designing `ingest -> parse -> score on GPU -> persist -> notify`, with bursty traffic, one device per host, and a requirement that duplicate replay stay harmless after crash recovery.",
+   "prompts": [
+    "Where should the bounded GPU queue sit, and what does it own?",
+    "When should the async side hand over owned data to the GPU worker?",
+    "How will you separate transient GPU retry from terminal failure or CPU fallback?",
+    "What metrics would you require before rollout?"
+   ],
+   "acceptanceCriteria": [
+    "You define one explicit bounded GPU admission point.",
+    "You move owned payloads across the async-to-GPU boundary rather than borrowed request-local views.",
+    "You describe one idempotency or duplicate-safe completion rule for replay after crash or lease expiry.",
+    "You mention at least three observability hooks such as queue age, transfer bytes, launch count, or fallback rate."
+   ],
+   "hints": [
+    "Treat the GPU like a scarce worker pool, not like a free helper thread.",
+    "The cleanest design makes queueing, retries, and replay policy visible before the first incident."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What kinds of workloads actually amortize host-device transfer and launch cost well?",
+  "Why is a safe Rust wrapper around a kernel launch mostly an ownership and invariant story?",
+  "What is the practical difference between host memory ownership and device memory ownership?",
+  "Why are queue wait and launch count often more useful than one isolated kernel timing?",
+  "When is CUDA the wrong choice even when a kernel itself is efficient?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Safe launch wrapper",
+  "filename": "safe_launch_wrapper_lab.rs",
+  "runKey": "ch37_ex_safe_kernel_wrapper",
+  "expectedOutput": "blocks = 8\nthreads = 128\nlaunch ok = true",
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct LaunchConfig {\n    threads_per_block: u32,\n    blocks: u32,\n}\n\nfn validate_buffers(a_len: usize, b_len: usize, out_len: usize) -> Result<(), &'static str> {\n    Ok(())\n}\n\nfn build_config(a_len: usize, threads_per_block: u32) -> LaunchConfig {\n    LaunchConfig {\n        threads_per_block,\n        blocks: 0,\n    }\n}\n\nfn main() {\n    let len = 1_024_usize;\n    let threads_per_block = 128_u32;\n\n    let launch_ok = validate_buffers(len, len, len).is_ok();\n    let config = build_config(len, threads_per_block);\n\n    println!(\"blocks = {}\", config.blocks);\n    println!(\"threads = {}\", config.threads_per_block);\n    println!(\"launch ok = {}\", launch_ok);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 28, 32, 33, 35, and 36",
+  "Opening scenario",
+  "At a glance",
+  "Design questions",
+  "The shape of a GPU offload",
+  "Mental model",
+  "Core concepts",
+  "When GPU acceleration makes sense",
+  "How Rust reaches the GPU",
+  "Calling CUDA kernels from Rust",
+  "GPU memory ownership",
+  "Host-device transfer costs and kernel launch overhead",
+  "Matrix and vector workloads",
+  "Profiling CUDA workloads",
+  "Rust abstractions over GPU code",
+  "Integrating CUDA with async and distributed systems",
+  "How this lands depending on where you came from",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: a safe Rust wrapper around a kernel launch",
+  "Example 2: estimate transfer and launch budget before offload",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A GPU is a throughput machine guarded by an expensive boundary. The kernel does not run until you have paid to move data across the bus, configured a launch, and synchronized the result back. This chapter is about owning that boundary from Rust honestly: when the accelerator actu",
+  "Chapter 28 gave us FFI boundary discipline. Chapter 32 covered flat numeric layout and HPC thinking. Chapter 33 explained Rust’s broader performance model. Chapter 35 covered profiling, and Chapter 36 covered queue wait, saturation, and distributed task profiling. CUDA work sits ",
+  "A batch-scoring service already runs on the CPU and meets its latency target most of the time. Under load it starts to fall behind, and someone proposes adding a GPU-backed execution lane beside the existing CPU path. The card is approved on the assumption that &ldquo;the GPU is ",
+  "The real requirement is to prove the accelerator boundary pays for itself before it ships. That means measuring the whole round trip, not just the kernel: how long requests wait in the queue, how many bytes cross to the device and back, what each launch costs, how long the kernel",
+  "Before any of the details, fix the overall shape in your head. A request arrives on the host, where ordinary Rust owns the data. To use the GPU you copy that data across the bus into device memory, launch a kernel, wait for it, then copy the result back. Each arrow in the picture",
+  "Three ideas carry most of the weight in this chapter. The GPU is a throughput device, not a latency device, so it only repays you when the work is big and regular enough to amortize that boundary. Rust’s job is rarely to write the kernel; it is to keep the host side of the bounda",
+  "The single number that predicts whether a GPU helps is arithmetic intensity: how much math you do per byte you move across the bus. A workload that does a great deal of computation on a small amount of data can hide the transfer cost behind the kernel and win comfortably. A workl",
+  "CUDA is one option on a spectrum, not the default destination for anything slow. Before reaching for the device, place the work on this ladder of escalating mechanisms. Most service code never needs to climb past the first two rungs, and the right answer is frequently &ldquo;a CP",
+  "Rust does not have a single blessed CUDA story, and that is fine, because the choice is mostly about where your team wants the boundary to sit rather than which crate is fashionable. There are three broad shapes, and they differ in how much of the device you are choosing to own d",
+  "The key decision is less about one specific crate and more about boundary shape. If your team already owns CUDA kernels in native code, FFI may be the calmest first move. If Rust should also own the host-side driver boundary, a wrapper crate can reduce boilerplate. If the product",
+  "Whatever FFI or wrapper layer you pick, the safe call shape is the same and it is worth memorizing. There is one public, safe function the rest of the service calls, and one tiny private unsafe function that does the actual launch. The safe function’s only job is to check the inv",
+  "This is one of the cleanest places for Rust to earn its keep. In C++ host code the buffer shape and launch invariants usually live in convention and review comments, so a mismatched length is a silent corruption waiting to happen. The Rust version makes those checks routine and i",
+  "The most common mental-model mistake is to treat device memory as if it were just host memory with a faster processor attached. It is not. Host memory and device memory are two separate domains with separate allocators, and a pointer into one is meaningless in the other. A Vec<T>",
+  "Two fixed costs sit between you and the kernel, and both are easy to forget because neither shows up in a kernel-only profile. The first is the copy across the bus, paid in both directions: every input you move to the device and every result you move back is bytes on the wire. Fo",
+  "The fastest wrong architecture is often a service that moves small tensors to the GPU, launches one tiny kernel, synchronizes immediately, and moves the result back. Measure the whole round trip before you call the kernel a win.",
+  "The classic GPU demo is a vector add, and it is a misleading one. Vector add reads two arrays, adds them, and writes a third: one arithmetic operation per several bytes moved, which makes it memory-bandwidth-limited and acutely transfer-sensitive. It is a fine way to learn the bo",
+  "The point of profiling here is to refuse to call the whole feature &ldquo;GPU work&rdquo; and instead break the wall-clock time into named stages. A request spends time waiting in the queue, copying host-to-device, launching and running the kernel, synchronizing, and copying devi",
+  "A practical first question is simple: are you transfer-bound, launch-bound, queue-bound, or actually kernel-bound? A kernel-only profile cannot answer that by itself.",
+  "Good GPU code tends to layer into three levels, and the most common design mistake is exposing the wrong one to the rest of the system. At the bottom is a narrow safe wrapper around a single launch. In the middle are the handles that make reuse and admission explicit — a device b",
+  "Once a GPU lives inside an async service, treat it the way you would treat any scarce shared resource: as one worker behind a bounded queue, not as an open destination for fan-out. Async tasks can generate work far faster than a single device can absorb it, so the queue is where ",
+  "The GPU hardware is the same regardless of your background; what differs is the habit you bring to its boundary. Each of these is a mental-model shift rather than an API mapping — the trap that the language you know best sets for you when you reach for a device.",
+  "These are the habits that keep a GPU lane healthy once it is more than a benchmark. They share a theme: state the budget and the ownership before the device ever runs, and measure the whole path afterward, so the accelerator stays a deliberate decision rather than an assumption.",
+  "Almost every failure mode below is a systems mistake wearing a performance costume. The kernel is rarely the problem; the trouble is what surrounds it — too many small launches, too much copying, a borrowed buffer that outlived its request, or one shared device with no admission ",
+  "The most common CUDA mistake in service code is not a wrong kernel intrinsic. It is a wrong systems model: too many tiny launches, too much copying, or too little admission control around one scarce device.",
+  "This is the safe-gate pattern from earlier, made runnable. Read it in the order of the flow diagram above: launch_vec_add calls build_launch_config first (which rejects empty input and zero thread counts), allocates the three DeviceBuffer owners, and only then enters the unsafe b",
+  "Grid and block shape are checked before the raw launch becomes even possible.",
+  "Device buffers are explicit owners. The host wrapper decides when they exist and when they disappear.",
+  "The unsafe block is small enough that another engineer can re-derive the invariants quickly.",
+  "The first GPU decision is a budgeting question, and this code makes it an explicit one. The function to watch is should_use_gpu: it does not offload just because the work exists, it requires three conditions to hold at once — enough transfer bytes, high enough arithmetic intensit",
+  "Bytes on the bus are a first-class cost. Count them before you trust the kernel."
+ ],
+ "codeSamples": {
+  "cuda_gpu_kernel_launch_wrapper": "#[derive(Debug, Clone, Copy)]\nstruct LaunchConfig {\n    threads_per_block: u32,\n    blocks: u32,\n}\n\n#[derive(Debug)]\nstruct DeviceBuffer {\n    len: usize,\n    bytes: usize,\n}\n\nimpl DeviceBuffer {\n    fn for_f32(len: usize) -> Self {\n        Self {\n            len,\n            bytes: len * std::mem::size_of::<f32>(),\n        }\n    }\n}\n\nfn build_launch_config(len: usize, threads_per_block: u32) -> Result<LaunchConfig, &'static str> {\n    if len == 0 {\n        return Err(\"empty input\");\n    }\n\n    if threads_per_block == 0 {\n        return Err(\"threads_per_block must be > 0\");\n    }\n\n    let blocks = ((len as u32) + threads_per_block - 1) / threads_per_block;\n\n    Ok(LaunchConfig {\n        threads_per_block,\n        blocks,\n    })\n}\n\nunsafe fn raw_launch_vec_add(\n    config: LaunchConfig,\n    a: &DeviceBuffer,\n    b: &DeviceBuffer,\n    out: &mut DeviceBuffer,\n) -> Result<(), &'static str> {\n    if a.len != b.len || a.len != out.len {\n        return Err(\"shape mismatch\");\n    }\n\n    if config.blocks == 0 || config.threads_per_block == 0 {\n        return Err(\"invalid launch\");\n    }\n\n    Ok(())\n}\n\nfn launch_vec_add(len: usize, threads_per_block: u32) -> Result<(LaunchConfig, usize), &'static str> {\n    let config = build_launch_config(len, threads_per_block)?;\n    let a = DeviceBuffer::for_f32(len);\n    let b = DeviceBuffer::for_f32(len);\n    let mut out = DeviceBuffer::for_f32(len);\n\n    unsafe {\n        // SAFETY:\n        // - this wrapper creates all three device buffers with the same logical length.\n        // - build_launch_config guarantees nonzero block and thread counts.\n        // - the raw launch does not outlive these local buffers in this demo.\n        raw_launch_vec_add(config, &a, &b, &mut out)?;\n    }\n\n    Ok((config, a.bytes + b.bytes + out.bytes))\n}\n\nfn main() {\n    let (config, device_bytes) = launch_vec_add(4_096, 256).unwrap();\n\n    println!(\"blocks = {}\", config.blocks);\n    println!(\"threads = {}\", config.threads_per_block);\n    println!(\"device bytes = {}\", device_bytes);\n}",
+  "cuda_gpu_transfer_budget": "#[derive(Debug, Clone, Copy)]\nstruct Workload {\n    elements: usize,\n    flops_per_element: u64,\n    input_buffers: usize,\n    output_buffers: usize,\n}\n\nfn transfer_bytes(work: Workload) -> usize {\n    work.elements * std::mem::size_of::<f32>() * (work.input_buffers + work.output_buffers)\n}\n\nfn arithmetic_intensity(work: Workload) -> f64 {\n    work.flops_per_element as f64\n        / (std::mem::size_of::<f32>() as f64 * (work.input_buffers + work.output_buffers) as f64)\n}\n\nfn should_use_gpu(work: Workload, launch_us: u64) -> bool {\n    let bytes = transfer_bytes(work);\n    let intensity = arithmetic_intensity(work);\n\n    bytes >= 8_000_000 && intensity >= 4.0 && launch_us <= 50\n}\n\nfn main() {\n    let work = Workload {\n        elements: 1_000_000,\n        flops_per_element: 64,\n        input_buffers: 2,\n        output_buffers: 1,\n    };\n    let launch_us = 25_u64;\n\n    println!(\"transfer bytes = {}\", transfer_bytes(work));\n    println!(\"intensity = {:.2}\", arithmetic_intensity(work));\n    println!(\"gpu faster = {}\", should_use_gpu(work, launch_us));\n}"
+ },
+ "labReferenceSolution": null
+}

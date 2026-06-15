@@ -16,47 +16,52 @@ import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
     title: "Packaging is a runtime contract, not only a build command",
-    body: "The real question is what artifact another system will execute: a Linux binary, a container image, a browser or WASI module, or a native library loaded by another process. Rust makes that boundary explicit because the target triple, linker story, crate type, and feature set all change the final contract.",
+    body: "Before you choose flags, decide what another system will actually execute: a Linux binary, a container image, a browser or WASI module, or a native library that some other process loads. Each of those is a different promise about how the artifact starts, what it links against, and what it expects to find on disk. Rust forces that decision into the open because the target triple, the linker story, the crate type, and the feature set all change the final contract. There is no ambient runtime quietly papering over the difference, so you make the choice on purpose instead of discovering it in production.",
   },
   {
     title: "The final artifact matters more than the local dev build",
-    body: "A `cargo build --release` on your laptop is not the thing production runs. Production runs one target-specific binary, one image, one wasm module, or one shared library with its own libc, filesystem, certificates, ABI, and startup behavior.",
+    body: "A `cargo build --release` on your laptop is a convenience, not the thing production runs. Production runs one target-specific binary, one image, one wasm module, or one shared library, and that artifact carries its own libc, its own filesystem layout, its own certificate bundle, its own ABI, and its own startup behavior. The gap between a build that compiled and an artifact that runs correctly on the target is where most deployment incidents actually live, which is why the artifact deserves its own tests rather than borrowing confidence from the local build.",
   },
   {
     title: "Release engineering is part of system design",
-    body: "Checksums, signatures, SBOMs, smoke tests, health probes, rollback plans, and feature-matrix discipline belong in the packaging story. They are not paperwork after the software is already done.",
+    body: "Checksums, signatures, SBOMs, smoke tests, health probes, rollback plans, and feature-matrix discipline are not paperwork bolted on after the software is done. They are the part of the design that lets an operator trust, verify, and reverse a release under pressure. Treat them as first-class requirements that ship in the same lane as the code, and the difference between a confident rollout and a frightening one stops being luck.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You may already think in terms of ABI, libc, linkers, and deployment environments. Rust keeps that discipline, but often makes the surface smaller: one static binary, one `cdylib`, or one explicit target triple instead of a larger ambient runtime assumption.",
+    body: "You already think in ABI, libc, linkers, and target environments, and all of that carries over. The shift is that Rust makes the surface smaller and the decision explicit by default: instead of a tangle of CMake toolchain files and ambient system assumptions, you usually choose one target triple, one crate type, and one static binary or one `cdylib`. The discipline you used to enforce by hand is now the path of least resistance.",
   },
   {
     title: "C# background",
-    body: "The main shift is that deployment is usually less framework-hosted and more artifact-specific. Instead of assuming one managed runtime and packaging shell, Rust often asks you to pick the exact binary, image, wasm bundle, or native library contract up front.",
+    body: "Stop assuming a managed runtime and a standard packaging shell are already on the box. Rust deployment is artifact-specific, not framework-hosted: there is no shared CLR to target, so you decide the exact binary, image, wasm bundle, or native library and ship it self-contained. The win is that 'works on my machine' and 'works in production' converge, but only because you named the runtime contract up front instead of inheriting it.",
   },
   {
     title: "Go background",
-    body: "Go teams often expect one easy static binary path. Rust can absolutely do that, but not every crate graph or native dependency naturally lands there. Cross-compilation, libc choice, and feature gating stay more visible and therefore more reviewable.",
+    body: "Your instinct that one static binary is the goal is right, and Rust honors it for pure-Rust crate graphs. The trap is assuming it is always free: a crate that pulls in native C libraries or a custom linker does not land on a clean static binary by accident. Cross-compilation, libc choice (gnu versus musl), and feature gating stay visible, which means they stay reviewable rather than silently breaking your single-binary assumption.",
+  },
+  {
+    title: "Python background",
+    body: "There is no interpreter to install on the target and no virtualenv to reproduce: the artifact is the program, and dependencies are resolved at build time, not at runtime on the server. The mental shift is that 'deployment' stops meaning 'recreate my environment elsewhere' and starts meaning 'ship one verified artifact.' When you do reach back into a Python or browser host, you do it deliberately through a wasm module or a native library with a published ABI, not by assuming a shared runtime is already present.",
   },
 ]
 
 const staticBinarySection = {
-  title: "Static binaries",
-  body: "Static Linux binaries are attractive because they shrink runtime dependencies and fit minimal containers well. In Rust, the common path is a musl target for Linux. The operational tradeoff is that smaller runtime surface does not mean zero environment assumptions: CA bundles, timezone data, DNS behavior, and native library expectations still need target testing.",
+  title: "Static binaries: one file, fewer runtime surprises",
+  body: "A static Linux binary is attractive because it folds its dependencies into a single file: there is no shared-library version to mismatch, and it drops cleanly into a near-empty container. In Rust the usual path is the musl target, which links against musl libc instead of glibc and produces a binary that does not need the host's C library at all. The tradeoff is subtler than 'static means self-sufficient.' A smaller runtime surface is not a zero runtime surface: your binary still reaches for CA certificate bundles when it makes TLS connections, for timezone data when it formats local times, for a working DNS resolver, and for whatever native libraries a dependency expects. Static linking removes the shared-object problem; it does not remove the filesystem-and-environment problem, so these assumptions still have to be tested on a target-like system.",
   code: `cargo build --release --target x86_64-unknown-linux-musl`,
 }
 
 const crossCompilationSection = {
-  title: "Cross-compilation",
-  body: "Rust's target model is strong, but pure-Rust success and native-dependency success are different stories. Adding a target triple is easy. Producing a correct final artifact for a crate graph with native code, system libraries, or linker assumptions still requires target-aware CI and smoke tests.",
+  title: "Cross-compilation: compiling here, running there",
+  body: "Rust's target model is genuinely strong, but it is worth separating two stories that beginners conflate. Adding a target triple with `rustup target add` and getting pure-Rust code to compile for it is easy and reliable. Producing a correct, runnable artifact for a crate graph that pulls in native C code, system libraries, or a custom linker is a different problem, because now you need the right cross-linker, the right system headers, and sometimes the right sysroot for the destination platform. The compiler succeeding for one architecture on your machine tells you the Rust compiled; it does not tell you the artifact will start and behave on the real target. That gap is exactly why cross-builds belong in target-aware CI and must be followed by a smoke test, not signed off on the strength of a green compile.",
   code: `rustup target add \\
     x86_64-unknown-linux-musl \\
     aarch64-unknown-linux-gnu \\
@@ -68,8 +73,8 @@ const crossCompilationSection = {
 }
 
 const dockerSection = {
-  title: "Docker images",
-  body: "Multi-stage builds keep the Rust toolchain in the builder layer and copy only the final artifact into the runtime layer. That reduces image size and narrows the attack surface while keeping the build reproducible in CI.",
+  title: "Docker images: build heavy, ship light",
+  body: "The point of a multi-stage build is to separate the machinery that produces the artifact from the machinery that runs it. The builder stage carries the full Rust toolchain, the C cross-tools, and the source tree; the runtime stage carries nothing but the compiled binary copied across the stage boundary. Everything the compiler needed is left behind, so the final image is small, its attack surface is narrow, and the build still reproduces deterministically in CI because every input is pinned in the Dockerfile. Read the example below as two distinct worlds joined by a single `COPY --from=builder` line: the left world compiles, the right world runs, and almost nothing crosses between them.",
   code: `FROM rust:1 AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y musl-tools && rm -rf /var/lib/apt/lists/*
@@ -84,8 +89,8 @@ ENTRYPOINT ["/service"]`,
 }
 
 const minimalRuntimeSection = {
-  title: "Minimal runtime containers",
-  body: "Minimal images are not all equivalent. `scratch` is the smallest and least forgiving. Distroless-style images provide a little more runtime structure. Alpine gives you package tooling but also locks you into musl expectations. The right choice follows the artifact's real runtime needs, not image-size aesthetics alone.",
+  title: "Minimal runtime containers: pick the floor your binary needs",
+  body: "Minimal base images are not interchangeable, and choosing one by image-size alone is how teams ship a container that builds fine and then crashes on first TLS handshake. `scratch` is the smallest and the least forgiving: it is an empty filesystem, so anything your binary reads at runtime, including CA certificates and any user or directory it expects, has to be copied in by hand. Distroless-style images give you a little structure, such as certificates and a non-root user, without a full distro. Alpine hands you a package manager and a familiar shell, but it commits you to musl, which can surprise a crate graph that contains native code built against glibc. The right base is the smallest floor that still satisfies what the artifact genuinely reaches for, decided from the binary's real runtime needs rather than from aesthetics.",
   notes: [
     "A scratch image often needs copied CA certificates and any other files your binary expects at runtime.",
     "Alpine and musl are often a good pair, but they should be tested together if the crate graph includes native code.",
@@ -94,8 +99,8 @@ const minimalRuntimeSection = {
 }
 
 const wasmSection = {
-  title: "WASM packaging",
-  body: "WASM packaging is really two families of release: browser-oriented modules and WASI-oriented modules. Browser builds usually pair `wasm32-unknown-unknown` with generated glue and bundler integration. WASI-compatible packaging targets a runtime contract rather than a browser DOM contract.",
+  title: "WASM packaging: two targets that look alike and are not",
+  body: "WebAssembly is not one packaging story; it is two release families that happen to share a file extension. Browser-oriented modules typically build for `wasm32-unknown-unknown` and ship alongside generated JavaScript glue and a bundler step, because the module has no operating system underneath it and reaches the outside world only through the host page's APIs. WASI-oriented modules build for a target like `wasm32-wasip1` and assume a runtime that provides a standardized, sandboxed system interface, so they look more like a portable command-line program than a browser component. Treating these as one artifact with a different file extension is a recurring mistake; they have different hosts, different capabilities, and different things that can go wrong at load time.",
   code: `# browser-oriented
 cargo build --release --target wasm32-unknown-unknown
 
@@ -104,8 +109,8 @@ cargo build --release --target wasm32-wasip1`,
 }
 
 const nativeLibrarySection = {
-  title: "Native library packaging",
-  body: "Rust can ship as a native library just as easily as it can ship as a binary, but the contract changes. Instead of argv and stdout, you now publish symbols, crate type, ABI rules, versioning policy, and header or binding generation for another language to consume.",
+  title: "Native library packaging: you are publishing an ABI now",
+  body: "Rust ships as a native library as readily as it ships as a binary, but the contract you are signing is fundamentally different. A binary talks to the world through `argv` and `stdout`, both of which are forgiving and easy to change between releases. A library talks to the world through exported symbols and a memory layout, and the moment another language links against those symbols you have committed to an ABI that you cannot quietly break. So the deliverables grow: you publish a crate type (`cdylib` or `staticlib`), a set of `extern \"C\"` symbols, a versioning policy for the ABI, and the headers or bindings the consumer needs to call you correctly. The smaller you keep that exported surface, the easier it is to keep the promise.",
   code: `[lib]
 crate-type = ["cdylib"] # or ["staticlib"]`,
   notes: [
@@ -116,8 +121,8 @@ crate-type = ["cdylib"] # or ["staticlib"]`,
 }
 
 const ciCdSection = {
-  title: "CI/CD pipelines",
-  body: "A production Rust pipeline usually validates more than one build path: unit and integration tests, linting, one or more target builds, artifact smoke tests, container builds, wasm packaging when relevant, and release publication. The matrix itself is part of the contract with operators and downstream teams.",
+  title: "CI/CD pipelines: prove the release path before release day",
+  body: "A production Rust pipeline validates far more than 'does it compile.' It runs unit and integration tests, lints, one or more target builds, a smoke test of each packaged artifact, container builds, wasm packaging where relevant, and finally publication with its trust data. The reason to wire all of this into CI is timing: every stage that runs automatically on every change is a stage you are not improvising during an incident. The pipeline is itself part of the contract with operators and downstream teams, because it is the evidence that the artifact they pulled was produced and checked the same way every time. The stages flow as a gate sequence, where each gate must pass before the next runs.",
   code: `check -> test -> lint -> cross-build -> smoke-test-artifact -> package -> publish`,
   notes: [
     "Smoke test the final binary or image, not only the crate graph before packaging.",
@@ -126,8 +131,8 @@ const ciCdSection = {
 }
 
 const supplyChainSection = {
-  title: "Supply-chain security",
-  body: "Rust's packaging story is strongest when dependency and artifact discipline are explicit. Commit `Cargo.lock` for applications, review dependency changes, scan for advisories and license policy, emit checksums, and publish provenance and SBOM data through platform tooling or ecosystem options where required.",
+  title: "Supply-chain security: trust you can verify, not assume",
+  body: "Supply-chain discipline answers a blunt question: when an operator downloads your artifact, can they prove it is the one you built from the dependencies you reviewed? Rust gives you good materials for that answer, but only if you make them explicit. Commit `Cargo.lock` for applications so the dependency graph is pinned and reproducible, review dependency changes the way you review code, scan for known advisories and license violations, and emit checksums and signatures for the files operators actually pull. Provenance and SBOM data describe what went into the build, and they belong in the release lane where they are generated automatically, not in a wiki page assembled by hand after the fact.",
   notes: [
     "Well-known ecosystem options include advisory, license, and dependency-policy tools such as cargo-audit, cargo-deny, or cargo-vet.",
     "Checksums and signatures should be attached to the final artifacts operators actually download.",
@@ -136,8 +141,8 @@ const supplyChainSection = {
 }
 
 const featureGateSection = {
-  title: "Feature-gated builds",
-  body: "Feature flags are powerful when they model real packaging differences, such as metrics, admin endpoints, native bindings, or optional protocol support. They become dangerous when one artifact quietly enables everything by default and no CI lane exercises the minimal or alternate sets.",
+  title: "Feature-gated builds: shape the artifact at compile time",
+  body: "Cargo features let one codebase compile into materially different artifacts: a build with metrics, a build with admin endpoints, a build with native bindings, a build with optional protocol support, or a lean core with none of them. Used well, this is how you ship the smallest honest artifact for each consumer instead of one bloated binary that carries everyone's needs. Used carelessly, features become a quiet liability: when `default` enables everything and no CI lane ever builds the minimal or alternate sets, you are advertising configurations you have never actually compiled, let alone tested. The rule of thumb is to use compile-time features for artifact shape, leave ordinary toggles to runtime configuration, and build every feature combination you claim to support.",
   code: `[features]
 default = ["core"]
 metrics = []
@@ -150,8 +155,8 @@ native-bindings = []`,
 }
 
 const releaseEngineeringSection = {
-  title: "Release engineering",
-  body: "Release engineering is where packaging becomes operationally trustworthy. Version artifacts consistently, attach checksums and signatures, document feature sets and migrations, run a target-like smoke test, and keep a rollback path that does not depend on rebuilding from memory during an incident.",
+  title: "Release engineering: make rollback boring",
+  body: "Release engineering is the discipline that turns a pile of build outputs into something an operator can deploy, verify, and reverse with confidence. Version every artifact consistently so a human can read target, version, and shape from the name alone; attach checksums and signatures so the download can be verified; document the feature sets, migrations, and known flags that ship with the version; run a target-like smoke test before the release is blessed; and keep a rollback path that does not depend on rebuilding from memory at three in the morning. The measure of good release engineering is unglamorous: when something goes wrong, going back to the previous version is a known, rehearsed, boring procedure rather than an improvisation.",
   notes: [
     "Name artifacts so operators can tell target, version, and delivery shape quickly.",
     "Publish changelog, migration notes, and known feature flags with the artifact set.",
@@ -278,10 +283,25 @@ export function PageCh44PackagingAndDeployment() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            One Rust codebase ships as a static Linux binary, container image, browser Wasm module, and native library.
-            The business requirement is to treat each artifact as its own runtime contract with target-specific features,
-            smoke tests, provenance, signatures, and rollback instructions.
+            One Rust codebase has to ship four different ways: as a static Linux binary for the fleet, as a container
+            image for the orchestrator, as a browser Wasm module for the dashboard, and as a native library for a C++
+            host that embeds the risk engine. They share source, but they do not share a runtime contract. The business
+            requirement is to treat each artifact as its own promise, with its own target triple and feature set, its
+            own smoke test, and its own provenance, signatures, and rollback instructions. The diagram below shows how
+            one crate graph fans out into four distinct delivery shapes that must each be packaged and verified
+            separately.
           </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Src[one crate graph] --> Bin[static linux binary]\n  Src --> Img[container image]\n  Bin -->|musl + smoke test| ReleaseB[release: binary]\n  Img -->|distroless + health probe| ReleaseI[release: image]`}
+            caption="Half one: the same crate graph fans out to a static Linux binary and a container image, each with its own target and verification."
+          />
+          <p className="text-sm text-muted-foreground leading-6">
+            The same crate graph also feeds two more delivery shapes:
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Src[one crate graph] --> Wasm[browser wasm module]\n  Src --> Lib[native library]\n  Wasm -->|glue + bundler| ReleaseW[release: wasm]\n  Lib -->|cdylib + ABI| ReleaseL[release: library]`}
+            caption="Half two: the browser wasm module and the native library each pick a distinct packaging shell before they count as releasable."
+          />
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
@@ -367,10 +387,15 @@ export function PageCh44PackagingAndDeployment() {
           ))}
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">
-              Comparing Rust deployment with C++, C#, and Go
+            <h4 className="font-semibold text-foreground mb-2">
+              How to think about deployment coming from C++, C#, Go, or Python
             </h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The useful comparison here is not 'which crate replaces which library.' It is where each background expects
+              the runtime to come from, and how that expectation changes when the artifact has to stand on its own. Find
+              your starting language and notice the shift it asks for.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -378,6 +403,20 @@ export function PageCh44PackagingAndDeployment() {
                 </div>
               ))}
             </div>
+          </article>
+
+          <article className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-2">The release pipeline as a gate sequence</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              It helps to picture the pipeline as a chain of gates rather than a script. Each stage only runs if the one
+              before it passed, and the artifact only earns a signature and publication after the smoke test confirms it
+              actually runs on a target-like environment. The key transition to watch is the one from build to smoke
+              test: that is where a release stops being 'it compiled' and becomes 'it runs.'
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Check[cargo check] --> Test[unit + integration tests]\n  Test --> Lint[clippy + fmt]\n  Lint --> Build[cross-build per target]\n  Build --> Smoke[smoke test artifact]\n  Smoke -->|pass| Package[package image / wasm / lib]\n  Smoke -->|fail| Stop[block release]\n  Package --> Sign[checksum + sign + SBOM]\n  Sign --> Publish[publish artifacts]`}
+              caption="Build proves the code compiles; the smoke test proves the packaged artifact runs. Only then do trust data and publication follow."
+            />
           </article>
         </section>
 
@@ -444,6 +483,26 @@ export function PageCh44PackagingAndDeployment() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">match</code> in{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">artifact_name</code> is the whole
+              idea. One <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">BuildTarget</code> value
+              routes to exactly one naming rule, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">is_static</code> records intent as
+              data rather than as a comment in a release script. Follow how a single target flows through both functions
+              to a fully described artifact.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  T[BuildTarget value] --> M{match target}\n  M -->|LinuxGnu| G[name: ...-linux-gnu]\n  M -->|LinuxMusl| Mu[name: ...-linux-musl]\n  M -->|Wasm| W[name: ....wasm]\n  M -->|NativeLib| L[name: lib....so]\n  Mu --> Cont[continues below]`}
+              caption="First the match selects the artifact name: one enum variant routes to exactly one naming rule."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              From the musl name, the same target value then decides static intent:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[continues below] --> Mu[name: ...-linux-musl]\n  Mu --> S{is_static?}\n  S -->|musl| Yes[static = true]`}
+              caption="The musl target also records static intent as data: the enum, not a comment, decides the build is static."
+            />
             <RustCodeEditor
               code={codes.packaging_target_matrix}
               onChange={(newCode) => updateCode("packaging_target_matrix", newCode)}
@@ -501,6 +560,19 @@ export function PageCh44PackagingAndDeployment() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: watch how <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">build_bundle</code>{" "}
+              starts from a core artifact-and-feature set and then conditionally accumulates more based on the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">metrics</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">admin</code> flags. Each flag is a
+              real packaging decision: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">admin</code>{" "}
+              does not just add a feature, it adds a whole new artifact (the native library). The diagram traces that
+              branching before you read the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Core[core: linux-musl + container] --> Q1{metrics?}\n  Q1 -->|yes| AddM[+ metrics feature]\n  Q1 -->|no| Skip1[skip]\n  AddM --> Q2{admin?}\n  Skip1 --> Q2\n  Q2 -->|yes| AddA[+ admin feature + native-lib artifact]\n  Q2 -->|no| Skip2[skip]\n  AddA --> Bundle[ReleaseBundle: artifacts + features + SBOM + signature]\n  Skip2 --> Bundle`}
+              caption="Flags do not just flip booleans; they grow the artifact inventory and feature list that the release bundle must account for."
+            />
             <RustCodeEditor
               code={codes.packaging_release_bundle}
               onChange={(newCode) => updateCode("packaging_release_bundle", newCode)}

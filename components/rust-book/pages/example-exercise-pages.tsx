@@ -242,4 +242,6 @@ export const PageCh50Libp2pPeerToPeerRustSystemsExercises = createExercisePage("
 export const PageCh51ZeroKnowledgeProofsRustEngineersExercises = createExercisePage("ch51-zero-knowledge-proofs-rust-engineers-exercises")
 export const PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises = createExercisePage("ch52-zokrates-workflows-ethereum-verifiers-exercises")
 export const PageCh53EzklVerifiableLlmInferenceGpuZkmlExercises = createExercisePage("ch53-ezkl-verifiable-llm-inference-gpu-zkml-exercises")
-export const PageCh54NoStdRustConstrainedRuntimeDerivativesExercises = createExercisePage("ch54-no-std-rust-constrained-runtime-derivatives-exercises")
+export const PageCh56NoStdRustConstrainedRuntimeDerivativesExercises = createExercisePage("ch56-no-std-rust-constrained-runtime-derivatives-exercises")
+export const PageCh54OnnxRuntimeModelInferenceExercises = createExercisePage("ch54-onnx-runtime-model-inference-exercises")
+export const PageCh55SmartContractsSolanaSeiExercises = createExercisePage("ch55-smart-contracts-solana-sei-exercises")

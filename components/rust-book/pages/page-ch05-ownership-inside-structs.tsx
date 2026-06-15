@@ -14,6 +14,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -119,6 +120,10 @@ const comparisonCallouts = [
   {
     title: "Go background",
     body: "Go makes it easy to pass slice and string views around, but ownership of the backing storage is often implicit. Rust makes the coupling visible, which is why long-lived structs frequently want owned `String`, `Vec<u8>`, or `Arc<T>` instead.",
+  },
+  {
+    title: "Python background",
+    body: "Every Python attribute is a reference into one shared, garbage-collected heap, so a field is always free to outlive whatever produced it. In Rust a borrowed field instead pins the struct to a specific outer owner, and a shared field demands an explicit `Rc` or `Arc` rather than an invisible refcount you never had to name.",
   },
 ]
 
@@ -244,6 +249,23 @@ export function PageCh05OwnershipInsideStructs() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Owned fields vs borrowed fields</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The choice is not about which is faster to type. It is about which direction the dependency points. An
+              owned field copies the data inside the struct, so the struct stands alone. A borrowed field stores a
+              reference back to data someone else holds, so the struct can only live as long as that owner does. Trace
+              both arrows before you read the signatures.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  O1[Input buffer] -->|copied in| O2[StoredAlert owns String]\n  O2 -->|stands alone| O3[Vec, cache, queue, thread]`}
+              caption="Owned field: the data is copied inside the struct, which then carries it forward into long-lived storage on its own."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The borrowed case points the dependency the other way:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  B1[Input buffer must stay alive] -->|reference| B2[HeaderView holds and a str]\n  B2 -.->|dies when owner drops| B3[no independent storage]`}
+              caption="Borrowed field: the struct only points back at an owner that must outlive it, so it has no independent storage."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {fieldDesignCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -268,6 +290,24 @@ export function PageCh05OwnershipInsideStructs() {
             <h4 className="font-semibold text-foreground mb-3">
               Structs containing references and lifetime parameters on structs
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The thing to watch is contagion. The moment one field is a reference, the struct gains a lifetime
+              parameter, and that parameter has to be named everywhere the struct appears: in the functions that build
+              it, in the fields of any struct that holds it, in the return types that hand it back. The diagram shows the
+              same lifetime <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&apos;a</code> threading
+              through each of those positions.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Field[name: and a str field] --> Struct[MessageView of a]\n  Struct --> Builder[fn parse of a takes and a str]\n  Struct --> Holder[Session of a embeds the view]\n  Struct --> Return[fn view returns MessageView of a]`}
+              caption="One reference field forces a lifetime parameter, and that single 'a has to be named in the builder, in any holder, and in the return type."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              That parameter does not stop at the type definition. It reaches all the way out to call sites:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Builder[fn parse of a takes and a str] --> Caller[every caller must supply an owner that lives long enough]`}
+              caption="The builder propagates the same 'a outward, so ultimately every caller must supply an owner that lives long enough."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {borrowedStructNotes.map((note) => (
                 <div key={note.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -288,6 +328,15 @@ export function PageCh05OwnershipInsideStructs() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Interior ownership using Box, Rc, and Arc</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              These three smart pointers all put a field behind heap indirection, but they answer different questions.
+              The deciding factor is how many owners the value has and whether any of them live on another thread. Walk
+              the two questions in the diagram and each pointer falls out of the answer.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Field needs heap indirection] --> Q1{More than one owner?}\n  Q1 -->|No, single owner| Box[Box of T]\n  Q1 -->|Yes, shared| Q2{Shared across threads?}\n  Q2 -->|No, one thread| Rc[Rc of T, not Send or Sync]\n  Q2 -->|Yes, cross thread| Arc[Arc of T, atomic count, T must be thread safe]`}
+              caption="Two questions decide the pointer: how many owners, and whether ownership crosses a thread. Box for one owner, Rc for shared on one thread, Arc for shared across threads."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {pointerChoices.map((choice) => (
                 <div key={choice.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -458,6 +507,16 @@ export function PageCh05OwnershipInsideStructs() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the struct holds exactly one owned field, the raw line. Every accessor returns a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&amp;str</code> that is sliced out of
+              that field on demand, so the borrows live and die with each call instead of being stored. Follow the single
+              owner down to the short-lived views in the diagram, then read it in the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Raw[LogLine owns raw: String] -->|borrow on call| L[level returns and str]\n  Raw -->|borrow on call| M[message returns and str]\n  L -.->|tied to and self, dropped after use| Caller[caller prints the slice]\n  M -.->|tied to and self, dropped after use| Caller`}
+              caption="One owned buffer, many transient borrows. The returned slices are bound to &self, so the struct stays movable and storable."
+            />
             <RustCodeEditor
               code={codes.ownership_structs_owned_views}
               onChange={(newCode) => updateCode("ownership_structs_owned_views", newCode)}
@@ -514,6 +573,23 @@ export function PageCh05OwnershipInsideStructs() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: read the three field types, not the strings they hold. Each field encodes a different
+              ownership story, and the code downstream is forced to respect it. The boxed config is consumed by one
+              owner, the Rc template is cloned and used only on the main thread, and the Arc schema is the one value that
+              is allowed to move into the spawned worker. The diagram lines up each field with the boundary it may cross.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cfg[Box config] -->|single owner| Main[Main thread]\n  Tmpl[Rc template] -->|clone, refcount up| Main\n  Tmpl -.->|cannot send, not Sync| Worker[Spawned worker thread]`}
+              caption="Box keeps one owner on the main thread, and Rc can be cloned there but is barred from crossing into the worker."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The Arc-wrapped schema is the one field allowed to cross the thread boundary:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Schema[Arc schema] -->|clone, atomic refcount| Main[Main thread]\n  Schema -->|safe to move across| Worker[Spawned worker thread]`}
+              caption="Only the Arc-wrapped schema uses atomic counting, so it is the field that can safely move into the worker."
+            />
             <RustCodeEditor
               code={codes.ownership_structs_pointer_choices}
               onChange={(newCode) => updateCode("ownership_structs_pointer_choices", newCode)}

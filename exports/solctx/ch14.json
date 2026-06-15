@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch14",
+ "num": 14,
+ "title": "Interfaces in Rust: Traits",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Separate the trait, the impl, and the call site",
+   "objective": "Explain where capability is attached in Rust and why a struct can satisfy several unrelated traits.",
+   "starterPrompt": "Using the chapter's triangle (trait, concrete type, call site), describe how FixedLimit becomes a RetryPolicy and how a call site like evaluate names that trait.",
+   "prompts": [
+    "Name the three corners of the triangle and which one the impl block links.",
+    "State why the same struct can implement Display, Iterator, and RetryPolicy without any of them knowing about the others.",
+    "Say where the dispatch decision is made: at the trait, at the impl, or at the call site.",
+    "Explain what 'composition over inheritance' means concretely in this model."
+   ],
+   "acceptanceCriteria": [
+    "The answer identifies the trait as the named method set, the concrete type as the data, and the call site as the place that names the trait as a bound or a dyn object.",
+    "It states that the impl block is what links a type to a trait, separate from the type definition.",
+    "It explains that capability is added in independent layers, so one struct can carry many unrelated impls.",
+    "It locates the dispatch choice at the call site, not at the trait or impl."
+   ],
+   "hints": [
+    "An impl is a third thing, not part of the struct and not part of the trait.",
+    "Display and RetryPolicy never mention each other; only the type ties them together."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the RetryPolicy associated type and where-clause",
+   "objective": "Read the static-dispatch example and explain how the associated type and bound pin the output to bool.",
+   "starterPrompt": "Read the traits_bounds_associated_types listing: the RetryPolicy trait with type Decision, FixedLimit setting Decision = bool, and fn evaluate bounded by RetryPolicy<Decision = bool>.",
+   "prompts": [
+    "State what value type Self::Decision resolves to for FixedLimit and where that is declared.",
+    "Explain what the where-clause P: RetryPolicy<Decision = bool> lets evaluate assume about decide's return.",
+    "Identify which method evaluate calls that FixedLimit overrides and which it inherits unchanged.",
+    "Predict the two printed lines for FixedLimit { max: 3 } and evaluate(&policy, 2)."
+   ],
+   "acceptanceCriteria": [
+    "The answer says Self::Decision is bool because the impl declares type Decision = bool.",
+    "It explains the where-clause guarantees decide returns bool so format! can use it directly with no turbofish or conversion.",
+    "It notes label is overridden by FixedLimit while should_log is inherited from the default method.",
+    "It predicts the output lines 'fixed-limit => true' and 'log = true'."
+   ],
+   "hints": [
+    "decide(2) for max 3 evaluates 2 < 3.",
+    "Only label appears in the impl; should_log does not, so the default stands."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Add a second RetryPolicy with a default override",
+   "objective": "Implement a new RetryPolicy that still satisfies the Decision = bool bound while customizing a default method.",
+   "starterPrompt": "Add a struct AlwaysRetry that implements RetryPolicy with Decision = bool, returns true from decide regardless of attempts, labels itself 'always', and overrides should_log to return false.",
+   "prompts": [
+    "Set type Decision = bool so AlwaysRetry can be passed to evaluate unchanged.",
+    "Implement decide to ignore attempts and return true.",
+    "Override label to return 'always' and should_log to return false.",
+    "Call evaluate(&AlwaysRetry, 99) and should_log and confirm both reuse the existing function and trait."
+   ],
+   "acceptanceCriteria": [
+    "AlwaysRetry sets type Decision = bool and compiles against fn evaluate without changing evaluate.",
+    "decide returns true for any attempts value, ignoring the argument.",
+    "label returns 'always' and should_log returns false, overriding the default.",
+    "evaluate(&AlwaysRetry, 99) yields 'always => true' and AlwaysRetry.should_log() yields false."
+   ],
+   "hints": [
+    "Because Decision is bool, no change to evaluate's signature is needed.",
+    "Overriding should_log just means writing the method in the impl block instead of inheriting it."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Make a Plugin trait usable both generically and behind dyn",
+   "objective": "Design an object-safe trait and write one generic call site and one trait-object call site over it.",
+   "starterPrompt": "Starting from the Plugin trait (name and run, both &self), write fn apply_one<P: Plugin>(p: &P, input: &str) -> String for static dispatch and confirm the same trait still works in Vec<Box<dyn Plugin>>.",
+   "prompts": [
+    "Keep run(&self, input: &str) -> String with no generic method parameters so the trait stays object-safe.",
+    "Write apply_one with a generic bound P: Plugin that formats name and run like run_all does.",
+    "Build a Vec<Box<dyn Plugin>> with Uppercase and Prefix and confirm it compiles unchanged.",
+    "Explain in one line why the same trait serves both call sites."
+   ],
+   "acceptanceCriteria": [
+    "apply_one has signature fn apply_one<P: Plugin>(p: &P, input: &str) -> String and uses static dispatch.",
+    "The trait keeps only &self methods with no generic parameters, so Box<dyn Plugin> still compiles.",
+    "Both apply_one(&Uppercase, \"rust\") and a Vec<Box<dyn Plugin>> path produce matching 'name => output' strings.",
+    "The explanation states the trait is object-safe, which is what permits both the generic and the dyn use."
+   ],
+   "hints": [
+    "A generic bound monomorphizes; the dyn version goes through a vtable, but the trait definition is identical.",
+    "Object safety here just means no generic methods and no by-value Self in the signature."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Repair a trait that cannot be boxed",
+   "objective": "Diagnose an object-safety violation and refactor the trait so Box<dyn Trait> compiles.",
+   "starterPrompt": "A teammate added fn run<T: Display>(&self, input: T) -> String to the Plugin trait and now Vec<Box<dyn Plugin>> fails to compile. Identify the cause and restore object safety.",
+   "prompts": [
+    "Explain why a generic method prevents the compiler from laying out a single fixed vtable slot.",
+    "State which object-safety rule the generic method violates.",
+    "Refactor run back to a non-generic signature (for example &self, input: &str) -> String) that keeps the boxed pipeline working.",
+    "Confirm run_all over Vec<Box<dyn Plugin>> compiles again after the change."
+   ],
+   "acceptanceCriteria": [
+    "The diagnosis names the generic method run<T> as the object-safety violation.",
+    "It explains a vtable needs one fixed slot per method, which a generic method cannot provide because each T would need its own entry.",
+    "The refactor removes the generic parameter, giving a concrete &self method signature.",
+    "After the change, Vec<Box<dyn Plugin>> and run_all compile."
+   ],
+   "hints": [
+    "The compiler cannot pick one slot for infinitely many T at the indirect call.",
+    "Trade the generic parameter for a concrete type such as &str."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Decide static versus dynamic dispatch for a processing stage API",
+   "objective": "Choose a dispatch strategy for a configurable pipeline and justify it against the chapter's tradeoffs.",
+   "starterPrompt": "The service from the opening scenario needs a processing stage that operators enable by configuration today and extend with validate, redact, and enrich stages later. Decide whether the stage list should be a generic bound or Vec<Box<dyn Stage>> and defend the choice.",
+   "prompts": [
+    "State which property of the requirement (config-selected, heterogeneous, runtime-assembled) points toward trait objects.",
+    "Name the cost you accept with dyn (vtable indirection, no monomorphization) and why it is acceptable here.",
+    "Explain why you would still keep the Stage trait object-safe even if today's stages are few.",
+    "Note the breaking-change risk of later adding a generic method or by-value Self return to the published trait."
+   ],
+   "acceptanceCriteria": [
+    "The answer selects Vec<Box<dyn Stage>> and ties the choice to config-driven, heterogeneous, runtime-assembled stages.",
+    "It acknowledges the vtable indirection cost and argues it is negligible relative to per-stage text work.",
+    "It commits to keeping the trait object-safe from the start to avoid a future retrofit.",
+    "It identifies that adding a generic method or a by-value Self return later would foreclose dyn and break the API."
+   ],
+   "hints": [
+    "Configuration assembling a heterogeneous list at runtime is the canonical trait-object case.",
+    "Object safety is cheap to preserve up front and a breaking change to add back later."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What links a concrete type to a trait in Rust, and why does that separation let one struct implement many unrelated traits?",
+  "How does a generic bound's dispatch differ from a trait object's dispatch, and what runtime cost does each carry?",
+  "When should a trait use an associated type instead of a generic type parameter, and what symptom appears at call sites if you choose wrong?",
+  "What does object safety require of a trait's methods, and why does each rule exist for a single indirect call through a vtable?",
+  "Why is deciding up front whether a trait must work behind dyn important, given that adding a generic method or a by-value Self return later is a breaking change?"
+ ],
+ "lab": {
+  "title": "Runnable lab · object-safe stage pipeline with a default method",
+  "filename": "stage_pipeline_lab.rs",
+  "runKey": "ch14_ex_stage",
+  "expectedOutput": "trim => hi\nwrap => [b]  hi  [/b]\nstages = 2",
+  "helperText": "Two unrelated structs implement one object-safe Stage trait and live together in a Vec<Box<dyn Stage>>. The trait's default describe method drives every stage through the vtable; fill in the two run methods so the pipeline prints correctly.",
+  "initialCode": "trait Stage {\n    fn name(&self) -> &'static str;\n    fn run(&self, input: &str) -> String;\n\n    // Default method: reuse name() and run() so every stage prints the same way.\n    fn describe(&self, input: &str) -> String {\n        format!(\"{} => {}\", self.name(), self.run(input))\n    }\n}\n\nstruct Trim;\nstruct Wrap {\n    tag: &'static str,\n}\n\nimpl Stage for Trim {\n    fn name(&self) -> &'static str {\n        \"trim\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: return the input with leading and trailing whitespace removed.\n        input.to_string()\n    }\n}\n\nimpl Stage for Wrap {\n    fn name(&self) -> &'static str {\n        \"wrap\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: wrap input as [tag]input[/tag] using self.tag.\n        input.to_string()\n    }\n}\n\nfn run_pipeline(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {\n    stages.iter().map(|s| s.describe(input)).collect()\n}\n\nfn main() {\n    let stages: Vec<Box<dyn Stage>> = vec![\n        Box::new(Trim),\n        Box::new(Wrap { tag: \"b\" }),\n    ];\n\n    for line in run_pipeline(&stages, \"  hi  \") {\n        println!(\"{}\", line);\n    }\n    println!(\"stages = {}\", stages.len());\n}\n"
+ },
+ "proseHeadings": [
+  "Builds on Chapter 01",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "Traits, impls, and default methods",
+  "Static dispatch and dynamic dispatch",
+  "Associated types versus generic parameters",
+  "Object safety",
+  "Supertraits, blanket impls, and markers",
+  "Traits as API design",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Trait bounds and associated types",
+  "dyn Trait plugin pipeline",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Trait interfaces define capability contracts across library and service boundaries. This chapter treats bounds, associated types, generic dispatch, trait objects, and object safety as reviewable API choices rather than syntax, so you can decide deliberately what a type must prove",
+  "Chapter 01 noted that traits describe behavior and that generics usually compile via monomorphization rather than dynamic dispatch. This chapter makes that operational: how to write the contract, how bounds check it, and when to pay for a vtable instead.",
+  "A service needs a pluggable processing stage: today it normalizes text, tomorrow it will validate, redact, or enrich, and operators want to enable stages by configuration. At the same time, a retry layer needs to ask a policy whether another attempt is allowed, and that policy mu",
+  "The shape worth memorizing is a triangle. At one corner sits the trait, a named set of methods. At another sit the concrete types, each with its own impl block. At the third sit the call sites, which name the trait as a bound or as a dyn object. A type and a trait are linked only",
+  "Because an impl is separate from the type definition, the same struct can implement Display, Iterator, and a domain trait of your own, none of which know about the others. That is the practical meaning of composition over inheritance here: capability is added in independent layer",
+  "The single most consequential trait decision is how a call reaches the implementation. A generic bound is resolved at compile time into a direct call; a trait object is resolved at runtime through a vtable. The diagram below contrasts the two paths so the cost of each is visible ",
+  "The dynamic path instead funnels every concrete type through one shared indirection:",
+  "Both let a trait talk about types it does not yet know, but they answer different questions. An associated type asks the implementer to commit to one output. A generic parameter lets the same type implement the trait several ways. Choosing the wrong one shows up later as turbofis",
+  "You can only build a Box when the trait is object-safe, because the compiler has to lay out a vtable with one fixed slot per method. The rules are not arbitrary; each one exists so that a single indirect call works without knowing the concrete type. The flow below is the check th",
+  "Traits compose. A supertrait says one capability presupposes another, a blanket impl grants a behavior to every type that already meets a bound, and a marker trait carries no methods but still participates in the type system. The snippet shows a supertrait: any Audit type must al",
+  "At a boundary, the trait is the contract you publish and the concrete type is an implementation detail you keep. The discipline is the same one you would apply to any interface, with one Rust-specific lever: the bound on a parameter is the precise list of capabilities the caller ",
+  "Most engineers already have an interface mechanism in muscle memory. The useful question is which part of that mechanism transfers to traits and which part quietly misleads. The shift is rarely about syntax; it is about where implementation is attached, when dispatch is resolved,",
+  "A trait is a contract you will live behind for a long time. Adding a generic method or a by-value Self return is easy today and quietly forecloses dynamic dispatch tomorrow. Decide early whether the trait must work behind dyn, because retrofitting object safety is a breaking chan",
+  "A retry policy trait with an associated output type, a default method, and a generic function bounded so the output is exactly the bool the caller can use.",
+  "What to look at: the trait declares type Decision, so each implementer commits to one output type. The function evaluate is generic over the policy but bounds the associated type with Decision = bool, which is static dispatch: the compiler specializes it for FixedLimit. The shoul",
+  "Each implementer commits to one Decision output.",
+  "The where-clause pins the output so the caller can trust it is a bool.",
+  "should_log is inherited without an override.",
+  "Quick check: run it to confirm the baseline, then change max or the attempts passed to evaluate and watch the decision flip while the contract stays the same.",
+  "A heterogeneous list of plugins stored as trait objects, each running the same input through one shared function that dispatches dynamically.",
+  "What to look at: two unrelated structs, Uppercase and Prefix, implement the same object-safe Plugin trait. They live together in a Vec>, which is only possible because the concrete types are erased. The function run_all iterates that list and calls through the vtable, so one loop",
+  "Both methods take &self and avoid generics, so the trait can be boxed.",
+  "Vec> holds different types behind one element type.",
+  "Each run call goes through the vtable at runtime.",
+  "Quick check: run it, then add a third plugin or change the prefix value and confirm the pipeline keeps working without touching run_all, which is the whole point of the trait-object boundary.",
+  "The companion exercise page asks you to pick the right bound for a function, choose between an associated type and a generic parameter, decide whether a trait is object-safe, and build a small plugin API that works both as a generic and behind dyn.",
+  "Traits are the interface mechanism. Chapter 15 uses them to express the patterns engineers reach for out of object-oriented habit: polymorphism, encapsulation, and shared behavior modeled with composition, enums, and trait objects instead of inheritance. The dispatch and object-s"
+ ],
+ "codeSamples": {
+  "traits_bounds_associated_types": "trait RetryPolicy {\n    type Decision;\n\n    fn decide(&self, attempts: u32) -> Self::Decision;\n\n    fn label(&self) -> &'static str {\n        \"policy\"\n    }\n\n    fn should_log(&self) -> bool {\n        true\n    }\n}\n\nstruct FixedLimit {\n    max: u32,\n}\n\nimpl RetryPolicy for FixedLimit {\n    type Decision = bool;\n\n    fn decide(&self, attempts: u32) -> Self::Decision {\n        attempts < self.max\n    }\n\n    fn label(&self) -> &'static str {\n        \"fixed-limit\"\n    }\n}\n\nfn evaluate<P>(policy: &P, attempts: u32) -> String\nwhere\n    P: RetryPolicy<Decision = bool>,\n{\n    format!(\"{} => {}\", policy.label(), policy.decide(attempts))\n}\n\nfn main() {\n    let policy = FixedLimit { max: 3 };\n\n    println!(\"{}\", evaluate(&policy, 2));\n    println!(\"log = {}\", policy.should_log());\n}",
+  "traits_dyn_plugin_pipeline": "trait Plugin {\n    fn name(&self) -> &'static str;\n    fn run(&self, input: &str) -> String;\n}\n\nstruct Uppercase;\n\nstruct Prefix {\n    value: &'static str,\n}\n\nimpl Plugin for Uppercase {\n    fn name(&self) -> &'static str {\n        \"uppercase\"\n    }\n\n    fn run(&self, input: &str) -> String {\n        input.to_uppercase()\n    }\n}\n\nimpl Plugin for Prefix {\n    fn name(&self) -> &'static str {\n        \"prefix\"\n    }\n\n    fn run(&self, input: &str) -> String {\n        format!(\"{}{}\", self.value, input)\n    }\n}\n\nfn run_all(plugins: &[Box<dyn Plugin>], input: &str) -> Vec<String> {\n    plugins\n        .iter()\n        .map(|plugin| format!(\"{} => {}\", plugin.name(), plugin.run(input)))\n        .collect()\n}\n\nfn main() {\n    let plugins: Vec<Box<dyn Plugin>> = vec![\n        Box::new(Uppercase),\n        Box::new(Prefix { value: \"svc-\" }),\n    ];\n\n    for line in run_all(&plugins, \"rust\") {\n        println!(\"{}\", line);\n    }\n}"
+ },
+ "labReferenceSolution": "trait Stage {\n    fn name(&self) -> &'static str;\n    fn run(&self, input: &str) -> String;\n\n    // Default method: reuse name() and run() so every stage prints the same way.\n    fn describe(&self, input: &str) -> String {\n        format!(\"{} => {}\", self.name(), self.run(input))\n    }\n}\n\nstruct Trim;\nstruct Wrap {\n    tag: &'static str,\n}\n\nimpl Stage for Trim {\n    fn name(&self) -> &'static str {\n        \"trim\"\n    }\n    fn run(&self, input: &str) -> String {\n        input.trim().to_string()\n    }\n}\n\nimpl Stage for Wrap {\n    fn name(&self) -> &'static str {\n        \"wrap\"\n    }\n    fn run(&self, input: &str) -> String {\n        format!(\"[{}]{}[/{}]\", self.tag, input, self.tag)\n    }\n}\n\nfn run_pipeline(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {\n    stages.iter().map(|s| s.describe(input)).collect()\n}\n\nfn main() {\n    let stages: Vec<Box<dyn Stage>> = vec![\n        Box::new(Trim),\n        Box::new(Wrap { tag: \"b\" }),\n    ];\n\n    for line in run_pipeline(&stages, \"  hi  \") {\n        println!(\"{}\", line);\n    }\n    println!(\"stages = {}\", stages.len());\n}\n"
+}

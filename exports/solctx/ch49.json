@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch49",
+ "num": 49,
+ "title": "HTTPS, TLS, and Secure Service Boundaries",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose a TLS termination strategy from the real deployment boundary",
+   "objective": "Practice selecting load balancer, reverse proxy, sidecar, or in-process termination from trust, packaging, and ownership requirements instead of from habit.",
+   "starterPrompt": "You have one browser-facing Rust API behind a cloud load balancer, one internal admin tool on the same host as a reverse proxy, one service-mesh deployment, and one dedicated edge appliance written in Rust.",
+   "prompts": [
+    "Which deployment naturally wants load-balancer termination?",
+    "Which one fits reverse-proxy termination on the same host?",
+    "Which one already has a sidecar trust boundary and should model identity handoff explicitly?",
+    "Which one most plausibly wants in-process TLS because the Rust service itself owns the full external edge?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least two different termination strategies across the four cases.",
+    "You justify one choice with trust-header policy and one with certificate ownership or packaging policy.",
+    "You avoid pretending one termination strategy is always correct for every service."
+   ],
+   "hints": [
+    "Ask who owns public certificates, who trusts proxy headers, and who needs the peer identity directly.",
+    "The calm answer is often the one that keeps trust boundaries smallest and most reviewable."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Identify insecure HTTP, cookie, and header settings in one API edge",
+   "objective": "Read a sample configuration and explain which values are dangerous in production and which safer defaults belong instead.",
+   "starterPrompt": "A sample API config sets `redirect_http = false`, `allowed_origin = \"*\"`, `cookie.secure = false`, `cookie.http_only = false`, `same_site = \"None\"`, and `hsts_max_age_secs = 0`.",
+   "prompts": [
+    "Which fields weaken browser-side transport or session safety directly?",
+    "Which change is unsafe only in combination, such as wildcard CORS with credentials?",
+    "Which settings should be different for production even if a local demo accepted them?",
+    "What would you test in CI after changing these defaults?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least three concrete insecure settings.",
+    "You propose secure replacements for cookies, redirects, CORS, or HSTS with a reason.",
+    "You mention at least one CI assertion such as secure cookie flags, redirect behavior, or HSTS presence."
+   ],
+   "hints": [
+    "The question is not whether the app still works. The question is whether the boundary stays safe under browsers and proxies.",
+    "A secure answer usually names both the bad setting and the operational risk it creates."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Harden one API edge configuration deliberately",
+   "objective": "Translate insecure edge settings into a small typed policy that expresses secure defaults clearly and can be tested deterministically.",
+   "starterPrompt": "Refactor a tiny config so HTTPS redirects are on, the session cookie becomes hardened, the CORS origin becomes explicit, and HSTS is enabled.",
+   "prompts": [
+    "Keep the config as small plain Rust types.",
+    "Use one exact origin instead of `*`.",
+    "Use a secure session-cookie shape instead of a weak browser default.",
+    "Print one short summary that proves the values changed."
+   ],
+   "acceptanceCriteria": [
+    "The config now expresses secure redirect and HSTS behavior.",
+    "The session-cookie policy is hardened with at least `Secure` and `HttpOnly`.",
+    "The CORS policy is no longer wildcard.",
+    "The runnable lab prints the expected secure summary."
+   ],
+   "hints": [
+    "This is a boundary-policy exercise, not a framework exercise.",
+    "If the values are explicit and typed, the next CI or review step gets much easier."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Debug a TLS failure without weakening verification",
+   "objective": "Create a repair path for a real certificate or handshake failure while keeping production-safe verification intact.",
+   "starterPrompt": "A staging client fails with a certificate error. The server certificate recently rotated, traffic now goes through a different proxy layer, and an engineer suggests temporarily disabling verification to confirm the route.",
+   "prompts": [
+    "Which evidence should you check first: hostname or SNI, full chain, trust store, or ALPN mismatch?",
+    "Where could proxy termination or forwarded-scheme trust be the actual bug instead of the certificate itself?",
+    "How would you reproduce the failure locally or in CI with a local CA rather than by skipping checks?",
+    "Which change is acceptable for local diagnostics but unacceptable as a production workaround?"
+   ],
+   "acceptanceCriteria": [
+    "You produce a checklist that starts from hostname, chain, trust, and proxy evidence.",
+    "You do not recommend disabling verification as a production fix.",
+    "You include one safe local or CI reproduction strategy using explicit trust material.",
+    "You mention at least one way a proxy or termination change can look like a certificate bug to the app."
+   ],
+   "hints": [
+    "Most TLS failures are evidence problems before they are code problems.",
+    "The safe diagnostic path is usually a local CA or explicit trust-bundle path, not a global skip-verify switch."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design certificate rotation and mTLS boundaries for a service fleet",
+   "objective": "Make renewal, reload, trust distribution, and peer-identity policy explicit before the first expiry or mixed rollout incident.",
+   "starterPrompt": "You run one public API, one internal queue consumer, and one service-to-service path that requires mTLS. Certificates rotate every 30 days, and operators want zero-downtime renewals.",
+   "prompts": [
+    "Which hops need only server-authenticated TLS and which need mTLS?",
+    "Where should peer identity be checked: sidecar, reverse proxy, or in-process service?",
+    "How will certificates and trust bundles reload without taking the service offline?",
+    "Which metrics or alerts should warn before expiry or failed reload becomes user-visible?"
+   ],
+   "acceptanceCriteria": [
+    "You classify at least one path as server-auth TLS only and one path as mTLS.",
+    "You define where peer identity is enforced and why that owner is appropriate.",
+    "You mention one reload or rollout strategy for rotation.",
+    "You mention at least two observability signals such as cert-expiry horizon, reload failure count, or mTLS rejection rate."
+   ],
+   "hints": [
+    "Rotation is both a secret-distribution problem and a runtime-reload problem.",
+    "mTLS is useful only if the peer identity still becomes a policy input somewhere explicit."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Test HTTPS locally and in CI with realistic trust behavior",
+   "objective": "Build a local and CI test plan that exercises real TLS policy without teaching the team insecure shortcuts.",
+   "starterPrompt": "You need browser-facing HTTPS tests, one service-to-service mTLS test, and one CI lane that verifies secure cookies, redirects, and HSTS.",
+   "prompts": [
+    "Which SANs or hostnames should local certs cover?",
+    "Which trust material should the browser or client test harness use in CI?",
+    "How would you validate mTLS acceptance and rejection paths explicitly?",
+    "Which assertions belong in the CI smoke test beyond 'port opens over TLS'?"
+   ],
+   "acceptanceCriteria": [
+    "You use a local or CI CA and explicit trust bundle rather than an insecure verification bypass.",
+    "You include at least one mTLS acceptance or rejection test.",
+    "You include at least three transport-policy assertions such as HTTPS redirect, secure cookie, HSTS, or origin policy.",
+    "You explain how the plan keeps local and CI trust behavior close enough to production to be meaningful."
+   ],
+   "hints": [
+    "A trusted local CA is usually the calmest path for realistic developer HTTPS.",
+    "CI should prove policy, not only reachability."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What is the practical difference between server-authenticated TLS and mTLS?",
+  "Why should proxy-header trust be tied to a known network boundary instead of accepted from arbitrary callers?",
+  "When is HSTS a safe default, and when is it premature?",
+  "Why are local CA and CI trust bundles safer than skip-verification flags for HTTPS testing?",
+  "What makes certificate rotation a deployment problem as much as a cryptography problem?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Harden one API edge policy",
+  "filename": "harden_edge_policy_lab.rs",
+  "runKey": "ch49_ex_harden_api_defaults",
+  "expectedOutput": "redirect = true\ncookie hardened = true\ncors = locked-down\nhsts = true",
+  "initialCode": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"session\",\n        secure: false,\n        http_only: false,\n        same_site: \"None\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: false,\n        hsts_max_age_secs: 0,\n        allowed_origin: \"*\",\n    };\n\n    println!(\"redirect = {}\", policy.redirect_http);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    println!(\"hsts = {}\", policy.redirect_http && policy.hsts_max_age_secs > 0);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 25, 30, 43, 46, 47, and 48",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "What HTTPS actually checks: chains, hostnames, ALPN, and whose trust store",
+  "Where TLS ends: load balancer, reverse proxy, sidecar, or your own process",
+  "Picking a TLS library: Rust-native or the platform's stack",
+  "mTLS: authenticating the caller, not just the server",
+  "Certificate rotation as a lifecycle, not a one-off task",
+  "The HTTP defaults that make a TLS boundary actually secure",
+  "Debugging TLS failures without weakening security",
+  "Testing HTTPS locally and in CI",
+  "How this lands depending on where you come from",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: choose a TLS termination and internal peer-auth strategy deliberately",
+  "Example 2: encode secure cookie, CORS, HSTS, and rotation defaults explicitly",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A secure service boundary is not one library call. It is a set of decisions about where TLS terminates, which identities you accept, how certificates rotate, which proxy headers you believe, and what your HTTP defaults are. This chapter treats HTTPS and TLS as those decisions mad",
+  "Chapter 19 established contract-first serialization, Chapter 25 covered runtime boundaries, Chapter 30 covered durable transport edges, Chapter 43 covered observability, Chapter 46 covered HTTP APIs, Chapter 47 covered gRPC transport policy, and Chapter 48 covered long-lived conn",
+  "A single Rust API serves three very different audiences at once: browsers loading a web UI, other services calling it machine-to-machine, and long-lived administrative sessions. Some of that traffic crosses the public internet and some stays inside a private network. The team's j",
+  "Before any of that policy makes sense, it helps to see exactly what happens on the wire. Notice that every security check below, certificate validation, hostname matching, and protocol selection, finishes before the first HTTP byte is sent. The handshake is where trust is establi",
+  "Three ideas carry most of this chapter. The first is about what HTTPS actually is at the byte level. The second is about where the encryption boundary sits in your system. The third is about treating the boundary as policy you encode rather than behavior you hope for. Hold these ",
+  "When a TLS connection fails, it almost always fails for one of four reasons, and they map cleanly onto four questions. Could the client build a chain to a root it trusts? Did the certificate cover the hostname the client asked for? Did the two sides agree on a protocol? And, cruc",
+  "The single most consequential question in this chapter is where the public TLS connection actually ends. Follow the dotted plaintext segment in the diagram below: wherever it appears, that is a hop your application does not see as TLS, and therefore a hop where the original schem",
+  "The most common mistake here is to treat proxy headers as trustworthy simply because TLS terminated somewhere upstream. A header such as X-Forwarded-Proto is just bytes; any client can send it. Believe it only when it arrives through the specific proxy hops you operate, and strip",
+  "If your service terminates TLS itself, you choose a TLS implementation, and the two honest options pull in opposite directions. A Rust-native stack carries its own trust and behaves identically everywhere. The platform stack inherits the operating system's trust and certificate l",
+  "A good senior-level decision is usually “which runtime trust-store and packaging contract do we want?” long before it is “which exact client or server API looks shortest in code?”",
+  "For service-to-service traffic, you often want both ends to prove who they are. The diagram below shows the key addition over ordinary HTTPS: the server requests a certificate from the client, the client presents one, and then the server runs a policy check on the verified identi",
+  "A certificate is a secret with an expiry date, which makes rotation an ongoing state machine rather than a thing you do once. The transition that catches teams out is the one drawn in bold below: renewing the material on disk and actually reloading it into the running process are",
+  "A correct TLS handshake protects bytes in transit, but it does not by itself stop a session cookie from leaking, a cross-origin page from reading your responses, or a browser from quietly falling back to plaintext. Those are HTTP-level concerns, and each one is a small policy you",
+  "TLS failures feel opaque because the error often arrives as a generic 'handshake failed,' but the underlying cause is almost always one of a short list. Work through this checklist in order, from the most common cause (a name mismatch) to the more subtle ones (ALPN, proxy trust, ",
+  "A debugging checklist that ends with “turn verification off” is not a production checklist. Use a local CA or explicit test trust bundle instead.",
+  "The whole point of this section is to test the secure path, not a weakened stand-in for it. The reliable approach is to run a small certificate authority you control, in development and in CI, so your tests exercise the same chain assembly and hostname verification a real client ",
+  "The TLS facts in this chapter are the same in every language. What differs is the habit you arrive with and the assumption you most need to drop. These cards are about the mental-model shift, not about which crate maps to which library.",
+  "The point is not framework syntax. The point is that external termination, forwarded-proto trust, ALPN, and internal mTLS policy are one explicit configuration surface.",
+  "Before reading the code, picture the boundary it describes. The request crosses an external edge that terminates public TLS, then reaches the service over an internal hop that uses mTLS, and the service only believes the forwarded scheme because it came through that known edge. T",
+  "One enum value makes the termination owner visible instead of implicit.",
+  "mTLS is modeled as peer-auth policy, not as a vague “secure internal” claim.",
+  "Forwarded scheme data is trusted only when a known proxy hop exists.",
+  "HTTP protocol selection belongs in the same boundary model as certificates and hostnames.",
+  "This is a configuration-oriented example for the application edge. The values are boring on purpose, because boring secure defaults survive production review.",
+  "Read each field as a policy statement. The cookie name prefix, the CORS mode, the HSTS flag, and the rotation window each represent one decision that a reviewer can evaluate in isolation and a test can assert against directly.",
+  "Secure, HttpOnly, and SameSite stay visible instead of buried in one framework default.",
+  "Exact origin policy makes credentialed browser flows reviewable.",
+  "HTTPS redirects and HSTS should reinforce each other, not contradict each other.",
+  "Renewal windows are deployment policy, not a comment on a certificate ticket.",
+  "A typed config surface is much easier to diff and test in CI than scattered string settings."
+ ],
+ "codeSamples": {
+  "https_tls_topology_policy": "#[derive(Debug, Clone, Copy)]\nenum TlsTermination {\n    LoadBalancer,\n    ReverseProxy,\n    InProcess,\n}\n\n#[derive(Debug, Clone, Copy)]\nenum PeerAuth {\n    Off,\n    Mtls,\n}\n\n#[derive(Debug)]\nstruct ServiceEdge {\n    external_tls: TlsTermination,\n    internal_peer_auth: PeerAuth,\n    trusted_proxy_hops: u8,\n    app_protocol: &'static str,\n}\n\nimpl ServiceEdge {\n    fn external_mode(&self) -> &'static str {\n        match self.external_tls {\n            TlsTermination::LoadBalancer => \"load-balancer\",\n            TlsTermination::ReverseProxy => \"reverse-proxy\",\n            TlsTermination::InProcess => \"in-process\",\n        }\n    }\n\n    fn internal_mode(&self) -> &'static str {\n        match self.internal_peer_auth {\n            PeerAuth::Off => \"tls-only\",\n            PeerAuth::Mtls => \"mtls\",\n        }\n    }\n\n    fn forwarded_proto_policy(&self) -> &'static str {\n        if self.trusted_proxy_hops > 0 {\n            \"trusted-proxy-only\"\n        } else {\n            \"ignore-forwarded-proto\"\n        }\n    }\n\n    fn alpn(&self) -> &'static str {\n        self.app_protocol\n    }\n}\n\nfn main() {\n    let edge = ServiceEdge {\n        external_tls: TlsTermination::LoadBalancer,\n        internal_peer_auth: PeerAuth::Mtls,\n        trusted_proxy_hops: 1,\n        app_protocol: \"h2\",\n    };\n\n    println!(\"external = {}\", edge.external_mode());\n    println!(\"internal = {}\", edge.internal_mode());\n    println!(\"forwarded proto = {}\", edge.forwarded_proto_policy());\n    println!(\"alpn = {}\", edge.alpn());\n}",
+  "https_tls_security_defaults": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n    renew_before_days: u16,\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n\n    fn hsts_enabled(&self) -> bool {\n        self.hsts_max_age_secs > 0\n    }\n\n    fn rotate_now(&self, days_left: u16) -> bool {\n        days_left <= self.renew_before_days\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"__Host-session\",\n        secure: true,\n        http_only: true,\n        same_site: \"Lax\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: true,\n        hsts_max_age_secs: 63_072_000,\n        allowed_origin: \"https://app.example.com\",\n        renew_before_days: 14,\n    };\n\n    println!(\"cookie = {}\", cookie.name);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    println!(\"hsts = {}\", policy.hsts_enabled());\n    println!(\"rotate now = {}\", policy.rotate_now(21));\n}"
+ },
+ "labReferenceSolution": null
+}

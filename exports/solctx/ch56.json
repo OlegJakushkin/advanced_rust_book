@@ -1,0 +1,221 @@
+{
+ "chapterKey": "ch56",
+ "num": 56,
+ "title": "no-std Rust and Constrained Runtime Derivatives",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Place each function at its lowest ring",
+   "objective": "Restate the three-ring capability model (core, alloc, std) and the decision of which ring a given function belongs to.",
+   "starterPrompt": "The chapter describes the standard library as three stacked layers and frames no_std as opting out of the upper ones. Using the crate-root listing, explain why checksum lives in core, encode_frame lives behind the alloc feature, and write_diagnostic lives behind the std feature.",
+   "prompts": [
+    "State what capability each ring requires of the target: core, alloc, std.",
+    "For each of the three functions, name the single concrete need that pins it to its ring.",
+    "Explain why no_std and no-heap are described as two separate decisions, not one.",
+    "Say what the target triple decides about which ring a build can reach."
+   ],
+   "acceptanceCriteria": [
+    "core is described as always available, alloc as requiring a heap, and std as requiring an OS.",
+    "checksum is pinned to core because it takes only a slice and returns an integer; encode_frame to alloc because it returns an owned Vec<u8>; write_diagnostic to std because it produces a String and is meant for host diagnostics.",
+    "The answer states that a crate can be no_std yet still use alloc, so dropping std does not by itself remove the heap.",
+    "The target triple is identified as what determines the highest ring a given build is allowed to use."
+   ],
+   "hints": [
+    "Look at the return types: a borrowed slice needs nothing, an owned Vec needs a heap, a host String for diagnostics needs the OS.",
+    "no_std removes the std layer; the heap belongs to the alloc layer below it."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the fixed-capacity Pool",
+   "objective": "Read the fixed-capacity Pool and predict its observable outputs without running it.",
+   "starterPrompt": "Read Example 2, the Pool<const SLOTS, const BYTES> type with alloc_copy, as_slice, release, and in_use. Predict the three printed values for a Pool::<2, 8> after allocating b\"abc\" and b\"rust\", attempting b\"more\", and then releasing the first slot.",
+   "prompts": [
+    "Walk alloc_copy and state when it returns None versus Some(SlotId).",
+    "Determine why the third allocation of b\"more\" fails for a pool of two slots.",
+    "Compute in_use after the first slot is released, and state what sent_bytes (the length from as_slice) is.",
+    "Explain what release resets so the slot can be reused."
+   ],
+   "acceptanceCriteria": [
+    "alloc_copy returns None when bytes.len() exceeds BYTES, and otherwise None only when every slot is already used.",
+    "The third allocation fails because both of the two slots are occupied, not because of byte capacity.",
+    "in_use is 1 after release, overflow is true, and sent_bytes is 3 (the length of b\"abc\").",
+    "release is identified as clearing the used flag and zeroing the recorded length for that slot."
+   ],
+   "hints": [
+    "SLOTS bounds how many buffers exist; BYTES bounds the size of each one.",
+    "as_slice reads lens[id], which release sets back to 0."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Keep checksum slice-based across every ring",
+   "objective": "Write the baseline portable API as a function over a borrowed slice so it compiles at the core ring.",
+   "starterPrompt": "Implement fn checksum(bytes: &[u8]) -> u32 so it works identically whether the caller holds a fixed array on a sensor board, a wasm guest buffer, or a Vec<u8> on a server. The function must not require alloc or std.",
+   "prompts": [
+    "Keep the signature exactly fn checksum(bytes: &[u8]) -> u32.",
+    "Sum each byte widened to u32 and avoid allocating any intermediate collection.",
+    "Confirm in prose that nothing in the body would force the alloc or std ring.",
+    "Show one call from an array literal and one from a Vec<u8> to demonstrate the same function serves both."
+   ],
+   "acceptanceCriteria": [
+    "The signature stays fn checksum(bytes: &[u8]) -> u32 and takes a borrowed slice, not an owned Vec.",
+    "The body widens each byte to u32 and sums without constructing a new Vec or String.",
+    "The function compiles with no reference to alloc or std types, so it belongs at the core ring.",
+    "checksum(b\"abc\") returns 294 and the same function accepts &vec[..] from a Vec<u8>."
+   ],
+   "hints": [
+    "Arrays, vectors, and subslices all coerce to &[u8], which is the whole reason to take a slice.",
+    "A reduction over a slice is one iterator chain: map each byte to u32, then sum."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Transfer slot ownership to a DMA handoff",
+   "objective": "Use move semantics to encode that a peripheral, not the caller, owns a buffer while a transfer is in flight.",
+   "starterPrompt": "Following the chapter's submit_to_dma idea, write fn submit_to_dma(slot: SlotId) -> InFlight that takes the SlotId by value and returns a handle, plus fn complete(token: InFlight) -> SlotId that returns ownership once the transfer finishes. The caller must be unable to read the buffer between submit and complete.",
+   "prompts": [
+    "Define SlotId and a separate InFlight type that wraps the moved SlotId.",
+    "Make submit_to_dma consume the SlotId by value so the caller no longer holds it.",
+    "Make complete consume the InFlight token and hand the SlotId back.",
+    "Explain in prose why a use of the slot between submit and complete is a compile error, not a runtime race."
+   ],
+   "acceptanceCriteria": [
+    "submit_to_dma takes slot: SlotId by value and returns an InFlight handle that owns it.",
+    "complete takes the InFlight token by value and returns the original SlotId.",
+    "After calling submit_to_dma, any attempt to use the moved SlotId fails to compile.",
+    "The write-up names move semantics, not a runtime check or atomic, as what enforces exclusive access during the transfer."
+   ],
+   "hints": [
+    "Taking a parameter by value moves it; the previous binding is no longer usable.",
+    "The peripheral conceptually owns the memory until complete returns the SlotId."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Replace an infallible push with try_reserve",
+   "objective": "Convert an allocation that assumes success into a fallible path that returns the out-of-memory case to the caller.",
+   "starterPrompt": "A frame encoder behind the alloc feature calls out.extend_from_slice(payload) directly, so an allocation failure aborts the whole firmware image. Refactor it so it reserves capacity fallibly first and returns an error to the caller instead of aborting.",
+   "prompts": [
+    "Change the return type so the failure is visible, for example Result<Vec<u8>, TryReserveError>.",
+    "Call try_reserve for the needed capacity before pushing or extending any bytes.",
+    "Only grow the buffer once the capacity is secured, so a failure leaves the buffer untouched.",
+    "State why aborting on allocation failure is unacceptable on a constrained target but tolerated on a hosted one."
+   ],
+   "acceptanceCriteria": [
+    "The function returns a Result whose error path corresponds to a failed reservation rather than aborting.",
+    "try_reserve (or try_reserve_exact) is called and its error is propagated before any push or extend_from_slice.",
+    "No bytes are written into the buffer on the failure path.",
+    "The explanation notes that on constrained targets allocation can genuinely fail, so out-of-memory must be a handled value, not a process abort."
+   ],
+   "hints": [
+    "try_reserve returns Result<(), TryReserveError>; the ? operator turns its error into your function's error.",
+    "Secure capacity first, then extend, so the function is left in a clean state when reservation fails."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Ship one framing library across four homes",
+   "objective": "Design the feature-gated surface and runtime contract of a single crate that must run on firmware, a hypervisor, a wasm guest, and a server.",
+   "starterPrompt": "Your team owns a packet-framing and checksum library that must ship to four targets from the opening scenario: bare-metal firmware, kernel-adjacent hypervisor startup code, a sandboxed wasm guest behind a narrow ABI, and a normal server. Decide which functions live in core, which sit behind alloc, and which sit behind std, and state the runtime contract each target imposes.",
+   "prompts": [
+    "Assign the checksum, frame-encode, and host-diagnostic surfaces to the core, alloc, and std rings respectively, and justify each placement.",
+    "Name what each target must supply that std would otherwise provide: panic handler, allocator, startup glue, linker script.",
+    "Decide the memory strategy for the firmware path: fixed-capacity slots, fallible allocation, or both, and why.",
+    "Describe how host-side std tests validate the portable core logic separately from slower target-specific harnesses."
+   ],
+   "acceptanceCriteria": [
+    "The smallest truthful API is slice-based and in core; owned helpers are alloc-gated; host diagnostics are std-gated, matching the shape the chapter recommends.",
+    "The freestanding targets are shown to require an explicit panic handler, allocator choice, startup, and linker script as part of the release contract.",
+    "The firmware path prefers fixed-capacity or fallible-memory handling rather than assuming infallible allocation.",
+    "Portable core logic is tested on the host with std while target-specific behavior is validated separately, keeping the fast tests fast."
+   ],
+   "hints": [
+    "Design the smallest truthful API first and add owned conveniences only where the product boundary genuinely benefits.",
+    "The common failure is an unspoken assumption: that an allocator, logs, or unwind exist on every target."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What capability does each of the three rings require of a target, and which ring is always available regardless of target triple?",
+  "Why are no_std and no-heap two independent decisions rather than one, and how does the alloc feature relate to that distinction?",
+  "On a freestanding target, why does the compiler require you to supply a #[panic_handler], and what does std normally provide in its place?",
+  "How does taking a slot by value in a submit_to_dma-style API turn a potential data race with a DMA engine into a compile-time error?",
+  "What does try_reserve change about a buffer-growing function compared with calling push or extend_from_slice directly, and why does that matter on a constrained target?"
+ ],
+ "lab": {
+  "title": "Runnable lab · fixed-capacity frame pool",
+  "filename": "fixed_capacity_pool_lab.rs",
+  "runKey": "ch56_ex_pool",
+  "expectedOutput": "checksum = 294\noverflow = true\nin_use = 1",
+  "helperText": "Model the chapter's fixed-capacity Pool in plain std: a frame pool with a bounded slot count where allocation can fail. Fill in alloc_copy so it rejects oversized inputs and reuses the first free slot.",
+  "initialCode": "struct FramePool {\n    used: Vec<bool>,\n    frames: Vec<Vec<u8>>,\n    capacity: usize,\n}\n\nimpl FramePool {\n    fn new(slots: usize, capacity: usize) -> Self {\n        FramePool {\n            used: vec![false; slots],\n            frames: vec![Vec::new(); slots],\n            capacity,\n        }\n    }\n\n    // TODO: Reject inputs longer than `self.capacity` by returning None.\n    // Otherwise find the first free slot, mark it used, copy the bytes into\n    // it, and return Some(index). Return None if every slot is already used.\n    fn alloc_copy(&mut self, bytes: &[u8]) -> Option<usize> {\n        let _ = bytes;\n        None\n    }\n\n    fn release(&mut self, id: usize) {\n        self.used[id] = false;\n        self.frames[id].clear();\n    }\n\n    fn in_use(&self) -> usize {\n        self.used.iter().filter(|&&u| u).count()\n    }\n}\n\nfn checksum(bytes: &[u8]) -> u32 {\n    bytes.iter().map(|&b| b as u32).sum()\n}\n\nfn main() {\n    let mut pool = FramePool::new(2, 8);\n\n    let first = pool.alloc_copy(b\"abc\").unwrap_or(0);\n    let _second = pool.alloc_copy(b\"rust\");\n    let overflow = pool.alloc_copy(b\"overflowing\").is_none();\n    let first_sum = checksum(pool.frames[first].as_slice());\n\n    pool.release(first);\n\n    println!(\"checksum = {}\", first_sum);\n    println!(\"overflow = {}\", overflow);\n    println!(\"in_use = {}\", pool.in_use());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 03, 08, 28, 29, and 44",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "The three surfaces in practice: core, alloc, std, and what the target triple decides",
+  "When to reach for no_std (and when not to)",
+  "Designing a crate that stays portable",
+  "Managing memory when there is no std heap",
+  "Ownership and data layout next to the hardware",
+  "Embedded Rust layering: PAC, HAL, BSP, RTIC or Embassy-style execution, interrupts, and critical sections",
+  "FFI and ABI boundaries for `no_std` code: C, C++, kernels, hypervisors, and wasm hosts",
+  "Testing, simulation, debugging, fuzzing, and profiling `no_std` crates from a host-side std environment",
+  "Safety boundaries: unsafe, atomics, MMIO, interrupt concurrency, panic handlers, and audit checklists",
+  "Production tradeoffs: portability, specialization, observability, binary size, linker scripts, and release engineering",
+  "Comparison callout",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: a portable crate surface split across core, alloc, and std",
+  "Example 2: fixed-capacity buffer ownership with a DMA-style slot handle",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
+  "Chapter 03 covered feature flags and dependency hygiene. Chapter 08 established how to audit small unsafe surfaces. Chapters 28 and 29 covered C/C++ and wasm host boundaries. Chapter 44 covered cross-target build and release engineering. This chapter recombines those ideas for `n",
+  "Imagine one team that owns a packet-framing and checksum library and is asked to ship it in four very different homes: the firmware on a sensor board with no operating system, the kernel-adjacent startup code of a small hypervisor, a sandboxed wasm guest that talks to a host over",
+  "That is the whole job of this chapter: decide, per layer, the smallest runtime surface that is actually needed. Pure logic that needs nothing but the language stays in core. Helpers that own a growable buffer get gated behind alloc. Anything that touches the OS gets gated behind ",
+  "The diagram below is the picture to hold in your head for the rest of the chapter. Read it as three concentric capability rings (core is always there, alloc needs a heap, std needs an OS) and four target triples that each stop at a different ring.",
+  "Each target triple stops at a different ring. Here is how the four homes from the scenario map onto the stack above:",
+  "Three ideas do most of the work in this chapter, and getting them straight up front prevents nearly all of the confusion newcomers have with no_std. The first is that you are not learning a different language. The second is that no_std and no-heap are separate decisions. The thir",
+  "With the three-ring picture in place, the rest of the chapter walks the concrete decisions a senior engineer makes: how to lay out a crate so each function lives at the right ring, when no_std is the right call at all, how to manage memory without a heap, how ownership changes wh",
+  "The standard library you reach for on a server is really three layers stacked on top of each other, and no_std lets you opt out of the upper ones. Knowing exactly what lives in each layer is what lets you place a function at the lowest ring it can tolerate. The cards below name t",
+  "Look at the listing below as three doors, one per surface. The crate is no_std unless the caller turns on the std feature. checksum takes only a slice and so compiles everywhere. encode_frame returns an owned Vec<u8> and is therefore behind the alloc door. write_diagnostic touche",
+  "Each of those three doors carries a different target requirement:",
+  "In a hosted program std supplies a panic handler for free: it prints a message and unwinds or aborts. In a freestanding binary there is no std to do that, so the compiler requires you to provide a #[panic_handler] yourself. The one below simply spins forever, which is a deliberat",
+  "The lesson is that panic strategy, startup glue, and linker scripts are not background details on these targets; they are first-class items you own or import explicitly. Some boards rely on a platform crate to provide that layer, others want it hand-written, and there is no singl",
+  "It is easy to over-apply no_std out of a sense of minimalism. The honest test is whether the code must run somewhere that does not have, or does not want, the standard library. There are four recurring situations where that is genuinely the case. Outside them, a normal std crate ",
+  "The correction worth internalizing: no_std is not a synonym for \"microcontroller only.\" It is a way to make runtime assumptions explicit enough that one body of logic can survive several constrained hosts honestly. If your code will only ever run on a normal OS, do not go no_std ",
+  "Portability is not something you bolt on later; it is a property of how the crate is shaped from the first commit. The pattern is the same one the crate-root listing showed: keep the baseline API in core, layer owned conveniences behind an alloc feature, and reserve std for the o",
+  "The senior rule of thumb is to design the smallest truthful API first. If borrowed slices and fixed-capacity callers are enough, keep the surface in core and let it compile everywhere. Add owned convenience only when the product boundary genuinely benefits from alloc or std, and ",
+  "The biggest habit to unlearn from hosted programming is the assumption that allocation always succeeds. On a constrained target, memory is a fixed budget and growth can fail, so the design question shifts from \"how do I allocate?\" to \"what happens when I cannot?\" The four strateg",
+  "The difference is one method. Where a hosted version would call push or extend_from_slice and let an allocation failure abort the process, the version below first calls try_reserve and returns the error to the caller. The buffer only grows once the capacity is secured, so the out",
+  "Close to the metal, Rust's ownership model stops being a discipline about cleanup and becomes a tool for reasoning about who is physically allowed to touch a piece of memory at a given instant. Two concurrent actors you cannot see from ordinary code (a DMA engine and a hardware r",
+  "The key idea in the next listing is that submit_to_dma takes the slot by value. Once you call it, you no longer have the slot, so the compiler will reject any attempt to read or write that buffer while the transfer is in flight. The peripheral conceptually owns the memory until i",
+  "Here the entire unsafe footprint is two one-line functions. Wrapping the raw pointer in a Register type means the rest of the driver works with a safe API, and any audit of MMIO correctness reduces to reviewing these two reads and writes plus the validity of the address that prod",
+  "Interrupt safety usually combines ownership discipline with either atomics or a critical-section model. Do not assume a `Mutex` from std exists, and do not assume an interrupt boundary behaves like a thread boundary.",
+  "Keep panic and allocation policy explicit at the ABI seam. A freestanding or host-constrained caller cannot safely consume an implicit unwind or an unexpected heap contract.",
+  "Keep the smallest cross-target logic in `core`, then add `alloc` or `std` at explicit adapter boundaries instead of letting the runtime surface spread inward accidentally.",
+  "Prefer fixed-capacity or fallible-memory paths where bounds are real, and make buffer ownership transfer explicit for peripherals, DMA, or host ABI handoff.",
+  "Separate host-side tests from target-specific tests so the portable logic stays fast to validate even when device or guest runtime harnesses are slower.",
+  "Treat linker scripts, panic mode, startup, allocator choice, and target runners as part of the release contract, not only as build-system trivia.",
+  "The common senior mistake is not unsafe syntax. It is an unspoken runtime assumption: assuming an allocator, assuming logs exist, assuming unwind exists, or assuming one dependency will behave the same across all targets.",
+  "The smallest API stays slice-based. Owned helpers are alloc-gated. Host diagnostics stay std-gated. This is the shape to prefer before a library accidentally commits to a wider runtime than it needs."
+ ],
+ "codeSamples": {
+  "no_std_portable_surface": "#[cfg(feature = \"alloc\")]\nextern crate alloc;\n\n#[cfg(feature = \"alloc\")]\nuse alloc::vec::Vec;\n\nfn checksum(bytes: &[u8]) -> u32 {\n    bytes.iter().map(|&byte| byte as u32).sum()\n}\n\n#[cfg(feature = \"alloc\")]\nfn encode_frame(tag: u8, payload: &[u8]) -> Vec<u8> {\n    let mut out = Vec::with_capacity(payload.len() + 1);\n    out.push(tag);\n    out.extend_from_slice(payload);\n    out\n}\n\n#[cfg(feature = \"std\")]\nfn write_diagnostic(service: &str, checksum: u32) -> String {\n    format!(\"{}:{}\", service, checksum)\n}\n\nfn main() {\n    let payload = [1_u8, 2, 3];\n    let sum = checksum(&payload);\n\n    println!(\"portable modes = core|alloc|std\");\n    println!(\"checksum = {}\", sum);\n    println!(\"alloc-gated api = encode_frame\");\n}",
+  "no_std_fixed_capacity_dma": "#[derive(Clone, Copy, Debug, PartialEq, Eq)]\nstruct SlotId(usize);\n\nstruct Pool<const SLOTS: usize, const BYTES: usize> {\n    used: [bool; SLOTS],\n    lens: [usize; SLOTS],\n    data: [[u8; BYTES]; SLOTS],\n}\n\nimpl<const SLOTS: usize, const BYTES: usize> Pool<SLOTS, BYTES> {\n    const fn new() -> Self {\n        Self {\n            used: [false; SLOTS],\n            lens: [0; SLOTS],\n            data: [[0; BYTES]; SLOTS],\n        }\n    }\n\n    fn alloc_copy(&mut self, bytes: &[u8]) -> Option<SlotId> {\n        if bytes.len() > BYTES {\n            return None;\n        }\n\n        let mut index = 0;\n        while index < SLOTS {\n            if !self.used[index] {\n                self.used[index] = true;\n                self.lens[index] = bytes.len();\n                self.data[index][..bytes.len()].copy_from_slice(bytes);\n                return Some(SlotId(index));\n            }\n            index += 1;\n        }\n\n        None\n    }\n\n    fn as_slice(&self, id: SlotId) -> &[u8] {\n        &self.data[id.0][..self.lens[id.0]]\n    }\n\n    fn release(&mut self, id: SlotId) {\n        self.used[id.0] = false;\n        self.lens[id.0] = 0;\n    }\n\n    fn in_use(&self) -> usize {\n        self.used.iter().filter(|&&used| used).count()\n    }\n}\n\nfn main() {\n    let mut pool = Pool::<2, 8>::new();\n\n    let first = pool.alloc_copy(b\"abc\").unwrap();\n    let _second = pool.alloc_copy(b\"rust\").unwrap();\n    let overflow = pool.alloc_copy(b\"more\").is_none();\n    let sent_bytes = pool.as_slice(first).len();\n\n    pool.release(first);\n\n    println!(\"in_use = {}\", pool.in_use());\n    println!(\"overflow = {}\", overflow);\n    println!(\"sent bytes = {}\", sent_bytes);\n}"
+ },
+ "labReferenceSolution": "struct FramePool {\n    used: Vec<bool>,\n    frames: Vec<Vec<u8>>,\n    capacity: usize,\n}\n\nimpl FramePool {\n    fn new(slots: usize, capacity: usize) -> Self {\n        FramePool {\n            used: vec![false; slots],\n            frames: vec![Vec::new(); slots],\n            capacity,\n        }\n    }\n\n    fn alloc_copy(&mut self, bytes: &[u8]) -> Option<usize> {\n        if bytes.len() > self.capacity {\n            return None;\n        }\n        for index in 0..self.used.len() {\n            if !self.used[index] {\n                self.used[index] = true;\n                self.frames[index].clear();\n                self.frames[index].extend_from_slice(bytes);\n                return Some(index);\n            }\n        }\n        None\n    }\n\n    fn release(&mut self, id: usize) {\n        self.used[id] = false;\n        self.frames[id].clear();\n    }\n\n    fn in_use(&self) -> usize {\n        self.used.iter().filter(|&&u| u).count()\n    }\n}\n\nfn checksum(bytes: &[u8]) -> u32 {\n    bytes.iter().map(|&b| b as u32).sum()\n}\n\nfn main() {\n    let mut pool = FramePool::new(2, 8);\n\n    let first = pool.alloc_copy(b\"abc\").unwrap_or(0);\n    let _second = pool.alloc_copy(b\"rust\");\n    let overflow = pool.alloc_copy(b\"overflowing\").is_none();\n    let first_sum = checksum(pool.frames[first].as_slice());\n\n    pool.release(first);\n\n    println!(\"checksum = {}\", first_sum);\n    println!(\"overflow = {}\", overflow);\n    println!(\"in_use = {}\", pool.in_use());\n}"
+}

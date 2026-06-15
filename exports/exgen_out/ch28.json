@@ -1,0 +1,159 @@
+{
+  "chapterKey": "ch28",
+  "exercises": [
+    {
+      "number": 1,
+      "kind": "warm-up comprehension",
+      "title": "Sort types into what may cross the seam",
+      "objective": "Distinguish C ABI-stable representations from Rust-specific types whose layout must stay behind the boundary.",
+      "starterPrompt": "The chapter's central filter is to put every type into one of two buckets: a stable, agreed-upon shape that may cross a C ABI seam, or a Rust-specific type whose layout is an implementation detail. Sort the following: i32, &str, *const i32 plus a usize length, Vec<u8>, *mut i64, Result<u32, MyError>, and an opaque handle pointer.",
+      "prompts": [
+        "For each type, state whether it may cross the seam unchanged or must be flattened first.",
+        "For each type that must stay behind the seam, name the C ABI-safe shape you would replace it with.",
+        "Explain why &str and Vec<u8> cannot cross even though they describe contiguous bytes.",
+        "State what a Result<u32, MyError> becomes once the contract is expressed in C terms."
+      ],
+      "acceptanceCriteria": [
+        "i32, *const i32 with a usize length, *mut i64, and an opaque handle pointer are identified as crossable.",
+        "&str, Vec<u8>, and Result are identified as Rust-specific and not allowed to cross unchanged.",
+        "&str/Vec<u8> are replaced with a raw pointer plus an explicit length, and Result is replaced with an integer status plus out parameters.",
+        "The answer states that the reason is layout: a slice or Result has no fixed, agreed-upon C representation."
+      ],
+      "hints": [
+        "The decisive question is whether the type has a stable layout both languages already agree on.",
+        "Anything carrying a Rust lifetime, aliasing promise, or enum discriminant has to be lowered to pointers, lengths, and integers."
+      ]
+    },
+    {
+      "number": 2,
+      "kind": "code reading",
+      "title": "Trace the three layers of the abs wrapper",
+      "objective": "Read the chapter's calling-C-from-Rust example and identify which single layer is unsafe and why.",
+      "starterPrompt": "Re-read Example 1, where ffi_demo_abs is defined with extern \"C\" and no_mangle, reached through an unsafe extern \"C\" declaration, called inside the one-line wrapper safe_abs, and finally used from main. The body uses wrapping_abs rather than abs.",
+      "prompts": [
+        "Name the three layers and state which one contains the unsafe block.",
+        "Explain what the unsafe extern \"C\" declaration tells the compiler and what it does not verify.",
+        "Explain why the seam requires no ownership transfer for this signature.",
+        "Explain what would go wrong at the boundary if the body used abs instead of wrapping_abs on i32::MIN."
+      ],
+      "acceptanceCriteria": [
+        "The answer identifies the foreign declaration, the unsafe wrapper safe_abs, and the safe main, with only safe_abs holding unsafe.",
+        "It states that the declaration asserts the symbol and signature exist elsewhere but the compiler cannot check the foreign side honors them.",
+        "It explains the seam is plain i32 -> i32, so nothing is allocated or freed across it.",
+        "It explains that abs on i32::MIN panics, and a panic unwinding across a C ABI boundary is undefined behavior, which wrapping_abs avoids."
+      ],
+      "hints": [
+        "Only the actual foreign call needs unsafe; the surrounding wrapper and main stay safe.",
+        "The panic policy at the boundary is the real reason for choosing wrapping_abs over abs."
+      ]
+    },
+    {
+      "number": 3,
+      "kind": "implementation",
+      "title": "Export a length-prefixed buffer reader",
+      "objective": "Build a C ABI-safe exported function that takes a raw pointer plus length, validates null, and reports failure through an integer status.",
+      "starterPrompt": "Following the shape of sum_i32s from Example 2, write a function fn max_i32(ptr: *const i32, len: usize, out_max: *mut i32) -> i32 that writes the maximum element through the out parameter and returns 0 on success.",
+      "prompts": [
+        "Return a distinct nonzero status if out_max is null, and another if ptr is null.",
+        "Decide and document what status you return when len is 0 so the contract is unambiguous.",
+        "Build the slice with std::slice::from_raw_parts only after both pointers are known non-null.",
+        "Write the result through *out_max only on the success path and return 0."
+      ],
+      "acceptanceCriteria": [
+        "The signature is exactly fn max_i32(ptr: *const i32, len: usize, out_max: *mut i32) -> i32 marked extern \"C\".",
+        "Null out_max and null ptr each return a distinct nonzero status before any dereference.",
+        "The empty-input case returns a defined nonzero status rather than reading from an empty slice or writing a garbage maximum.",
+        "The slice is constructed inside an unsafe block with a SAFETY comment, and *out_max is written only on success."
+      ],
+      "hints": [
+        "Order matters: check the out pointer first, then the input pointer, exactly as the chapter's guard sequence does.",
+        "from_raw_parts still requires a non-null, aligned pointer even when len is 0, so an empty input is a contract decision, not a free pass."
+      ]
+    },
+    {
+      "number": 4,
+      "kind": "implementation",
+      "title": "Map ownership across the seam with an opaque handle",
+      "objective": "Express Rust-owned memory across a C ABI boundary using an opaque handle and an explicit destroy function.",
+      "starterPrompt": "Design a tiny C ABI surface for a Rust-owned counter: a create function returning an opaque handle, an increment function taking that handle, a read function, and a destroy function. The Rust struct behind the handle must never appear in the C signatures.",
+      "prompts": [
+        "Define the create function as returning *mut CounterHandle built from Box::into_raw on a boxed Rust struct.",
+        "Have increment and read take the raw handle, null-check it, and reconstruct a reference without taking ownership.",
+        "Define destroy so it takes the handle back with Box::from_raw exactly once and drops it.",
+        "State in a comment who allocates, who may mutate, and who frees, so ownership is readable from the signatures."
+      ],
+      "acceptanceCriteria": [
+        "The four extern \"C\" functions expose only the opaque pointer, integers, and out parameters, never the Rust struct by value.",
+        "create uses Box::into_raw and destroy uses Box::from_raw, with destroy consuming the handle exactly once.",
+        "increment and read null-check the handle and borrow it without freeing it.",
+        "A comment records that Rust owns the allocation, the caller holds the handle, and only destroy frees it."
+      ],
+      "hints": [
+        "Box::into_raw hands ownership out as a pointer; Box::from_raw is the matching reclaim, and calling it twice is a double free.",
+        "An opaque handle is just a pointer to a type the foreign side never sees the fields of."
+      ]
+    },
+    {
+      "number": 5,
+      "kind": "debugging or refactoring",
+      "title": "Stop an unwind from crossing the boundary",
+      "objective": "Find and fix an exported function that can let a Rust panic unwind across a C ABI boundary.",
+      "starterPrompt": "An exported extern \"C\" function parses a caller buffer with code that can panic (an indexing operation and an unwrap on a parse), then returns the parsed value. Reviewers flagged that a panic here is undefined behavior because it would unwind through the foreign caller's frames.",
+      "prompts": [
+        "Identify every operation in the body that can panic and explain why each is a boundary hazard.",
+        "Refactor the panicking operations into checked forms that return a status instead of panicking.",
+        "Decide whether to also wrap the body in std::panic::catch_unwind, and justify the choice.",
+        "Confirm that on every path the function returns an integer status rather than unwinding."
+      ],
+      "acceptanceCriteria": [
+        "Each panic source (indexing, unwrap, slicing, arithmetic) is named and replaced with a checked operation or guard.",
+        "Failure is reported through a distinct nonzero status code, never by panicking.",
+        "The answer states the rule plainly: no cross-language unwinding, translate failure to a status before control leaves the function.",
+        "If catch_unwind is used, the answer explains it is a backstop and the primary fix is removing the panics."
+      ],
+      "hints": [
+        "The most dangerous thing crossing the seam is an in-flight unwind, not a bad value.",
+        "get, checked_add, and parse returning Result are the checked replacements for indexing, raw arithmetic, and unwrap."
+      ]
+    },
+    {
+      "number": 6,
+      "kind": "design or production scenario",
+      "title": "Choose a binding tool for a legacy C++ subsystem",
+      "objective": "Apply the chapter's decision tree to select between a hand-written C shim, bindgen, cxx, and autocxx for a real integration.",
+      "starterPrompt": "A product is replacing one hot native subsystem with Rust while keeping the existing host process, plugin loader, and native test harness. You must reach a large legacy C++ surface, you control the Rust side but not the historical C++ headers, and the requirement is a narrow ABI contract with explicit layout, pointer validity, ownership, status-code errors, and no cross-language unwinding.",
+      "prompts": [
+        "State the two questions the chapter's decision tree turns on and answer them for this scenario.",
+        "Recommend one of a hand-written C shim, bindgen, cxx, or autocxx, and justify it against the size of the C++ surface and who controls each side.",
+        "Explain what part of the contract the tool does not write for you and remains your responsibility.",
+        "Describe how you would test and sanitize the resulting FFI layer before shipping."
+      ],
+      "acceptanceCriteria": [
+        "The answer frames the choice around whether you control both sides and how large the C++ surface is.",
+        "A specific tool is recommended with reasoning tied to a large C++ surface you do not fully control.",
+        "The answer states that the tool reduces boilerplate but does not change the ownership, panic, and ABI-stability contract you still owe.",
+        "A concrete testing and sanitizing plan is given, such as exercising the seam under the native harness with a sanitizer build."
+      ],
+      "hints": [
+        "The tool changes how much boilerplate is written for you, not the binary contract you are responsible for.",
+        "A deliberate C ABI seam around C++ buys a smaller contract surface and fewer standard-library assumptions."
+      ]
+    }
+  ],
+  "reviewQuestions": [
+    "What are the four FFI fundamentals the chapter says almost every Rust interop layer is built from?",
+    "Why must a Rust Result<T, E> be re-expressed as an integer status plus out parameters before crossing a C ABI boundary?",
+    "What does no_mangle and the extern \"C\" calling convention each contribute when exporting a Rust function to C or C++?",
+    "Why is an in-flight unwind, a Rust panic or a C++ exception, more dangerous to let cross the seam than a bad value?",
+    "Which two questions drive the choice between a hand-written C shim, bindgen, cxx, and autocxx?"
+  ],
+  "lab": {
+    "title": "Runnable lab · status-code seam over a caller buffer",
+    "filename": "cpp_integration_status_seam_lab.rs",
+    "runKey": "ch28_ex_status_seam",
+    "expectedOutput": "status = 0\ntotal = 12\nnull input status = 2\nnull out status = 1",
+    "helperText": "Model the exported sum_i32s seam from Example 2 in plain std Rust: the caller owns the input buffer and the output slot, you only borrow both, and every failure is reported as a distinct integer status rather than a Result.",
+    "initialCode": "// Status codes mirror the C ABI seam from the chapter: 0 = success,\n// nonzero = a distinct failure the caller can branch on without a Result.\nconst STATUS_OK: i32 = 0;\nconst STATUS_NULL_OUT: i32 = 1;\nconst STATUS_NULL_INPUT: i32 = 2;\n\n// Models the exported `sum_i32s` seam: the caller owns both the input buffer\n// and the output storage; this function only borrows them for the call.\n// Option<&...> stands in for a possibly-null pointer; &mut i64 is the out slot.\nfn sum_i32s(input: Option<&[i32]>, out_total: Option<&mut i64>) -> i32 {\n    // TODO: implement the guard sequence and the sum.\n    // 1. If out_total is None, return STATUS_NULL_OUT.\n    // 2. If input is None, return STATUS_NULL_INPUT.\n    // 3. Otherwise widen each i32 to i64, sum them, write the total\n    //    through the out parameter, and return STATUS_OK.\n    let _ = (&input, &out_total);\n    STATUS_OK\n}\n\nfn main() {\n    let values = [3_i32, 4, 5];\n\n    let mut total = -1_i64;\n    let status = sum_i32s(Some(&values), Some(&mut total));\n    println!(\"status = {}\", status);\n    println!(\"total = {}\", total);\n\n    let mut ignored = 0_i64;\n    println!(\"null input status = {}\", sum_i32s(None, Some(&mut ignored)));\n    println!(\"null out status = {}\", sum_i32s(Some(&values), None));\n}\n",
+    "solutionCode": "// Status codes mirror the C ABI seam from the chapter: 0 = success,\n// nonzero = a distinct failure the caller can branch on without a Result.\nconst STATUS_OK: i32 = 0;\nconst STATUS_NULL_OUT: i32 = 1;\nconst STATUS_NULL_INPUT: i32 = 2;\n\n// Models the exported `sum_i32s` seam: the caller owns both the input buffer\n// and the output storage; this function only borrows them for the call.\n// Option<&...> stands in for a possibly-null pointer; &mut i64 is the out slot.\nfn sum_i32s(input: Option<&[i32]>, out_total: Option<&mut i64>) -> i32 {\n    // Guard the out pointer first, exactly like the chapter's null checks.\n    let out = match out_total {\n        Some(slot) => slot,\n        None => return STATUS_NULL_OUT,\n    };\n    // Then guard the input pointer before touching the buffer.\n    let values = match input {\n        Some(slice) => slice,\n        None => return STATUS_NULL_INPUT,\n    };\n    // Widen to i64 before summing so the boundary contract cannot overflow i32.\n    *out = values.iter().map(|&v| v as i64).sum::<i64>();\n    STATUS_OK\n}\n\nfn main() {\n    let values = [3_i32, 4, 5];\n\n    let mut total = -1_i64;\n    let status = sum_i32s(Some(&values), Some(&mut total));\n    println!(\"status = {}\", status);\n    println!(\"total = {}\", total);\n\n    let mut ignored = 0_i64;\n    println!(\"null input status = {}\", sum_i32s(None, Some(&mut ignored)));\n    println!(\"null out status = {}\", sum_i32s(Some(&values), None));\n}\n"
+  }
+}

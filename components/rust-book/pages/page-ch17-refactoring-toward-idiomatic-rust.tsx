@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -39,7 +40,16 @@ const refactorPasses = [
   },
 ]
 
-const coreSections = [
+type CoreSection = {
+  title: string
+  body: string
+  bullets?: string[]
+  lookAt?: string
+  diagram?: string
+  code?: string
+}
+
+const coreSections: CoreSection[] = [
   {
     title: "Refactoring C++-style Rust",
     body: "The common C++-style porting mistake is to preserve class shape, pointer shape, and out-parameter shape even when the Rust version should just move values or return them by value. Rust usually gets calmer when one owner is obvious, mutation scope is shorter, and internal abstraction stays generic rather than immediately becoming runtime dispatch.",
@@ -51,12 +61,15 @@ const coreSections = [
   },
   {
     title: "Refactoring Go-style error handling",
-    body: "A Go-shaped port often hides failure in sentinel values, `(T, bool)` pairs, or log-and-continue branches. Rust is stronger when routine failure is `Result`, callers use `?` to propagate it, and domain errors get names instead of becoming strings at the earliest possible site.",
+    body: "A Go-shaped port often hides failure in sentinel values, `(T, bool)` pairs, or log-and-continue branches. Rust is stronger when routine failure is `Result`, callers use `?` to propagate it, and domain errors get names instead of becoming strings at the earliest possible site. The payoff is that the type signature now documents every way the call can fail, and the compiler refuses to let a caller forget one of them.",
     bullets: [
       "Reserve `panic!` for bugs or violated internal invariants, not malformed user input.",
       "Keep domain errors in domain language and translate infrastructure errors at the edge.",
       "If the function may fail in a normal way, make that explicit in the return type.",
     ],
+    lookAt:
+      "Watch how each fallible step has exactly one happy path forward and one named error branch; the question-mark operator is what collapses those branches at the call site.",
+    diagram: `flowchart TD\n  In[raw: Option ref str] --> Present{present?}\n  Present -->|None| E1[MissingPort]\n  Present -->|Some text| Parse{parses as u16?}\n  Parse -->|No| E2[InvalidPort]\n  Parse -->|Yes| Ok[Ok of port]`,
     code: `fn parse_port(raw: Option<&str>) -> Result<u16, ConfigError> {
     let text = raw.ok_or(ConfigError::MissingPort)?;
     text.parse::<u16>().map_err(|_| ConfigError::InvalidPort)
@@ -73,12 +86,15 @@ const coreSections = [
   },
   {
     title: "Replacing inheritance with traits and enums",
-    body: "Use traits for open behavior and enums for closed variants. That choice does more work than any inheritance translation because it decides whether the compiler can check exhaustiveness and whether callers know the concrete type at compile time.",
+    body: "A class hierarchy collapses three separate concerns into one mechanism: it stores shared data, it dispatches shared behavior, and it enumerates a set of subtypes. Rust gives you a different tool for each. Use enums for closed variants you control and want the compiler to check exhaustively, and use traits for open behavior whose implementations are genuinely independent. That split does more work than any literal inheritance translation, because it decides whether the compiler can verify exhaustiveness and whether callers keep the concrete type at compile time.",
     bullets: [
       "Use enums for closed command sets, workflow state, transport modes, and AST variants.",
       "Use traits when several implementations are semantically real across time or deployment.",
       "Use `dyn Trait` only when runtime heterogeneity is actually required by one collection or boundary.",
     ],
+    lookAt:
+      "Notice the decision is binary: a fixed set you own becomes an enum, an open set of behaviors becomes a trait. The diagram is the question to ask before you write either keyword.",
+    diagram: `flowchart TD\n  Q{Is the set of cases fixed and owned by you?}\n  Q -->|Yes, closed| Enum[enum variants, exhaustive match]\n  Q -->|No, open behavior| T{Concrete type known at compile time?}\n  T -->|Yes| Generic[trait bound, static dispatch]\n  T -->|No, mixed at runtime| Dyn[dyn Trait, dynamic dispatch]`,
     code: `enum DeliveryMode {
     Immediate,
     Retry,
@@ -90,21 +106,27 @@ trait Notifier {
   },
   {
     title: "Removing unnecessary clones",
-    body: "Unnecessary cloning is usually a boundary smell, not only a local inefficiency. The first question is whether the callee needed independent ownership at all. If it only needed read access, the correct refactor is often a borrowed parameter. If it did need independence, the clone may be perfectly valid.",
+    body: "Unnecessary cloning is usually a boundary smell, not only a local inefficiency. The first question is never how to make the clone faster; it is whether the callee needed independent ownership at all. If it only needed read access, the correct refactor is a borrowed parameter, and the clone disappears. If it genuinely needed an independent value, the clone may be exactly right and should stay. Reaching for `.clone()` to silence a borrow error skips this question and is the single most common way a port stays non-idiomatic.",
     bullets: [
       "Borrow first on read-only paths: `&str`, `&[T]`, `&Path`, `&T`.",
       "Keep explicit clones where duplication is semantically real or operationally cheap enough.",
       "Remember that `Arc::clone` adds a shared owner; it is not the same thing as deep-cloning inner data.",
     ],
+    lookAt:
+      "Run the decision top to bottom before writing .clone(). The clone is only the right leaf when the callee truly needs a value it can keep and mutate independently.",
+    diagram: `flowchart TD\n  Need{What does the callee need?}\n  Need -->|read only| Borrow[take a borrow: ref str, ref slice, ref T]\n  Need -->|its own value to keep| Own2{One independent owner or shared?}\n  Own2 -->|independent| CloneOk[clone is correct]\n  Own2 -->|shared owners| Arc[Arc::clone, shared not deep copy]`,
   },
   {
     title: "Reducing lifetime complexity",
-    body: "Many lifetime annotations disappear when the ownership model improves. Long-lived structs usually want owned fields. Helpers that build normalized labels or joined strings usually want owned returns. Borrow where the owner is nearby; own where the data crosses storage, queue, cache, or async boundaries.",
+    body: "Many lifetime annotations disappear when the ownership model improves, because an explicit lifetime is usually the compiler reporting a design mismatch rather than asking for ceremony. Long-lived structs usually want owned fields. Helpers that build normalized labels or joined strings usually want owned returns. The rule of thumb: borrow where the owner is plainly nearby and outlives the use, and own where the data crosses a storage, queue, cache, or async boundary and must survive on its own.",
     bullets: [
       "Return `String` when the function constructs new text.",
       "Store owned data in long-lived structs unless the type is intentionally a view.",
       "Treat explicit lifetime noise as a design signal before treating it as a syntax problem.",
     ],
+    lookAt:
+      "Look at what the return value points into. The before version returns a reference tied to both inputs, which is impossible because the joined text it implies does not exist anywhere yet; the after version allocates and returns ownership.",
+    diagram: `flowchart LR\n  subgraph Before [Before: borrowed return]\n    A1[service ref a] --> R1[returned ref a]\n    A2[route ref a] --> R1\n    R1 -.->|caller bound to inputs| Trap[lifetime knot]\n  end\n  subgraph After [After: owned return]\n    B1[service ref] --> Fmt[format new String]\n    B2[route ref] --> Fmt\n    Fmt --> Own[owned String, no lifetime]\n  end`,
     code: `// before
 fn build_label<'a>(service: &'a str, route: &'a str) -> &'a str { /* wrong model */ }
 
@@ -115,12 +137,15 @@ fn build_label(service: &str, route: &str) -> String {
   },
   {
     title: "Extracting safe abstractions from unsafe code",
-    body: "Unsafe refactors are most successful when the public API becomes safer than the original. Shrink the `unsafe` block until it contains only the raw operation, check the invariants before entering it, and document the proof with a `// SAFETY:` comment another engineer can re-derive quickly.",
+    body: "Unsafe refactors are most successful when the public API becomes safer than the original, not merely faster. The pattern is a thin safe wrapper that validates every precondition in ordinary checked code, and only then enters a minimal `unsafe` block containing the raw operation alone. Shrink the unsafe surface until the proof of correctness fits in a `// SAFETY:` comment that another engineer can re-derive in a few seconds. The example below avoids unsafe entirely by returning a `Result`, which is itself the most idiomatic outcome: the safest unsafe code is the unsafe code you removed.",
     bullets: [
       "Keep bounds, contiguity, aliasing, and lifetime checks outside the unsafe block when possible.",
       "If the caller must uphold the contract, make the function `unsafe fn` and document it explicitly.",
       "Do not export a safe API that depends on undocumented unsafe preconditions.",
     ],
+    lookAt:
+      "Trace the order of operations: the length check happens in safe code and returns an error on failure, so by the time any raw write occurs the precondition is already proven.",
+    diagram: `flowchart LR\n  Call[caller passes buf] --> Check{buf.len at least 4?}\n  Check -->|No| Err[Err TooSmall, no write]\n  Check -->|Yes, invariant proven| Write[copy bytes into first 4]\n  Write --> Ok[Ok]`,
     code: `pub fn write_header(buf: &mut [u8]) -> Result<(), HeaderError> {
     if buf.len() < 4 {
         return Err(HeaderError::TooSmall);
@@ -141,12 +166,15 @@ fn build_label(service: &str, route: &str) -> String {
   },
   {
     title: "Refactoring synchronous code into async code",
-    body: "Do not start by sprinkling `async` across pure logic. First make the sync boundary explicit: owned inputs where work crosses tasks, owned outputs where results cross `await`, and explicit error types. Then make the IO boundary async and keep pure parsing, validation, and domain logic synchronous where possible.",
+    body: "Do not start by sprinkling `async` across pure logic. First make the sync boundary explicit: owned inputs where work crosses tasks, owned outputs where results cross `await`, and explicit error types. Then make only the IO boundary async and keep parsing, validation, and domain decisions synchronous where you can. The reason owned values matter so much here is that an `await` is a suspension point: the future may be parked and resumed later, possibly on another thread, so a borrowed reference into request-local storage cannot be guaranteed to still be valid when execution resumes.",
     bullets: [
       "Return owned values across `await` boundaries rather than borrowed references into repository or request storage.",
       "Add `Send` only when the future or captured data must cross threads on a multithreaded executor; add `Sync` only when shared references must be thread-safe.",
       "Most business-facing async refactors should not expose `Pin`; `Pin` usually stays inside lower-level future machinery and framework boundaries.",
     ],
+    lookAt:
+      "Notice that the order value is loaded into an owned binding before the first await completes and is then moved into the next await; nothing borrowed has to survive across a suspension point.",
+    diagram: `flowchart LR\n  Caller[caller] --> Load[repo.load await]\n  Load --> Owned[owned order value]\n  Owned -->|move across await| Store[cache.store await]\n  Store --> Done[Ok]\n  Load -. error .-> Err[AppError via ?]\n  Store -. error .-> Err`,
     code: `async fn load_and_store<R, C>(repo: &R, cache: &C, id: OrderId) -> Result<(), AppError>
 where
     R: OrderRepository,
@@ -171,15 +199,19 @@ where
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You already know RAII, value categories, and zero-cost intent. The refactor usually improves when you stop preserving pointer-heavy class shape and instead let Rust make ownership transfer, enum state, and generic capability seams explicit.",
-  },
-  {
-    title: "Go background",
-    body: "You already know small interfaces and service boundaries. The refactor usually improves when normal failure becomes `Result`, borrowed inputs stay local, and async or cross-thread work receives owned values rather than ambient references.",
+    body: "RAII and move semantics already match your instincts, so the trap is more subtle: you tend to preserve pointer-heavy class shape and out-parameters even when the Rust version should move a value or return it by value. The shift is to let one owner be obvious and reach for generic trait bounds before runtime dispatch.",
   },
   {
     title: "C# background",
-    body: "You already know interface-driven design and layered services. The refactor usually improves when you stop looking for inheritance and instead split shared state, shared behavior, and closed workflow state into composition, traits, and enums.",
+    body: "Years of inheritance and interface hierarchies push you to look for a base class to extend. The shift is to stop looking for one entirely and split the old hierarchy into three separate tools: a struct for shared data, a trait for shared behavior, and an enum for closed workflow state.",
+  },
+  {
+    title: "Go background",
+    body: "Small interfaces and service boundaries carry over cleanly, but the habit of returning sentinel values or (T, bool) pairs does not. The shift is to make normal failure a named Result error, propagate it with the question-mark operator, and reserve panic for actual bugs rather than malformed input.",
+  },
+  {
+    title: "Python background",
+    body: "Duck typing and easy mutation let you reshape objects anywhere, so the trap is treating .clone() as Python's cheap reference copy. The shift is that ownership is a real type-level fact: decide whether a callee needs to read, mutate, or keep a value before you reach for a clone to silence the compiler.",
   },
 ]
 
@@ -316,9 +348,25 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
             A mature service has accumulated pointer-heavy objects, panic-based parsing, sentinel failures, public mutable
-            records, and broad runtime dispatch. The business requirement is a staged refactor that makes ownership,
-            fallibility, state shape, and test seams explicit before optimizing syntax or async structure.
+            records, and broad runtime dispatch. None of this is wrong in isolation; it is the residue of porting an
+            existing C++, C#, or Go design and then bolting on features under deadline. The business requirement is not a
+            rewrite. It is a staged refactor that makes ownership, fallibility, state shape, and test seams explicit
+            before anyone touches syntax cosmetics or async structure.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The ordering matters more than any single change. When you correct ownership and error flow first, a
+            surprising amount of the lifetime noise and clone pressure simply evaporates, because those problems were
+            symptoms of the wrong boundary rather than independent defects. The three passes below run in that order on
+            purpose: each one removes the pressure that was making the next one hard.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-4">
+            Read the pipeline left to right. Each pass takes the output of the previous one and is only worth attempting
+            once the earlier boundary is clean.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Legacy[Ported legacy module] --> P1[Pass 1: ownership and errors]\n  P1 --> P2[Pass 2: data model]\n  P2 --> P3[Pass 3: async and ergonomics]\n  P3 --> Out[Testable idiomatic module]`}
+            caption="Refactor in passes. Ownership and error flow first, data model second, async and ergonomics last; each pass clears the way for the next."
+          />
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             {refactorPasses.map((pass) => (
               <div key={pass.title} className="rounded-lg border border-border bg-card p-4">
@@ -344,11 +392,39 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Most of the friction in an idiomatic refactor is not about Rust syntax. It is about the instinct you brought
+            from your previous language and where that instinct now points you wrong. The cards below name the specific
+            mental-model shift for each background, not a library mapping. Find the one that fits you and keep it in mind
+            while you read the core concepts.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Each concept below is a recurring move you make during the three passes. They are grouped roughly by the
+            language habit they correct, but they share one theme: every one of them turns an implicit decision the old
+            code made by convention into an explicit decision the type system can check. Where a concept has a shape worth
+            seeing, a short pointer and a diagram come before the code so you read the structure first and the syntax
+            second.
+          </p>
 
           <div className="grid gap-4">
             {coreSections.map((section) => (
@@ -362,6 +438,17 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                     ))}
                   </ul>
                 ) : null}
+                {section.lookAt ? (
+                  <p className="mt-4 text-sm text-foreground leading-6">
+                    <span className="font-medium text-primary">What to look at: </span>
+                    {section.lookAt}
+                  </p>
+                ) : null}
+                {section.diagram ? (
+                  <div className="mt-3">
+                    <MermaidDiagram chart={section.diagram} />
+                  </div>
+                ) : null}
                 {section.code ? (
                   <pre className="mt-4 rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs overflow-x-auto">
                     <code className="font-mono text-foreground">{section.code}</code>
@@ -369,18 +456,6 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                 ) : null}
               </article>
             ))}
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">What to unlearn by background</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -479,6 +554,16 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-foreground leading-6 mb-2">
+              <span className="font-medium text-primary">What to look at: </span>
+              follow the data left to right. Borrowed config text comes in, parsing either fails with a named error or
+              produces an owned endpoint, and that owned value is what leaves the function so the caller never depends on
+              the input buffer.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cfg[borrowed config text] --> Parse{parse and validate}\n  Parse -->|missing or invalid| Err[ConfigError, no panic]\n  Parse -->|valid| Build[build owned Endpoint]\n  Build --> Ret[return owned value]\n  Ret --> Caller[caller, independent of input]`}
+              caption="Routine failure becomes a Result error and the normalized result is owned, so the signature alone tells the caller what they get and how it can fail."
+            />
             <RustCodeEditor
               code={codes.refactoring_result_owned_api}
               onChange={(newCode) => updateCode("refactoring_result_owned_api", newCode)}
@@ -537,6 +622,16 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-foreground leading-6 mb-2">
+              <span className="font-medium text-primary">What to look at: </span>
+              the old hierarchy splits into three parts. The closed delivery mode is an enum the processor matches on, the
+              notifier is a small trait the processor is generic over, and a fake notifier can stand in for the real one
+              in tests without touching anything else.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Order[order id] --> Proc[Processor generic over N: Notifier]\n  Mode{DeliveryMode enum} -->|Immediate or Retry| Proc\n  Proc -->|charge| Charged[charged record]\n  Proc -->|notify via trait seam| N{Notifier}\n  N --> Real[EmailNotifier in prod]\n  N --> Fake[FakeNotifier in tests]`}
+              caption="Closed state is an enum, behavior is a trait the processor is generic over, and the trait seam is where a test fake swaps in. Dispatch stays static because the concrete notifier is known at compile time."
+            />
             <RustCodeEditor
               code={codes.refactoring_traits_enums_testable}
               onChange={(newCode) => updateCode("refactoring_traits_enums_testable", newCode)}

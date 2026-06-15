@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -27,15 +28,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "`Box<T>` is closer to `std::unique_ptr<T>` than to a general smart-pointer hierarchy. `Rc<T>` resembles `shared_ptr<T>` for one thread. `Pin<T>` is the unusual piece: it is an address-stability promise, not merely heap allocation.",
+    body: "Your instincts mostly transfer, but the shift is that the pointer type is now a checked contract rather than a convention. The trap is reaching for shared ownership the way C++ codebases drift toward shared_ptr by default: in Rust, shared mutation is a separate, explicit decision, and the compiler will not let you alias mutably the way you could by accident before. Pinning is the genuinely new idea, because C++ never promised that a moved object kept its address.",
   },
   {
     title: "C# background",
-    body: "Managed references are not ownership declarations. Rust makes ownership count explicit. `Arc<T>` is shared ownership, `Mutex<T>` is synchronized mutation, and `Pin<T>` appears when runtime-managed movement can no longer be assumed away.",
+    body: "The mental shift is that a reference is not an ownership statement. A managed reference says nothing about who frees the value or who may mutate it; in Rust the pointer type carries that, so you must answer ownership count and mutation authority up front instead of letting the runtime smooth it over. The trap is assuming a shared handle is automatically safe to mutate from several places, which the garbage-collected world let you ignore.",
   },
   {
     title: "Go background",
-    body: "Go makes pointer sharing and goroutine handoff easy to express, but much of the ownership story stays implicit. Rust forces the question earlier: one owner or many, one thread or many, compile-time borrowing or runtime synchronization, movable or pinned.",
+    body: "Go lets you share a pointer and hand it to a goroutine with almost no ceremony, leaving the ownership and data-race story to discipline and the race detector. The shift in Rust is that those questions move to compile time and into the type: one owner or many, one thread or many, plain borrow or synchronized. The trap is treating every shared value as an implicit Arc<Mutex<...>>, when Rust often wants you to choose message passing or a single owner instead.",
+  },
+  {
+    title: "Python background",
+    body: "Python hands you reference semantics and a cycle-collecting garbage collector for free, so you rarely think about who owns an object or when it dies. The shift is that Rust's reference counting (Rc and Arc) does not collect cycles, so a back-edge that keeps its parent alive will leak unless you make it a Weak. The trap is assuming the runtime will eventually clean up; here the ownership graph is something you design to stay acyclic.",
   },
 ]
 
@@ -219,6 +224,15 @@ export function PageCh09SmartPointersAndPinning() {
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6 mb-3">
+                  What to look at: the box is a thin owning handle that lives wherever the field lives, while the pointee
+                  it owns sits on the heap. That indirection is what lets a recursive type have a finite size, because the
+                  field is one pointer wide no matter how deep the chain goes.
+                </p>
+                <MermaidDiagram
+                  chart={`flowchart TD\n  subgraph Stack\n    H[Box handle]\n  end\n  subgraph Heap\n    N[Node data]\n    N -->|next: Option Box| N2[Node data]\n  end\n  H -->|owns, one owner| N`}
+                  caption="A Box is a single owning pointer on the stack; the value it owns lives on the heap, which is what makes a recursive node a fixed-size field."
+                />
                 <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                   <code className="font-mono text-foreground">{`struct Node {
     next: Option<Box<Node>>,
@@ -246,6 +260,15 @@ export function PageCh09SmartPointersAndPinning() {
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6 mb-3">
+                  What to look at: several handles point at one allocation, and the allocation carries a count. Each clone
+                  bumps the count; each drop lowers it; the value is freed only when the count reaches zero. The data
+                  itself is shared and read-only through these handles.
+                </p>
+                <MermaidDiagram
+                  chart={`flowchart TD\n  A[Rc handle a] --> V[(value, strong=3)]\n  B[Rc handle b] --> V\n  C[Rc handle c] --> V\n  V -.->|count hits 0| F[freed]`}
+                  caption="Cloning an Rc adds an owner and raises the strong count; the allocation lives until the last owner drops and the count reaches zero."
+                />
                 <p className="text-sm text-muted-foreground leading-6">
                   If you later need shared mutation as well, that is a second decision. Many single-thread designs use{" "}
                   <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc&lt;RefCell&lt;T&gt;&gt;</code>,
@@ -282,7 +305,18 @@ export function PageCh09SmartPointersAndPinning() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-3">Interior mutability: moving the borrow check somewhere else</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: all three of the types below let you mutate through a shared handle, which ordinary
+              borrowing forbids. The difference is purely where and how the aliasing rule is enforced. A{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cell&lt;T&gt;</code> sidesteps borrowing
+              by only swapping whole values, a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">RefCell&lt;T&gt;</code>{" "}
+              keeps the same rule but checks it at runtime and panics on violation, and a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex&lt;T&gt;</code> enforces it across
+              threads by blocking on a lock.
+            </p>
+            <div className="grid gap-4 lg:grid-cols-3">
             <div className="rounded-xl border border-border bg-card p-5">
               <h4 className="font-semibold text-foreground mb-3">
                 <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">RefCell&lt;T&gt;</code>: runtime borrow
@@ -333,6 +367,7 @@ struct ParserStats {
 
 let counter = Arc::new(Mutex::new(0u64));`}</code>
               </pre>
+            </div>
             </div>
           </div>
 
@@ -401,6 +436,25 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Choosing the right pointer type</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: the choice is a short series of independent questions, not a single menu pick. Answer them
+              in order, and the type usually falls out. How many owners are real? If many, do they live on one thread or
+              cross thread boundaries? Does anything need to mutate the shared value, and if so, is the borrow pattern
+              static enough for the compiler or dynamic enough to need a runtime check or a lock? Only at the end do you
+              ask whether the value must also stop moving.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Need indirection or sharing] --> Owners{How many owners}\n  Owners -->|one| Box[Box T]\n  Owners -->|many| Threads{One thread or many}\n  Threads -->|one thread| Rc[Rc T]\n  Threads -->|many threads| Arc[Arc T]\n  Box --> Move{Must it stop moving}\n  Move -->|yes| Pin[Pin Box T]\n  Rc --> Cont[shared mutation, continues below]\n  Arc --> Cont`}
+              caption="First the ownership questions: how many owners, and if many, do they cross thread boundaries. A single owner picks Box, and only Box faces the separate question of whether the value must stop moving."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Once owner count and thread boundary are settled, the remaining question is whether the shared value also
+              needs mutation, and under which enforcement model:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[shared mutation needed] --> Rc[shared on one thread, Rc T]\n  Cont --> Arc[shared across threads, Arc T]\n  Rc --> Mut1{Borrow pattern}\n  Mut1 -->|small copy or swap| Cell[wrap in Cell]\n  Mut1 -->|dynamic borrows| RefCell[wrap in RefCell]\n  Arc --> Mut2{Need shared mutation}\n  Mut2 -->|yes| Mutex[wrap in Mutex]`}
+              caption="The second half resolves shared mutation: a single-thread Rc reaches for Cell or RefCell depending on the borrow pattern, while a cross-thread Arc reaches for a Mutex."
+            />
             <div className="grid gap-3 lg:grid-cols-2">
               {selectionGuide.map((item) => (
                 <div key={item.need} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -421,16 +475,27 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Most senior engineers do not meet smart pointers as a blank slate; they arrive with a pointer model from
+            another language. The useful thing to know is which part of that model carries over and which part will
+            quietly mislead you. The shift is almost never about which type maps to which library class. It is about the
+            fact that ownership count, mutation authority, and address stability now live in the type and are checked,
+            rather than being left to convention or a runtime.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -496,6 +561,20 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the two edges between root and leaf are deliberately different kinds. The root owns the
+              leaf through a strong <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc</code> in its
+              children list, while the leaf only observes the root through a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Weak</code> parent pointer. Trace the
+              two arrows in the diagram, then notice that the leaf reads its parent through{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">upgrade()</code>, which can fail if the
+              owner is already gone. That asymmetry is what keeps the graph acyclic and lets the count actually reach
+              zero.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart LR\n  Root[root Rc] -->|strong: owns child| Leaf[leaf Rc]\n  Leaf -.->|weak: observes via upgrade| Root\n  Note[strong edge keeps alive, weak edge does not]`}
+              caption="Owning edges stay strong and point down the tree; the back-edge to the parent is weak, so no cycle pins the allocation alive."
+            />
             <RustCodeEditor
               code={codes.smart_pointers_tree}
               onChange={(newCode) => updateCode("smart_pointers_tree", newCode)}
@@ -550,6 +629,19 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Box::pin</code> creates
+              the owned, pinned storage once, and then the loop polls it repeatedly through{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">as_mut()</code>, which hands{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">poll</code> the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin&lt;&amp;mut Self&gt;</code> it
+              requires. Each poll either reports it is still pending and yields, or returns a ready value and ends the
+              loop. Follow that one-future, two-exits cycle in the diagram, then read the same shape in the match arms.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Pinned: Box pin creates owner\n  Pinned --> Poll: as_mut gives Pin and mut Self\n  Poll --> Pending: not done yet\n  Pending --> Poll: poll again\n  Poll --> Ready: value produced\n  Ready --> [*]: break loop`}
+              caption="One pinned future is polled in a loop; each poll yields Pending and repeats, or yields Ready and exits. The pin stays fixed across every poll."
+            />
             <RustCodeEditor
               code={codes.smart_pointers_pin_poll}
               onChange={(newCode) => updateCode("smart_pointers_pin_poll", newCode)}
@@ -641,536 +733,3 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch09-smart-pointers-and-pinning-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose the pointer before the syntax",
-    objective: "Practice selecting `Box`, `Rc`, `Arc`, `Cell`, `RefCell`, `Mutex`, `Weak`, or `Pin` from the ownership story.",
-    starterPrompt:
-      "Pick the right type for each case: a recursive AST owned by one parent, a UI template shared in one thread, a schema shared across workers, a tiny single-thread hit counter, a graph back-edge, and a future stored for later polling.",
-    prompts: [
-      "Which cases are ownership-count questions?",
-      "Which cases are mutation-discipline questions?",
-      "Which case is really about stable address rather than sharing?",
-    ],
-    acceptanceCriteria: [
-      "You choose `Box<T>` for the recursive single-owner case.",
-      "You distinguish `Rc<T>` from `Arc<T>` by thread boundary, not by personal taste.",
-      "You choose `Cell<T>`, `RefCell<T>`, or `Mutex<T>` based on mutation and enforcement model.",
-      "You identify `Weak<T>` as the non-owning edge and `Pin<...>` as the immovability tool.",
-    ],
-    hints: [
-      "Start with one owner versus many owners.",
-      "Then ask whether the mutation is single-thread local, runtime-checked, or synchronized.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Read the failure mode from the type combination",
-    objective: "Diagnose what can go wrong in `Rc<RefCell<T>>`, `Arc<T>`, and `Arc<Mutex<T>>` without hand-waving.",
-    starterPrompt:
-      "Review three snippets: `Rc<RefCell<State>>` that panics at runtime, `Arc<RefCell<State>>` that fails at a thread boundary, and `Arc<Mutex<State>>` that compiles but may contend heavily.",
-    prompts: [
-      "Which failure is a runtime borrow violation?",
-      "Which failure is a trait-bound or thread-safety issue?",
-      "Which case compiles but still deserves operational scrutiny because locks are now real work?",
-    ],
-    acceptanceCriteria: [
-      "You identify the runtime panic risk in `RefCell<T>` correctly.",
-      "You explain why `Arc<RefCell<T>>` is usually wrong across threads.",
-      "You describe `Arc<Mutex<T>>` as shared ownership plus synchronized mutation, not as a generic fix-all.",
-    ],
-    hints: [
-      "The type tells you where the check moved: compile time, runtime, or lock acquisition.",
-      "Compiling is not the same thing as being the cheapest operational design.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Break the parent cycle with Weak",
-    objective: "Replace an owning back-edge with a non-owning one and explain why the strong count stays healthy.",
-    starterPrompt:
-      "Implement a parent pointer for a small tree node so the child can observe its parent without keeping the parent alive.",
-    prompts: [
-      "Keep children strongly owned.",
-      "Make the parent edge non-owning.",
-      "Explain what `upgrade()` returning `None` would mean.",
-    ],
-    acceptanceCriteria: [
-      "The parent edge uses `Weak<T>` rather than another strong `Rc<T>` or `Arc<T>`.",
-      "You explain that `upgrade()` reflects whether an owning pointer still exists.",
-      "You can state why the ownership graph is now acyclic.",
-    ],
-    hints: [
-      "The question is not whether the child may refer to the parent. The question is whether that reference is owning.",
-      "Back-edges in trees are usually observational, not owning.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Choose Cell, RefCell, or Mutex on purpose",
-    objective: "Repair a design that picked the wrong interior-mutability tool for three different fields.",
-    starterPrompt:
-      "A parser uses `Mutex<u64>` for a tiny single-thread counter, `Cell<Vec<u8>>` for a borrowed scratch buffer, and `RefCell<HashMap<...>>` inside cross-thread shared state. Refactor each field to a better fit.",
-    prompts: [
-      "Which field only needs copy-or-replace behavior?",
-      "Which field needs borrowed interior access in one thread?",
-      "Which field crosses threads and therefore needs synchronized mutation or a redesign?",
-    ],
-    acceptanceCriteria: [
-      "You move the scalar counter toward `Cell<T>` or ordinary mutation where appropriate.",
-      "You choose `RefCell<T>` only for single-thread dynamic borrowing.",
-      "You move cross-thread shared mutation to a synchronization primitive or a clearer ownership boundary.",
-    ],
-    hints: [
-      "Do not ask which type is most powerful. Ask which contract is smallest and still true.",
-      "A lock around everything is often a smell before it is a solution.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "design or production scenario",
-    title: "Review an Arc<Mutex<...>> proposal like an engineer, not a slogan",
-    objective: "Decide whether shared mutable state is semantically real or whether message passing would be cleaner.",
-    starterPrompt:
-      "A teammate proposes one global `Arc<Mutex<HashMap<String, JobState>>>` for a retry service with network workers, a scheduler, and a metrics thread. Review the design.",
-    prompts: [
-      "What parts of the state are truly shared and mutable?",
-      "Which operations might contend or hold the lock too long?",
-      "Could some updates become owned messages instead of broad shared mutation?",
-      "What observability would you add to validate the choice in production?",
-    ],
-    acceptanceCriteria: [
-      "You justify at least one place where locking is semantically valid or one place where it is too broad.",
-      "You name contention or lock-scope risks explicitly.",
-      "You propose either message passing, sharding, or a narrower shared state design where appropriate.",
-      "You mention at least one production signal such as lock timing, queue depth, or throughput.",
-    ],
-    hints: [
-      "The first question is not 'can this compile?' It is 'what is actually shared here?'",
-      "A single global lock often hides several different state domains.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Explain why async futures may require pinning",
-    objective: "Make the pinning story operational instead of mystical.",
-    starterPrompt:
-      "You are reviewing an API that stores futures in a collection and polls them later. Explain why the code often uses `Pin<Box<F>>` and why `poll` takes `Pin<&mut Self>`.",
-    prompts: [
-      "What invariant would movement break?",
-      "Why is heap allocation alone not the full answer?",
-      "When does pinning become irrelevant because a type is effectively movable?",
-    ],
-    acceptanceCriteria: [
-      "You explain that pinning protects an address-sensitive invariant rather than merely 'making async work.'",
-      "You distinguish `Box<T>` from `Pin<Box<T>>` clearly.",
-      "You mention that many ordinary types are fine because they are `Unpin`.",
-      "You state that `Pin<&mut T>` is the operating view used by polling APIs.",
-    ],
-    hints: [
-      "Start from the `poll` signature. Rust is telling you what the protocol requires.",
-      "The useful comparison is movement versus no movement, not stack versus heap.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "When is `Box<T>` the right answer even though sharing is not involved at all?",
-  "Why is `Rc<T>` rejected at thread boundaries while `Arc<T>` is accepted only conditionally?",
-  "What makes `Cell<T>` smaller and calmer than `RefCell<T>` for some fields?",
-  "Why does `Weak<T>` belong on observational back-edges?",
-  "What problem does `Pin<T>` solve that plain heap allocation does not solve by itself?",
-]
-
-const workingLoop = [
-  "Count owners first, then talk about mutation.",
-  "State whether the pointer crosses a thread boundary before choosing `Rc<T>` or `Arc<T>`.",
-  "If mutation hides behind interior mutability, say where the enforcement moved: replace, runtime borrow, or lock.",
-  "If pinning appears, name the address-sensitive invariant before you accept the type.",
-]
-
-export function PageCh09SmartPointersAndPinningExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 17
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 09 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice choosing pointer types deliberately, keeping ownership graphs healthy, and explaining pinning in
-          operational terms instead of folklore.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an ownership review. The question is not which pointer is most advanced. The
-                question is which pointer tells the truth about ownership count, mutation, threads, and movement with the
-                least accidental power.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(16)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 09
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Pointer design drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Break the parent edge with Weak"
-          description={
-            <>
-              Fix the starter so the child keeps a non-owning parent reference. The checker expects the root to keep a{" "}
-              strong count of <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">1</code> and the parent
-              upgrade to succeed.
-            </>
-          }
-          filename="weak_parent_lab.rs"
-          runKey="ch09_ex_weak_parent"
-          expectedOutput={"root strong = 1\nleaf parent upgrade = true"}
-          helperText={
-            <>
-              Tip: keep the child edge observing, not owning. The change is a downgrade, not another clone.
-            </>
-          }
-          initialCode={`use std::cell::RefCell;\nuse std::rc::{Rc, Weak};\n\nstruct Node {\n    parent: RefCell<Weak<Node>>,\n    children: RefCell<Vec<Rc<Node>>>,\n}\n\nfn main() {\n    let root = Rc::new(Node {\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n\n    let leaf = Rc::new(Node {\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n\n    root.children.borrow_mut().push(Rc::clone(&leaf));\n    *leaf.parent.borrow_mut() = Weak::new();\n\n    println!(\"root strong = {}\", Rc::strong_count(&root));\n    println!(\"leaf parent upgrade = {}\", leaf.parent.borrow().upgrade().is_some());\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to explain why a given design wants `Box`, `Rc`, `Arc`,
-            `Cell`, `RefCell`, `Mutex`, `Weak`, or `Pin`, describe the operational cost of that choice, and defend the
-            choice in terms another senior engineer can review quickly.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch09_smart_pointers_and_pinning/rc_weak_tree.rs`
-````
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
-#[derive(Debug)]
-struct Node {
-    name: String,
-    parent: RefCell<Weak<Node>>,
-    children: RefCell<Vec<Rc<Node>>>,
-}
-
-fn main() {
-    let root = Rc::new(Node {
-        name: String::from("root"),
-        parent: RefCell::new(Weak::new()),
-        children: RefCell::new(Vec::new()),
-    });
-
-    let leaf = Rc::new(Node {
-        name: String::from("leaf"),
-        parent: RefCell::new(Weak::new()),
-        children: RefCell::new(Vec::new()),
-    });
-
-    root.children.borrow_mut().push(Rc::clone(&leaf));
-    *leaf.parent.borrow_mut() = Rc::downgrade(&root);
-
-    let parent_name = leaf
-        .parent
-        .borrow()
-        .upgrade()
-        .map(|node| node.name.clone())
-        .unwrap_or_else(|| String::from("none"));
-
-    println!("root children = {}", root.children.borrow().len());
-    println!("leaf parent = {}", parent_name);
-    println!("root strong = {}", Rc::strong_count(&root));
-}
-````
-
-### File: `examples/ch09_smart_pointers_and_pinning/pin_box_and_poll.rs`
-````
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
-
-struct Countdown {
-    remaining: u8,
-}
-
-impl Future for Countdown {
-    type Output = &'static str;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-
-        if this.remaining == 0 {
-            Poll::Ready("done")
-        } else {
-            this.remaining -= 1;
-            Poll::Pending
-        }
-    }
-}
-
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
-fn main() {
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut cx = Context::from_waker(&waker);
-    let mut task = Box::pin(Countdown { remaining: 2 });
-
-    loop {
-        match Future::poll(task.as_mut(), &mut cx) {
-            Poll::Ready(value) => {
-                println!("ready = {}", value);
-                break;
-            }
-            Poll::Pending => {
-                println!("pending = {}", task.as_ref().get_ref().remaining);
-            }
-        }
-    }
-}
-````
-
-### File: `explainer.md`
-````
-# Task 9 explainer
-
-## Repository convention used
-
-The task brief named markdown chapter targets, but this repository's source of truth is the React/Next book template under:
-
-- `components/rust-book/pages/`
-- `components/rust-book/types.ts`
-- `components/rust-book/index.tsx`
-- `examples/`
-
-So I followed the existing repository convention instead of creating unused markdown chapter files.
-
-## What changed
-
-### New chapter pages
-Added the Chapter 09 page pair in the established TSX page format:
-
-- `components/rust-book/pages/page-ch09-smart-pointers-and-pinning.tsx`
-- `components/rust-book/pages/page-ch09-smart-pointers-and-pinning-exercises.tsx`
-
-These pages include:
-
-- opening scenario
-- mental model
-- core concepts
-- production patterns
-- pitfalls and tradeoffs
-- worked examples
-- exercises
-- summary
-
-### Navigation and page registration
-Updated the page registry so Chapter 09 appears in the book flow and table of contents:
-
-- `components/rust-book/pages/index.ts`
-- `components/rust-book/index.tsx`
-- `components/rust-book/types.ts`
-
-### Example source files
-Added standalone Rust example files under the repository's example convention:
-
-- `examples/ch09_smart_pointers_and_pinning/rc_weak_tree.rs`
-- `examples/ch09_smart_pointers_and_pinning/pin_box_and_poll.rs`
-
-### Default editor code
-Added chapter-specific default editor code in a small companion file to avoid inflating `types.ts`:
-
-- `components/rust-book/default-codes-ch09.ts`
-
-`types.ts` now imports and merges those defaults.
-
-### Simulator support
-Added chapter-specific simulator output handling in a companion file:
-
-- `components/rust-book/rust-simulator-ch09.ts`
-
-And wired it into:
-
-- `components/rust-book/rust-simulator.ts`
-
-This keeps the existing simulator architecture intact while making the new chapter runnable and checkable.
-
-### Syntax highlighting support
-Extended code highlighting/editor type lists for the new chapter concepts in:
-
-- `components/rust-code-editor.tsx`
-
-## ToC mapping
-
-The chapter content maps directly to the requested source sections:
-
-1. `Box<T>: heap ownership`
-2. `Rc<T>: single-threaded shared ownership`
-3. `Arc<T>: thread-safe shared ownership`
-4. `RefCell<T>: runtime borrow checking`
-5. `Cell<T> and interior mutability`
-6. `Mutex<T> and ownership under synchronization`
-7. `Weak<T> and cyclic references`
-8. `Pin<T> and immovable values`
-9. `Pin<Box<T>> and Pin<&mut T>`
-10. `Choosing the right pointer type`
-
-## Exercise coverage
-
-The exercise page includes exercises covering:
-
-- pointer-type selection
-- breaking an `Rc` graph back-edge with `Weak`
-- `Cell` vs `RefCell` vs `Mutex`
-- `Arc<Mutex<T>>` tradeoffs
-- why async futures may require pinning
-
-It also includes a runnable lab with explicit acceptance via simulator output.
-
-## Assumptions
-
-- Page indices for the new chapter are:
-  - Chapter 09 main page: `16`
-  - Chapter 09 exercises page: `17`
-- Cross-links only target chapters that already exist in the repository.
-- I did not create markdown files because they would not be used by the existing app template.
-- I kept the build/navigation model consistent with the prior completed chapters.
-````

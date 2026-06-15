@@ -1,0 +1,218 @@
+{
+ "chapterKey": "ch29",
+ "num": 29,
+ "title": "JavaScript and C++ Integration for WASM",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "State the two-heaps model in your own words",
+   "objective": "Explain why every non-numeric value crossing the WebAssembly boundary is copied rather than shared.",
+   "starterPrompt": "The chapter says the shape worth memorizing is two separate heaps with one shared byte array between them. Write a short paragraph that explains what each side owns and what crosses the boundary for build_label and sum_bytes.",
+   "prompts": [
+    "Name what the JavaScript host owns and what the module owns inside its single linear memory.",
+    "Identify the only memory region both sides can touch directly.",
+    "For build_label, say what is copied in and what is copied back out.",
+    "Explain why a u32 result from sum_bytes needs no copy."
+   ],
+   "acceptanceCriteria": [
+    "The answer states that JavaScript holds its own objects while the module holds its own stack and heap inside one linear memory.",
+    "The answer identifies the shared linear memory as the only region both sides can touch.",
+    "It explains that each &str argument to build_label is copied into linear memory and the returned String is copied back into the host.",
+    "It explains that a u32 rides the native interface directly with no allocation and no copy."
+   ],
+   "hints": [
+    "The boundary does not disappear under WebAssembly; it becomes an explicit copy you can see and measure.",
+    "Numbers are the only values that travel without an encode-and-copy step."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the C ABI crossing in route_score",
+   "objective": "Read the C-ABI example and account for every invariant the unsafe block depends on.",
+   "starterPrompt": "Study the wasm_cpp_ffi_boundary listing where route_score forwards a &str to cpp_route_score as a pointer and length. Trace exactly what crosses the inner C-ABI seam and why the unsafe blocks are sound.",
+   "prompts": [
+    "List what route_score passes to the shim and explain why a slice is not passed directly.",
+    "State the three invariants the SAFETY comments name for the pointer, the length, and the borrow duration.",
+    "Identify which functions are unsafe and which stay in safe Rust.",
+    "Explain what cpp_route_score returns for the input \"/orders\" and why."
+   ],
+   "acceptanceCriteria": [
+    "The answer notes that route.as_ptr() and route.len() cross because the C ABI has no slice type.",
+    "It names the valid-pointer, correct-length, and read-only-for-the-call invariants from the SAFETY comments.",
+    "It identifies that only the wrapper and the shim are unsafe while the rest stays safe Rust.",
+    "It computes the returned score as bytes.len() as u32 times 10, giving 70 for the 7-byte \"/orders\"."
+   ],
+   "hints": [
+    "from_raw_parts reconstructs the slice inside the shim only for the duration of the call.",
+    "Count the characters in \"/orders\" before multiplying."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Add a byte-returning boundary function",
+   "objective": "Implement an exported-style function that takes a borrowed byte slice and returns an owned buffer copied back to the host.",
+   "starterPrompt": "Following the sum_bytes pattern, write fn mask_bytes(bytes: &[u8], key: u8) -> Vec<u8> that returns each input byte XORed with key, so the host receives a freshly owned buffer copied out of linear memory.",
+   "prompts": [
+    "Keep the parameter as &[u8] so the input is borrowed and not owned by the module.",
+    "Return an owned Vec<u8> that the host will copy back and own separately.",
+    "Use an iterator or an explicit loop; do not mutate the input slice.",
+    "Note in a comment which direction each value is copied across the boundary."
+   ],
+   "acceptanceCriteria": [
+    "The signature is exactly fn mask_bytes(bytes: &[u8], key: u8) -> Vec<u8>.",
+    "Each output byte equals the corresponding input byte XORed with key.",
+    "The input slice is read but never mutated, and no ownership of the caller's buffer is taken.",
+    "For input [1, 2, 3, 4] with key 1 the function returns [0, 3, 2, 5]."
+   ],
+   "hints": [
+    "bytes.iter().map(...).collect() builds the owned Vec in one expression.",
+    "The borrowed slice is the copy-in; the returned Vec is the copy-out."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Batch crossings instead of crossing per element",
+   "objective": "Replace a per-element boundary call with a single batched crossing and account for the copy savings.",
+   "starterPrompt": "A caller currently invokes route_score once per route in a list, paying one boundary crossing per element. Implement fn route_scores(routes: &[&str]) -> Vec<u32> that scores every route in a single call, reusing the route_score logic.",
+   "prompts": [
+    "Accept the whole batch as &[&str] so one crossing covers all routes.",
+    "Reuse the existing route_score logic for each element rather than reimplementing the shim call.",
+    "Return a Vec<u32> aligned by index with the input routes.",
+    "Explain how many boundary crossings this saves compared to calling once per route."
+   ],
+   "acceptanceCriteria": [
+    "The signature is exactly fn route_scores(routes: &[&str]) -> Vec<u32>.",
+    "The result length equals the input length and each entry matches route_score for that route.",
+    "The implementation reuses route_score rather than duplicating the unsafe shim call.",
+    "The answer states the batch makes one crossing instead of one per route."
+   ],
+   "hints": [
+    "routes.iter().map(|r| route_score(r)).collect() keeps the batch in one expression.",
+    "The cost you are removing is the per-call boundary overhead, not the arithmetic."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Fix an unsound boundary wrapper",
+   "objective": "Diagnose and repair an FFI wrapper whose pointer and length invariants do not hold.",
+   "starterPrompt": "A teammate wrote fn score_prefix(route: &str, n: usize) -> u32 { unsafe { cpp_route_score(route.as_ptr(), n) } } intending to score only the first n bytes, but it can read past the string. Identify the defect and correct the wrapper.",
+   "prompts": [
+    "Explain why passing n unchecked can violate the correct-length invariant from the SAFETY comment.",
+    "Decide how to clamp or validate n against route.len() before crossing the seam.",
+    "Rewrite the wrapper so the pointer and length always describe a valid read-only region.",
+    "State the SAFETY invariants your corrected version guarantees."
+   ],
+   "acceptanceCriteria": [
+    "The answer identifies that n greater than route.len() lets the shim read beyond the borrowed bytes.",
+    "The fix clamps the length to at most route.len() (for example n.min(route.len())) before the call.",
+    "The corrected wrapper passes a pointer and a length that always describe a valid region for the call.",
+    "A written SAFETY comment names the valid-pointer, correct-length, and read-only invariants."
+   ],
+   "hints": [
+    "The C ABI trusts the length you hand it; the wrapper is the only place that can enforce a bound.",
+    "n.min(route.len()) keeps the length inside the borrowed slice."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose boundary representations on the cost ladder",
+   "objective": "Apply the number / bytes / struct / resident-handle cost ladder to a concrete WebAssembly workload.",
+   "starterPrompt": "The product moves image processing, parsing, and a routing-score calculation into the module. For each of: a per-frame brightness scalar, a parsed config struct sent once at startup, a large image buffer processed every frame, and a parser the host calls thousands of times, choose a boundary representation and justify the cost.",
+   "prompts": [
+    "Map each workload to one rung of the ladder: number, byte array, serialized struct, or resident handle.",
+    "Justify each choice in terms of copies per crossing and encode/decode cost.",
+    "Decide which workload should keep state resident behind a handle instead of copying per call.",
+    "Name one case where reaching for the most convenient type (for example JSON) would make the module slower than the JavaScript it replaced."
+   ],
+   "acceptanceCriteria": [
+    "The brightness scalar is sent as a number with no copy, and the image buffer crosses as a byte array with one copy per crossing.",
+    "The parser called thousands of times is kept resident behind a handle to avoid per-call copies, accepting a managed lifetime.",
+    "Each choice is justified using copies per crossing or encode-plus-decode cost from the ladder.",
+    "The answer names a concrete case (such as a large struct as JSON) where the convenient encoding loses to a compact binary layout."
+   ],
+   "hints": [
+    "A number is free, a byte array is one copy, a struct adds encode plus decode, and a handle trades a per-call copy for a lifetime you manage.",
+    "The performance conversation is about the boundary, not the arithmetic inside the module."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why does every value richer than a number get copied when it crosses between the JavaScript host and the WebAssembly module?",
+  "What role does wasm-bindgen play after a browser-facing crate is compiled as a cdylib?",
+  "On the cost ladder of boundary representations, how do a number, a byte array, a serialized struct, and a resident handle differ in per-crossing cost?",
+  "How do the outer Rust-to-JavaScript seam and the inner Rust-to-C-shim seam differ in how data and safety are managed?",
+  "Why is the WebAssembly performance discussion almost always about the boundary rather than the arithmetic inside the module?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Boundary crossings and the cost ladder",
+  "filename": "wasm_boundary_lab.rs",
+  "runKey": "ch29_ex_boundary",
+  "expectedOutput": "label = billing::/ready\nsum = 10\nscore = 70\nbatch crossings = 1",
+  "helperText": "Model the chapter's boundary contracts in plain std Rust: a string-in/string-out crossing, a byte-slice-in/number-out crossing, a pointer-plus-length C-ABI crossing, and a single batched call. Fill in the TODO in route_scores so the whole batch crosses in one call.",
+  "initialCode": "// Models the WebAssembly boundary contracts in plain std Rust.\n// Two separate heaps with one shared byte array is simulated here by\n// passing borrowed slices in and returning owned values out.\n\nfn build_label(service: &str, route: &str) -> String {\n    // &str copied in, owned String copied back out.\n    format!(\"{}::{}\", service, route)\n}\n\nfn sum_bytes(bytes: &[u8]) -> u32 {\n    // borrowed slice copied in, u32 rides back with no copy.\n    bytes.iter().map(|&value| value as u32).sum()\n}\n\nfn route_score(route: &str) -> u32 {\n    // Pointer-plus-length C-ABI crossing, modeled: score is len * 10.\n    (route.len() as u32) * 10\n}\n\nfn route_scores(routes: &[&str]) -> Vec<u32> {\n    // TODO: score every route in a single batched crossing,\n    // reusing route_score, and return one u32 per route.\n    Vec::new()\n}\n\nfn main() {\n    let label = build_label(\"billing\", \"/ready\");\n    let total = sum_bytes(&[1_u8, 2, 3, 4]);\n    let score = route_score(\"/orders\");\n    let scores = route_scores(&[\"/a\", \"/bb\", \"/ccc\"]);\n\n    println!(\"label = {}\", label);\n    println!(\"sum = {}\", total);\n    println!(\"score = {}\", score);\n    println!(\"batch crossings = {}\", if scores.is_empty() { 0 } else { 1 });\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19 and 28",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "From Rust to WebAssembly",
+  "JavaScript interop and boundary data choices",
+  "Calling C and C++ from a WebAssembly module",
+  "WASI and host capabilities",
+  "Performance limits and serialization at the boundary",
+  "Debugging WebAssembly",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: wasm-bindgen string and byte boundary",
+  "Example 2: Wasm plus C ABI boundary",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "WebAssembly integration needs explicit host calls, memory ownership, data batching, and ABI rules. The module and its JavaScript host keep separate heaps, so every value richer than a number is encoded and copied across a boundary you design. This chapter defines the boundary con",
+  "Chapter 19 covered wire data contracts and versioned encodings; the WebAssembly boundary is one more wire, with the same evolution and encoding concerns. Chapter 28 covered the C ABI and Rust FFI; the C and C++ shim in this chapter is that same seam, now compiled into a browser-s",
+  "A web product is moving its hot client-side work, image processing, parsing, and a routing-score calculation, from JavaScript into a Rust WebAssembly module, and part of the routing logic already exists as a small C++ function the team wants to reuse rather than rewrite. The requ",
+  "The shape worth memorizing is two separate heaps with one shared byte array between them. JavaScript holds its own objects; the module holds its own stack and heap inside a single linear memory. The only thing both sides can touch is that linear memory, so every string, array, or",
+  "A browser-facing crate is built as a cdylib so the linker produces a single .wasm artifact, then wasm-bindgen post-processes it to emit the JavaScript glue that knows how to lay out and read back each annotated value.",
+  "The interop surface is where the design lives. wasm-bindgen will happily generate glue for a string, an array, or a serialized struct, but the four representations below have very different costs. Choosing among them deliberately, rather than reaching for the most convenient type",
+  "The decision is essentially a cost ladder. A number rides the native interface for free. A string or byte array costs one copy per crossing. A struct costs an encode plus a copy plus a decode. A resident handle costs almost nothing per call but adds a lifetime you must manage. Re",
+  "For everything that is not a number, the remaining questions decide how it crosses:",
+  "Reusing existing C or C++ code inside the module means crossing a second, lower boundary: the C ABI. This is the same FFI seam covered in Chapter 28, and it behaves the same way under WebAssembly. The shim exports plain functions, Rust calls them through an unsafe extern block, a",
+  "The two boundaries stack but stay distinct. The outer edge, Rust to JavaScript, is managed by generated glue. The inner edge, Rust to the C shim, is raw pointers and lengths with manual invariants. Keep them conceptually separate so a fault at one seam is not misdiagnosed at the ",
+  "A module has no ambient operating system. In the browser it can compute freely but can only reach the outside world through functions the host imports into it. WASI is the standardized way a non-browser host grants files, clocks, and randomness, but the underlying rule is the sam",
+  "WebAssembly computes at near-native speed inside the module, so the performance conversation is almost never about the arithmetic. It is about the boundary. A design that crosses the seam per element, or copies a large buffer on every call, will be slower than the JavaScript it r",
+  "Serialization is the other half of this. A rich struct that crosses as JSON pays an encode and a parse on top of the copy; the same struct crossing as a compact binary layout the host reads as a typed array can be dramatically cheaper. As in Chapter 19, the encoding is a contract",
+  "A fault inside a module is harder to read than a native crash because, by default, you see a trap and an offset into linear memory rather than a Rust line. The good news is that a small amount of setup recovers most of the familiar debugging experience: a panic hook surfaces mess",
+  "Most engineers reach WebAssembly with a marshalling model from somewhere else, and the useful question is which part of that model still holds. The shift is rarely about API names. It is about accepting that the host and the module keep separate heaps, that every non-numeric valu",
+  "WebAssembly does not make the boundary disappear; it makes it explicit. The cost you used to pay invisibly in a marshaller is now a copy you can see, measure, and design around.",
+  "Two exported functions show the two common non-numeric crossings: a string in and out, and a byte slice in with a number out.",
+  "What to look at: the #[wasm_bindgen] attribute is what makes each function callable from JavaScript, and the parameter types decide how the data crosses. build_label takes two borrowed &str values, each copied into linear memory, and returns an owned String copied back out; sum_b",
+  "A &str or &[u8] is copied into linear memory for the call and not owned by the module afterwards.",
+  "The returned String is copied back into the host, which then owns its own separate value.",
+  "The summed u32 rides the native interface with no allocation and no copy.",
+  "A safe Rust function hands a string's bytes to a C-ABI shim as a pointer and a length, mirroring how a reused C or C++ routine is called inside the module.",
+  "What to look at: the safe wrapper route_score is the only place that touches raw pointers, and it does so inside a narrow unsafe block with a written SAFETY comment naming each invariant. It passes route.as_ptr() and route.len() to the shim, which reconstructs a slice for the dur",
+  "The C ABI has no slice type, so the borrowed bytes cross as a raw pointer and an explicit length.",
+  "The SAFETY comment names what must hold: valid pointer, correct length, read-only for the call's duration.",
+  "Only the wrapper and the shim are unsafe; the rest of the program stays in safe Rust.",
+  "Both examples run here as ordinary Rust so the boundary logic is testable without a browser or a WebAssembly runtime. In a real build, the first compiles to a cdylib processed by wasm-bindgen, and the second links the C or C++ shim into the same module, but the crossing contracts",
+  "The companion exercise page asks you to export Rust to JavaScript with wasm-bindgen, choose serialization and memory boundaries for a given workload, reason about the copying cost of crossing the seam, and decide when to batch or keep state resident instead of copying per call.",
+  "This chapter handed values across a boundary inside one machine. Chapter 30 widens that boundary to a message broker between services, where the wire contract, copy semantics, and explicit ownership habits from this chapter reappear as durable messages, acknowledgments, and idemp"
+ ],
+ "codeSamples": {
+  "wasm_bindgen_string_array_boundary": "use wasm_bindgen::prelude::*;\n\n#[wasm_bindgen]\npub fn build_label(service: &str, route: &str) -> String {\n    format!(\"{}::{}\", service, route)\n}\n\n#[wasm_bindgen]\npub fn sum_bytes(bytes: &[u8]) -> u32 {\n    bytes.iter().map(|&value| value as u32).sum()\n}\n\nfn main() {\n    let label = build_label(\"billing\", \"/ready\");\n    let total = sum_bytes(&[1_u8, 2, 3, 4]);\n\n    println!(\"label = {}\", label);\n    println!(\"sum = {}\", total);\n}",
+  "wasm_cpp_ffi_boundary": "mod cpp_shim {\n    #[unsafe(no_mangle)]\n    pub extern \"C\" fn cpp_route_score(ptr: *const u8, len: usize) -> u32 {\n        if ptr.is_null() && len != 0 {\n            return 0;\n        }\n\n        let bytes = unsafe {\n            // SAFETY:\n            // - ptr is either null with len == 0 or valid for len bytes.\n            // - the shim only reads the bytes for the duration of the call.\n            std::slice::from_raw_parts(ptr, len)\n        };\n\n        (bytes.len() as u32) * 10\n    }\n}\n\nunsafe extern \"C\" {\n    fn cpp_route_score(ptr: *const u8, len: usize) -> u32;\n}\n\npub fn route_score(route: &str) -> u32 {\n    unsafe {\n        // SAFETY:\n        // - route.as_ptr() is valid for route.len() bytes for the duration of the call.\n        // - the shim borrows the bytes only for the duration of the call.\n        cpp_route_score(route.as_ptr(), route.len())\n    }\n}\n\nfn main() {\n    let route = \"/orders\";\n    println!(\"route = {}\", route);\n    println!(\"score = {}\", route_score(route));\n}"
+ },
+ "labReferenceSolution": "// Models the WebAssembly boundary contracts in plain std Rust.\n// Two separate heaps with one shared byte array is simulated here by\n// passing borrowed slices in and returning owned values out.\n\nfn build_label(service: &str, route: &str) -> String {\n    // &str copied in, owned String copied back out.\n    format!(\"{}::{}\", service, route)\n}\n\nfn sum_bytes(bytes: &[u8]) -> u32 {\n    // borrowed slice copied in, u32 rides back with no copy.\n    bytes.iter().map(|&value| value as u32).sum()\n}\n\nfn route_score(route: &str) -> u32 {\n    // Pointer-plus-length C-ABI crossing, modeled: score is len * 10.\n    (route.len() as u32) * 10\n}\n\nfn route_scores(routes: &[&str]) -> Vec<u32> {\n    // Score every route in a single batched crossing, reusing route_score.\n    routes.iter().map(|route| route_score(route)).collect()\n}\n\nfn main() {\n    let label = build_label(\"billing\", \"/ready\");\n    let total = sum_bytes(&[1_u8, 2, 3, 4]);\n    let score = route_score(\"/orders\");\n    let scores = route_scores(&[\"/a\", \"/bb\", \"/ccc\"]);\n\n    println!(\"label = {}\", label);\n    println!(\"sum = {}\", total);\n    println!(\"score = {}\", score);\n    println!(\"batch crossings = {}\", if scores.is_empty() { 0 } else { 1 });\n}"
+}

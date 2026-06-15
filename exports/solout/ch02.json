@@ -1,0 +1,100 @@
+{
+  "chapterKey": "ch02",
+  "intro": "These exercises convert the chapter's mental model into something you can apply during code review and debugging. They ask you to track ownership transfer line by line, to separate inline storage from heap allocation in a composite value, to rewrite imperative mutation as value-producing expressions, to diagnose a lifetime error as an ownership problem rather than an annotation problem, and to plan ownership across a realistic ingest pipeline.\n\nThe common thread is naming the owner at every step. Once you can say which binding owns a value, when that owner is dropped, and which references must stay within that window, most of Rust's diagnostics become predictable rather than adversarial. The solutions below answer each exercise directly in those terms.",
+  "exerciseSolutions": [
+    {
+      "number": 1,
+      "title": "Predict the ownership timeline",
+      "kind": "warm-up comprehension",
+      "solution": "Track ownership one binding at a time. After `let service = String::from(\"payload\");`, the binding `service` owns the heap-backed `String`. After `let alias = service;`, ownership moves out of `service` and into `alias`. `String` is not `Copy`, so this assignment transfers ownership rather than duplicating the value; `service` is now an unusable, moved-from binding. After `consume(alias);`, ownership moves again, this time out of `alias` and into the `consume` function's parameter.\n\nThe owned `String` is dropped at the end of `consume`'s body, because that is where its current owner leaves scope. Nothing in `main` drops it after the call, because `main` no longer owns it once the value was moved into `consume`. This is the chapter's point that owned values live until their owner is dropped, and that drop is deterministic: it happens at a specific, predictable point in the code, not at an unspecified later time.\n\nA line that would fail to compile is any use of a moved-from binding after its value has been transferred, for example `println!(\"{}\", service);` placed after `let alias = service;`, or `println!(\"{}\", alias);` placed after `consume(alias);`. The compiler rejects these with a use-after-move error because the named binding no longer owns a value. The fix, when you genuinely need the data in two places, is to clone before the move or to pass a reference instead of transferring ownership.",
+      "code": "fn consume(value: String) {\n    println!(\"consume owns {}\", value);\n    // `value` (the owned String) is dropped here, at end of `consume`.\n}\n\nfn main() {\n    let service = String::from(\"payload\");\n    let alias = service; // ownership moves: service -> alias\n    // println!(\"{}\", service); // would NOT compile: service was moved out.\n    consume(alias); // ownership moves: alias -> consume's parameter\n    // println!(\"{}\", alias);   // would NOT compile: alias was moved out.\n}",
+      "codeNote": "Ownership moves service -> alias -> consume; the String is dropped at the end of consume.",
+      "criteria": [
+        "Ownership is shown moving from `service` to `alias`, then from `alias` into `consume`'s parameter.",
+        "The drop point is identified as the end of `consume`, where the value's current owner leaves scope.",
+        "The failing-line example uses a moved-from binding (`service` or `alias`) after its value was transferred."
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Map stack and heap storage precisely",
+      "kind": "code reading",
+      "solution": "Separate the outer struct layout from the storage owned by each field. A `Batch` that holds a fixed-size array, say `[u32; 4]`, plus a `Vec<String>` stores both fields inline in the `Batch` value itself. The array is stored inline in full: all four `u32` words sit directly inside the `Batch`, with no separate allocation. The `Vec<String>` field is also inline, but only as a small fixed-size handle: three machine words holding a pointer, a length, and a capacity. Wherever the `Batch` value lives (a local on the stack, or inside another owner), those words travel with it.\n\nThe heap allocations are owned indirectly through the `Vec`. The `Vec<String>` owns one heap buffer: the element array of `String` handles, sized by its capacity. That buffer does not live inside the `Batch` value; the `Vec`'s pointer field points at it. Each `String` element is itself a three-word handle stored inside that element buffer, and each non-empty `String` owns a further, separate heap allocation holding its UTF-8 bytes.\n\nOwnership is layered. The `Batch` value owns the array inline and owns the `Vec` handle inline. The `Vec` owns its element buffer on the heap. Each `String` element owns its own byte allocation on the heap. When the `Batch` is dropped, drop runs recursively: each `String` frees its bytes, then the `Vec` frees its element buffer, and the inline array needs no separate cleanup because it was never separately allocated.",
+      "code": "struct Batch {\n    counts: [u32; 4],     // inline: 4 * 4 = 16 bytes live inside Batch\n    labels: Vec<String>,  // inline handle (ptr,len,cap); owns a heap buffer\n}\n\n// Storage map for a Batch value:\n//   counts            -> inline in Batch (no allocation)\n//   labels handle     -> inline in Batch: ptr/len/cap words\n//   labels buffer     -> heap, owned by the Vec (array of String handles)\n//   each String handle-> lives in the Vec's heap buffer\n//   each String bytes -> separate heap allocation, owned by that String",
+      "codeNote": "The array and the Vec handle are inline in Batch; the Vec buffer and each String's bytes are heap allocations.",
+      "criteria": [
+        "The fixed-size array is identified as stored inline in the `Batch` value.",
+        "The `Vec<String>` is shown as an inline handle whose element buffer is a separate heap allocation.",
+        "Each `String` element is noted as owning its own heap-backed bytes."
+      ]
+    },
+    {
+      "number": 3,
+      "title": "Refactor imperative mutation into expression-oriented Rust",
+      "kind": "implementation",
+      "solution": "The original `classify` introduces a wide mutable temporary, `let mut scaled = 0;`, then mutates it in two branches and threads it into two separate return sites. The mutable binding spans the whole function even though no value of interest exists until a branch is taken, and the `0` initializer is a placeholder that is never the real answer. That widened mutable scope is exactly what the chapter's expression-oriented style removes.\n\nBecause `if` in Rust is an expression, the entire function body can be a single `if`/`else` that evaluates to the tuple. Each branch computes the scaled value directly in the tuple position, so there is no separate `mut` binding to initialize, reassign, and reason about, and there are no early returns. The return type stays exactly `(&'static str, usize)`: the string literals are `&'static str`, and the arithmetic stays in `usize`. No heap allocation or cloning is introduced, since both branches return a borrowed static string and a stack `usize`.\n\nThe result is easier to verify at a glance: the two outcomes sit side by side, each branch is total (it always produces the tuple), and there is no intermediate state that could be left stale. This is the refactor the lab uses, and it produces the same output as the imperative version.",
+      "code": "fn classify(depth: usize) -> (&'static str, usize) {\n    if depth > 1000 {\n        (\"hot\", depth / 2)\n    } else {\n        (\"steady\", depth + 50)\n    }\n}",
+      "codeNote": "A single if-expression returns the tuple directly; no wide `mut scaled` binding and no early returns.",
+      "criteria": [
+        "The wide `mut scaled` binding is removed entirely.",
+        "The return type is still `(&'static str, usize)`.",
+        "Control flow is a single value-producing `if`/`else` expression rather than early-return-driven mutation."
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Explain the lifetime bug instead of fighting the annotation",
+      "kind": "debugging or refactoring",
+      "solution": "The function builds a `String` locally, takes a reference into it (for example `text.lines().next()`), and tries to return that reference. The rule Rust enforces is that a reference may not outlive the value it points at. The local `String` named `text` is owned by the function and is dropped at the end of the function body; any reference into it becomes dangling at that exact point. Returning such a reference would hand the caller a borrow of memory that has already been freed, so the borrow checker rejects it.\n\nAdding a lifetime annotation does not fix this, because lifetimes describe valid borrowing relationships; they do not extend how long a value lives. A signature like `fn first_line<'a>(...) -> &'a str` is a claim that the returned reference stays valid for some region `'a`, but the only data the reference points at is dropped when the function returns. No annotation can make the local `String` live past its owner's scope. The annotation would just move the contradiction from one error to another, because there is no caller-provided source for `'a` to attach to.\n\nThere are two valid repairs with different tradeoffs. First, return an owned value: change the return type to `String` and return `text.lines().next().unwrap_or(\"\").to_string()`. This transfers ownership to the caller, costs one allocation, and frees the function from any borrowing relationship. Second, borrow from caller-provided input instead of a local: take `text: &str` as a parameter and return `&str` derived from it, so the returned reference points at data the caller already owns and that outlives the call. The first repair is simplest and self-contained; the second avoids allocation but ties the output's validity to the caller's input lifetime.",
+      "code": "// Broken: returns a reference into a local String that is dropped on return.\n// fn first_line() -> &str {\n//     let text = String::from(\"alpha\\nbeta\");\n//     text.lines().next().unwrap_or(\"\") // borrow of `text`, which dies here\n// }\n\n// Repair 1: return an owned String (transfer ownership, one allocation).\nfn first_line_owned() -> String {\n    let text = String::from(\"alpha\\nbeta\");\n    text.lines().next().unwrap_or(\"\").to_string()\n}\n\n// Repair 2: borrow from caller-provided input that outlives the call.\nfn first_line_borrowed(text: &str) -> &str {\n    text.lines().next().unwrap_or(\"\")\n}",
+      "codeNote": "Repair 1 returns an owned String; repair 2 borrows from caller-owned input so the reference outlives the call.",
+      "criteria": [
+        "The diagnosis is that the returned reference would outlive the local `String` owner, which is dropped on return.",
+        "It is stated that lifetimes constrain references and do not extend a value's actual lifetime, so an annotation cannot fix it.",
+        "Two real repairs are given: return an owned `String`, or borrow from caller-provided input."
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Choose owned versus borrowed data at a queue boundary",
+      "kind": "design or production scenario",
+      "solution": "Name the owner at each subsystem edge. The inbound `&[u8]` request bytes are borrowed, owned by whatever buffer received them (a socket read buffer or a pooled allocation). Parsing should stay inside that borrow: header parsing, field slicing, and validation can all work against `&[u8]` and `&str` slices that point into the request buffer. None of these intermediate slices should be stored beyond the parse step, because the request buffer can be reused or freed as soon as ingest moves on. Keeping borrows local to parsing avoids copying data that may turn out to be invalid and gets rejected.\n\nThe `Event` is the value that crosses the worker queue, and a queue is an ownership boundary. The worker runs concurrently and outlives the request buffer, so the `Event` must own everything it needs: owned `String` fields, owned `Vec<u8>` payloads, owned numeric and enum fields. The single deliberate ownership transition is at construction of the `Event`: validated borrowed slices are converted into owned data (`to_string()`, `to_vec()`), and from that point the request buffer is free to be recycled. Sending the `Event` into the queue then moves ownership to the worker.\n\nCloning is acceptable exactly at this boundary, where converting a validated slice into an owned field is the price of crossing into an independently-lived subsystem; that is an explicit economic choice, not a default. Cloning is a smell when it appears inside parsing to dodge a borrow-checker message, or when the same `Event` is cloned to hand copies to several stages that could instead share an `Arc<Event>` or receive a borrow. For cleanup, rely on ordinary scope exit and `Drop`: the request buffer is released when parsing's scope ends, and the `Event`'s owned `String` and `Vec` allocations are freed when the worker finishes with it and drops it, after persist and metrics have run. No manual free, and no slow network or locking logic in any destructor.",
+      "code": "// Borrowed during parsing; owned at the Event boundary.\nstruct Event {\n    topic: String,    // owned: outlives the request buffer\n    payload: Vec<u8>, // owned: moved into the worker queue\n    priority: u8,     // inline Copy\n}\n\nfn ingest(request: &[u8], queue: &std::sync::mpsc::Sender<Event>) {\n    // Parse against borrowed slices into `request` (no ownership taken).\n    let topic_slice: &str = parse_topic(request);   // borrow stays local\n    let body_slice: &[u8] = parse_body(request);     // borrow stays local\n    let priority = parse_priority(request);\n\n    // Cross the boundary: convert validated borrows into owned data.\n    let event = Event {\n        topic: topic_slice.to_string(),\n        payload: body_slice.to_vec(),\n        priority,\n    };\n\n    // Move ownership into the worker queue; `request` may now be reused.\n    let _ = queue.send(event);\n    // No manual cleanup: request buffer drops with its scope; Event drops in the worker.\n}\n\nfn parse_topic(_r: &[u8]) -> &str { \"ingest\" }\nfn parse_body<'a>(r: &'a [u8]) -> &'a [u8] { r }\nfn parse_priority(_r: &[u8]) -> u8 { 1 }",
+      "codeNote": "Parsing works on borrows into the request buffer; the Event owns its data before it crosses the queue boundary.",
+      "criteria": [
+        "Borrowed slices into the request buffer stay local to parsing and validation.",
+        "Data that crosses the queue is converted into owned `Event` fields before the boundary.",
+        "Cloning at the boundary is justified as a deliberate cost, while cloning inside parsing or to feed shared readers is named as a smell.",
+        "Cleanup is described as scope exit and `Drop` of the buffer and the `Event`, with no runtime magic or heavy destructor logic."
+      ]
+    }
+  ],
+  "labSolution": {
+    "solutionCode": "fn classify(depth: usize) -> (&'static str, usize) {\n    if depth > 1000 {\n        (\"hot\", depth / 2)\n    } else {\n        (\"steady\", depth + 50)\n    }\n}\n\nfn main() {\n    let (status_a, value_a) = classify(120);\n    let (status_b, value_b) = classify(1200);\n    println!(\"{} {}\", status_a, value_a);\n    println!(\"{} {}\", status_b, value_b);\n}",
+    "expectedOutput": "steady 170\nhot 600",
+    "explanation": "The lab completes Exercise 3 by replacing the imperative `classify` with an expression-oriented version. The body is a single `if`/`else` expression that evaluates to the `(&'static str, usize)` tuple, so there is no wide `mut scaled` temporary and no early return. Each branch is total and produces the result directly: the high-load branch returns `(\"hot\", depth / 2)`, and the default branch returns `(\"steady\", depth + 50)`.\n\nThe two calls in `main` exercise both branches. `classify(120)` takes the `else` branch because 120 is not greater than 1000, computing `120 + 50 = 170` and yielding `(\"steady\", 170)`. `classify(1200)` takes the `if` branch because 1200 is greater than 1000, computing `1200 / 2 = 600` and yielding `(\"hot\", 600)`. The two `println!` calls then print `steady 170` and `hot 600` on separate lines, matching the expected output exactly. The returned `&'static str` values are borrows of string literals baked into the binary, so they are valid for the whole program and require no allocation; the `usize` results are plain stack values.",
+    "stdOnly": true
+  },
+  "reviewAnswers": [
+    {
+      "question": "What is the difference between a value and a binding in Rust?",
+      "answer": "A value is the actual data, such as the bytes of a `String` or an integer's bits, while a binding is a named slot like `let x = ...` that currently owns or refers to a value. Ownership belongs to bindings: when you move a non-`Copy` value, the value is unchanged but the owning binding changes, and the old binding becomes unusable. Thinking in terms of which binding owns a value, rather than hidden object identity, is what makes move and drop behavior predictable."
+    },
+    {
+      "question": "Where do `Vec<T>` metadata and `Vec<T>` elements usually live?",
+      "answer": "The `Vec<T>` metadata, a pointer, a length, and a capacity, is a small fixed-size handle stored inline wherever the `Vec` itself lives, for instance on the stack for a local or inside an enclosing struct. The elements live in a separate heap buffer that the `Vec` owns and points at through its pointer field. Moving the `Vec` copies only the three-word handle; the heap buffer stays put, which is why moves are cheap and the `Vec` frees that buffer when it is dropped."
+    },
+    {
+      "question": "What does a lifetime annotation constrain, and what does it not do?",
+      "answer": "A lifetime annotation constrains references: it describes the region during which a borrow must stay valid and ties the validity of one reference to the data it points at. It does not extend how long a value lives, allocate anything, or change runtime behavior; it is a compile-time proof about borrowing, erased before code generation. So when a value is dropped, no annotation can keep a reference to it valid, and a lifetime error is a signal to fix ownership rather than to invent annotations."
+    },
+    {
+      "question": "Why can block expressions reduce mutation pressure in production code?",
+      "answer": "Because `if`, `match`, and `{ ... }` blocks are expressions that produce values, you can compute a result and bind it once as an immutable `let`, instead of declaring a wide `mut` placeholder and reassigning it across branches. Any mutation needed to assemble the value can be confined to a short inner block whose last expression becomes the result, so the surrounding bindings stay immutable. Narrower mutable scope means fewer places where state can be left stale, which is easier to review and to reason about under change."
+    },
+    {
+      "question": "When is `Drop` useful, and what kinds of logic should usually stay out of it?",
+      "answer": "`Drop` is useful for deterministic resource release and invariant maintenance: closing file handles, freeing buffers, releasing locks, or decrementing reference counts at a precise, predictable point when the owner leaves scope. Logic that should stay out of destructors includes slow or fallible network calls, complex lock-acquisition chains, and critical business logic, because destructors run implicitly, are awkward to handle errors in, and execute during unwinding and shutdown where they are hard to reason about. Keep destructors fast and predictable, and put meaningful work on explicit code paths instead."
+    }
+  ]
+}

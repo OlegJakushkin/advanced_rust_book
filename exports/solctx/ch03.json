@@ -1,0 +1,202 @@
+{
+ "chapterKey": "ch03",
+ "num": 3,
+ "title": "Project Structure and Tooling",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Name the unit before you design it",
+   "objective": "Practice distinguishing package, crate, module, workspace, and public API surface without hand-waving.",
+   "starterPrompt": "You inherit a repository with an API service, a worker, shared domain models, and a CLI. Classify which parts should be packages, which should be crates, and which should remain modules inside one crate.",
+   "prompts": [
+    "Which boundary is only organizational and therefore should stay a module?",
+    "Which boundary justifies a separate crate because of dependency or API isolation?",
+    "Which boundary belongs at workspace scope rather than crate scope?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish package, crate, module, and workspace correctly.",
+    "You justify at least one decision by dependency isolation rather than folder preference.",
+    "You identify at least one case where a module is cheaper than a new crate."
+   ],
+   "hints": [
+    "Ask what the compiler builds, what Cargo manages, and what callers should be allowed to import.",
+    "A directory boundary is not automatically a crate boundary."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read the public surface from a module tree",
+   "objective": "Infer what is public, what remains internal, and where refactoring freedom still exists.",
+   "starterPrompt": "Given a crate root that re-exports `pub use domain::OrderId;` and `pub use service::OrderService;`, with adapters hidden under internal modules, explain what downstream callers can rely on and what they should not know about.",
+   "prompts": [
+    "What path would a downstream crate import?",
+    "Which internal module names may change without breaking callers?",
+    "Why is `pub(crate)` often a better first choice than `pub`?"
+   ],
+   "acceptanceCriteria": [
+    "You identify the stable import path at the crate root.",
+    "You explain how re-exporting hides internal layout and preserves refactoring room.",
+    "You describe the maintenance cost of widening visibility too early."
+   ],
+   "hints": [
+    "Think about what another crate sees, not what the current file sees.",
+    "A public path is an API promise even if it felt temporary when written."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Create a workspace layout for a multi-crate product",
+   "objective": "Design a realistic Rust workspace for a product with multiple binaries and shared domain logic.",
+   "starterPrompt": "Sketch the top-level layout for a system with `api`, `worker`, `domain`, and `adapters` components. Use a workspace root plus packages and explain which crates own which dependencies.",
+   "prompts": [
+    "Which package should contain the shared domain types?",
+    "Which packages should depend on network or database crates?",
+    "Which package should remain free of infrastructure dependencies?"
+   ],
+   "acceptanceCriteria": [
+    "Your layout includes a workspace root and multiple packages.",
+    "The domain crate stays isolated from infrastructure dependencies.",
+    "The API and worker binaries depend inward rather than the core depending outward.",
+    "You explain one tradeoff involving build times, API stability, or dependency hygiene."
+   ],
+   "hints": [
+    "If a crate can stay free of HTTP and database types, that is usually a good sign.",
+    "Think in dependency direction, not just file organization."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a feature flag matrix without turning Cargo into a mode engine",
+   "objective": "Fix a design that uses features for mutually exclusive operational modes.",
+   "starterPrompt": "A crate has features `sqlite`, `postgres`, and `memory`, and the code assumes exactly one is enabled. Refactor the design so additive features remain sane and invalid combinations are handled explicitly.",
+   "prompts": [
+    "Which parts should stay compile-time options?",
+    "Which parts belong in runtime configuration instead?",
+    "How would you reject impossible combinations early?"
+   ],
+   "acceptanceCriteria": [
+    "You explain why mutually exclusive operational modes are awkward as Cargo features.",
+    "You preserve additive capability where it makes sense.",
+    "You propose an explicit validation strategy for impossible combinations."
+   ],
+   "hints": [
+    "Cargo resolves one feature set for the build graph, not per request or per environment.",
+    "A runtime enum is often cleaner than a compile-time feature war."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Choose a dependency policy for shared crates",
+   "objective": "Decide which crates may depend on infrastructure libraries and which crates must remain clean.",
+   "starterPrompt": "Your domain crate currently imports an HTTP status type, a database error type, and a tracing crate because it was faster during prototyping. Redesign the dependency policy for long-term maintainability.",
+   "prompts": [
+    "Which dependencies move outward into adapter crates?",
+    "Which types should be translated at the boundary instead of leaking inward?",
+    "Where would you allow a shared utility crate, and where would you avoid it?"
+   ],
+   "acceptanceCriteria": [
+    "You move protocol and storage dependencies out of the core domain crate.",
+    "You explain at least one translation boundary where infrastructure types should be converted.",
+    "You justify any remaining shared utility dependency rather than using it as a default bucket."
+   ],
+   "hints": [
+    "Core crates should know business concepts first and infrastructure concepts last.",
+    "A shared crate is only helpful when it removes duplication without becoming a junk drawer."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Write the CI command pack for the chapter examples",
+   "objective": "Define the baseline commands a serious Rust workspace should run for formatting, linting, testing, and benchmarking.",
+   "starterPrompt": "Pretend the chapter examples live inside a real Cargo workspace. Write the command sequence you would put into CI and explain what each command protects against.",
+   "prompts": [
+    "Which command gives the fastest structural feedback?",
+    "Which command enforces formatting consistency?",
+    "Which command should fail on lint warnings?",
+    "How will benchmarking fit in without pretending every repository already has a benchmark harness?"
+   ],
+   "acceptanceCriteria": [
+    "Your command pack includes check, test, formatting, and linting.",
+    "You mention benchmark execution conditionally rather than assuming every repo already has benches.",
+    "You explain why `--workspace`, `--all-targets`, or `--all-features` matter where used."
+   ],
+   "hints": [
+    "Think of the command pack as team muscle memory, not only as CI decoration.",
+    "A good answer is specific enough to paste into a pipeline later."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What is the operational difference between a package and a crate?",
+  "When should you create a new crate instead of a new module?",
+  "Why is `pub(crate)` often a better default than `pub`?",
+  "What kinds of choices belong in Cargo features, and what kinds usually belong in runtime configuration?",
+  "Why should benchmarking be explicit rather than assumed?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Feature matrix repair",
+  "filename": "feature_matrix_lab.rs",
+  "runKey": "ch03_ex_feature_matrix",
+  "expectedOutput": "none = Err(\"choose exactly one backend\")\ns3 = Ok(\"s3\")\nlocal = Ok(\"local\")\nboth = Err(\"choose exactly one backend\")",
+  "initialCode": "fn selected_backend(s3: bool, local: bool) -> Result<&'static str, &'static str> {\n    if s3 {\n        return Ok(\"s3\");\n    }\n\n    if local {\n        return Ok(\"local\");\n    }\n\n    Err(\"not configured\")\n}\n\nfn main() {\n    println!(\"none = {:?}\", selected_backend(false, false));\n    println!(\"s3 = {:?}\", selected_backend(true, false));\n    println!(\"local = {:?}\", selected_backend(false, true));\n    println!(\"both = {:?}\", selected_backend(true, true));\n}"
+ },
+ "proseHeadings": [
+  "Repository note",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "Cargo, crates, packages, and workspaces",
+  "Modules and visibility",
+  "Features and conditional compilation",
+  "Dependency management",
+  "Testing, benchmarking, linting, and formatting",
+  "A recommended Rust workflow",
+  "How prior instincts translate",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: shape a narrow module surface",
+  "Example 2: model an optional capability cleanly",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Large Rust repositories need predictable crate boundaries, module visibility, feature flags, dependency policy, and CI commands. This chapter sets the project structure that keeps builds repeatable and maintainable.",
+  "The current repository is a web book template, not a live Cargo workspace. To stay aligned with the existing template, this chapter uses standalone Rust example files under examples/ch03_project_structure_and_tooling/ and explains the Cargo layouts you would create in a real Rust",
+  "A product repository must deliver an API service, a worker, a support CLI, and a shared domain model from one Rust workspace. The business requirement is clear package ownership, crate boundaries that match release and dependency policy, module visibility that protects invariants",
+  "The easiest mistake is to treat these words as synonyms. They are not. A package is what Cargo manages from one Cargo.toml. A crate is what the compiler builds. A workspace groups packages so the repository can share one Cargo.lock, one target directory, and one top-level command",
+  "In practice, start with fewer crates than your instincts may suggest. A new crate is justified when it gives you a real boundary: dependency isolation, compile-time separation, reuse with a stable surface, or a clean public/private split. If the change is only organizational, a m",
+  "The relationship is strictly nested, and the diagram is worth fixing in memory before anything else: a workspace contains packages, each package is defined by exactly one Cargo.toml and produces one or more crates, and each crate contains a tree of modules. Note where the units d",
+  "Modules are how you hide detail inside a crate. The default visibility is private, which is a strong default to keep. Reach first for pub(crate), then pub(super), and only then full pub when you truly mean external callers.",
+  "The crate root is where you shape the surface. Internal modules may stay deep and specific while the public API becomes smaller and calmer through deliberate pub use re-exports. That keeps callers stable while giving you room to refactor internals.",
+  "What to look at: visibility is a ladder, not a switch. Each rung widens who can reach an item, and each rung up is harder to walk back later because more callers can depend on it. Climb only as far as a real caller forces you to, and shape the public path with a deliberate pub us",
+  "Cargo features work best as additive capability switches: optional integrations, platform-specific plumbing, or extra instrumentation. The real tools are compile-time conditions such as #[cfg(feature = \"metrics\")], #[cfg(test)], and optional dependencies.",
+  "The trap is to encode runtime mode systems as feature matrices. Features are resolved once for the whole build graph. If the question is “what mode is this service in today?”, a runtime config file or environment variable is usually the better abstraction.",
+  "What to look at in the diagram: the feature is decided once, on the left, before the compiler runs, and everything downstream is fixed for that whole build. A runtime decision sits on the opposite side — it branches per request inside a single binary. Choosing the wrong side is t",
+  "The runtime side is the opposite: one already-built binary that branches per request.",
+  "Keep feature design boring. Additive features compose. Mutually exclusive features multiply test matrices, documentation burden, and integration surprises.",
+  "Be strict about direct dependencies. Each direct crate becomes part of your maintenance surface, your security review surface, and sometimes your public API surface. If several packages share the same policy, centralize it with workspace-level dependency declarations such as work",
+  "Commit Cargo.lock for binaries and services so production resolution stays reproducible. Library crates also keep a lockfile in the repository for CI sanity, but downstream consumers still resolve their own graph.",
+  "The repository also includes examples/ch03_project_structure_and_tooling/testing_layers.rs as a small, standalone example of colocated tests.",
+  "Almost every confusion in this chapter comes from carrying a structural assumption from another language and quietly assuming Rust agrees. It usually does not. The cards below name the one shift to make for each background before any of the concrete layout advice will land.",
+  "Repository structure is architecture. In Rust, visibility, crate boundaries, and feature design are not cleanup chores after the code works. They are part of how the code keeps working.",
+  "Keep layout private where possible and expose behavior or focused accessors instead of raw structure.",
+  "What to look at: service_name is public, but bind_addr is a private field reached only through a method. Callers get the value without getting the right to depend on how it is stored, which is exactly the seam the diagram traces.",
+  "Quick check: run the baseline, then change the constructor arguments and keep the private field private. The point is not accessor boilerplate; it is preserving the right to change internal layout later.",
+  "The editor uses a simple constant so you can run the idea in one file. The repository example feature_gated_metrics.rs shows the real `#[cfg(feature = \"metrics\")]` shape.",
+  "What to look at: the example uses a plain const so it runs in one file, but read it as the right-hand runtime branch in the diagram below. The exercise is to decide whether this choice should instead move left, to a compile-time feature, so the unused backend never enters the bin",
+  "Quick check: toggle METRICS_ENABLED between false and true. Then ask whether the decision really belongs at runtime or should move to a compile-time feature.",
+  "The companion exercise page asks you to design a multi-crate product layout, repair a feature matrix, choose dependency policy, and write the baseline test/lint/benchmark commands you would expect in a production Rust workspace."
+ ],
+ "codeSamples": {
+  "project_structure_module_visibility": "mod config {\n    pub struct AppConfig {\n        pub service_name: String,\n        bind_addr: String,\n    }\n\n    impl AppConfig {\n        pub fn new(service_name: &str, bind_addr: &str) -> Self {\n            Self {\n                service_name: service_name.to_string(),\n                bind_addr: bind_addr.to_string(),\n            }\n        }\n\n        pub fn bind_addr(&self) -> &str {\n            &self.bind_addr\n        }\n    }\n}\n\nfn main() {\n    let config = config::AppConfig::new(\"api\", \"127.0.0.1:8080\");\n    println!(\"{}@{}\", config.service_name, config.bind_addr());\n}",
+  "project_structure_feature_flags": "// In a real crate, a Cargo feature would usually select this at compile time.\nconst METRICS_ENABLED: bool = false;\n\nfn metrics_backend() -> &'static str {\n    if METRICS_ENABLED {\n        \"prometheus\"\n    } else {\n        \"disabled\"\n    }\n}\n\nfn main() {\n    println!(\"metrics backend = {}\", metrics_backend());\n}"
+ },
+ "labReferenceSolution": null
+}

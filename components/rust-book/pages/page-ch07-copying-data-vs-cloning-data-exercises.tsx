@@ -216,7 +216,7 @@ export function PageCh07CopyingDataVsCloningDataExercises() {
                 obvious to the next engineer.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(12)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(14)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 07
             </Button>

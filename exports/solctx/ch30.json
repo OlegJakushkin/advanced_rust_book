@@ -1,0 +1,218 @@
+{
+ "chapterKey": "ch30",
+ "num": 30,
+ "title": "AMQP and Message Brokers",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Separate routing-key choice from routing policy",
+   "objective": "Explain who owns each decision in the publish path so the producer stays decoupled from queue topology.",
+   "starterPrompt": "The chapter insists that a producer publishes to an exchange with a routing key such as orders.created and never names a queue, while the exchange owns bindings and decides which queues receive a copy. Describe this split in your own words.",
+   "prompts": [
+    "State what the producer controls and what the exchange controls when a message is published.",
+    "Explain why a new team can add a search-indexing queue for orders.created without editing any publisher.",
+    "Describe what happens to a message whose routing key matches no binding, and why that is counted rather than silently dropped."
+   ],
+   "acceptanceCriteria": [
+    "The answer says the producer chooses only the routing key and the exchange owns binding state and routing policy.",
+    "The answer explains that adding a binding for an existing key reaches new queues without changing the producer.",
+    "The answer states that an unbound key produces zero deliveries and is tracked as unrouted, not delivered anywhere."
+   ],
+   "hints": [
+    "Reread the line that a producer never names a queue; it publishes to an exchange with a routing key.",
+    "The exchange is the one place routing topology lives, so publishers do not need to be queue-aware."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the idempotent consumer's decision machine",
+   "objective": "Predict the processed, duplicate, retried, and dead-letter counts by reading the on_delivery state transitions.",
+   "starterPrompt": "Read the Consumer type from Example 2, whose on_delivery first checks processed_ids, then routes a delivery for order ord-fail through a bounded retry, and finally records successful unique work. Hand-trace the four messages that main feeds it, including the retry-queue drain loop.",
+   "prompts": [
+    "Walk through msg-1 sent twice and say which branch each delivery takes.",
+    "Follow msg-2 with order_id ord-fail through every attempt until the drain loop empties the retry_queue, and say where it lands.",
+    "State the final values of processed, duplicates, retried, and dlq printed by main."
+   ],
+   "acceptanceCriteria": [
+    "The trace identifies the second msg-1 as a duplicate that is counted and returns without redoing the work.",
+    "The trace shows ord-fail being retried at attempts 1 and 2, then moved to the DLQ once attempt reaches 3.",
+    "The predicted output is processed = 2, duplicates = 1, retried = 2, dlq = 1."
+   ],
+   "hints": [
+    "A successful unique delivery is the only path that inserts into processed_ids and increments processed.",
+    "The retry branch fires only while attempt is below 3; the third arrival of ord-fail takes the dlq branch."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Add a wildcard topic match to the exchange",
+   "objective": "Extend the routing lookup so a single binding pattern can match a family of routing keys.",
+   "starterPrompt": "Starting from DirectExchange in Example 1, add a method that supports a single trailing wildcard segment, so binding orders.* reaches a queue for both orders.created and orders.cancelled. Keep the exact-match route method working unchanged.",
+   "prompts": [
+    "Decide how to store wildcard bindings so an exact lookup is still cheap.",
+    "Implement matching by splitting the routing key on '.' and comparing segments, treating '*' as matching exactly one segment.",
+    "Return the union of exact-match queues and wildcard-match queues, with no duplicate queue names."
+   ],
+   "acceptanceCriteria": [
+    "Binding orders.* to a queue makes that queue appear for both orders.created and orders.cancelled.",
+    "An exact binding such as orders.created to billing still resolves through the unchanged route path.",
+    "A routing key matching both an exact binding and a wildcard binding lists each target queue only once.",
+    "A key matching no binding still returns an empty Vec<String>."
+   ],
+   "hints": [
+    "Split on '.' and compare segment by segment; '*' covers exactly one segment, not several.",
+    "Collect results into a structure that rejects duplicates, or check membership before pushing."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Make the consumer ack only after the durable effect",
+   "objective": "Encode the commit-then-ack ordering so a crash between the two cannot lose acknowledged work.",
+   "starterPrompt": "Model a consumer with a durable store (a Vec or HashMap standing in for the database) and an explicit ack list. Implement handle so it writes the durable effect first and only then records the ack, mirroring the chapter's rule that an ack promises the work is safely done.",
+   "prompts": [
+    "Define functions for the durable write and for sending the ack as two separate steps.",
+    "Order them so the durable effect is committed before the ack is recorded.",
+    "Add a duplicate guard so re-handling an already-committed message id acks without writing twice.",
+    "Describe what the broker does to a message that was committed but crashed before the ack."
+   ],
+   "acceptanceCriteria": [
+    "The code commits the durable effect strictly before appending to the ack list.",
+    "A message id already present in the durable store is acked again without a second write.",
+    "The answer explains that a crash after commit but before ack yields a redelivery, which the idempotency guard absorbs.",
+    "No code path records an ack for a message whose durable effect was not committed."
+   ],
+   "hints": [
+    "An ack is a promise the work is safely done and the broker may forget the message.",
+    "At-least-once delivery means commit-then-crash is a redelivery, so the handler must tolerate seeing the id again."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Fix an ack-before-commit consumer",
+   "objective": "Diagnose and correct a consumer that loses work by acknowledging before its side effect is durable.",
+   "starterPrompt": "A consumer acks the broker first and then performs the durable write, and it also retries malformed payloads forever. Identify both defects against the chapter's guidance and refactor the handler.",
+   "prompts": [
+    "Explain the data-loss window created when ack happens before the durable commit.",
+    "Reorder the steps so the durable effect is committed before the ack.",
+    "Replace the unbounded retry with a bounded attempt count that sends terminal failures to a DLQ.",
+    "Distinguish which failures deserve a retry and which should go straight to the dead-letter queue."
+   ],
+   "acceptanceCriteria": [
+    "The diagnosis names ack-before-commit as the cause of silently lost work on a mid-handler crash.",
+    "The refactor commits the durable effect before sending the ack.",
+    "Retries become counted and bounded, and a message exceeding the cap is routed to a DLQ.",
+    "A malformed or unsupported payload is sent to the DLQ instead of being retried, since it fails identically every time."
+   ],
+   "hints": [
+    "If the consumer acks first and then crashes before the durable effect, the broker has already forgotten the message.",
+    "Requeuing a message that can never succeed just blocks the queue behind it; that is what the DLQ is for."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design a versioned envelope for mixed deployments",
+   "objective": "Specify a message contract and consumer policy that survive replay across deploys and version skew.",
+   "starterPrompt": "The order pipeline must let a message sit in a queue across a deploy, be replayed weeks later, and be consumed by a service running an older version. Design the envelope and the consumer rules that keep this safe, building on the chapter's idempotency and DLQ work.",
+   "prompts": [
+    "List the envelope fields that travel alongside the payload, including a schema version and a stable message id.",
+    "Specify how a consumer handles a version it does not recognize without blocking the queue.",
+    "State how the message id ties into idempotency so replay is harmless.",
+    "Name the queue-health signals you would expose so a pile-up does not stay invisible."
+   ],
+   "acceptanceCriteria": [
+    "The envelope carries an explicit schema version, a stable unique message id, and the payload, rather than a bare struct dump.",
+    "The design keeps the message id as the idempotency key so duplicate or replayed deliveries are deduplicated, not reprocessed.",
+    "An unrecognized version is routed to a DLQ or held for a newer consumer rather than crashing or blocking the queue.",
+    "The answer lists at least queue depth, message age, retry rate, and dead-letter count as the minimum health signals."
+   ],
+   "hints": [
+    "A message often outlives the code that produced it, so the version belongs in the envelope, not in tribal knowledge.",
+    "A broker is a place work can pile up invisibly; depth, age, retry rate, and DLQ count are what reveal it."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "In the publish path, which decisions belong to the producer and which belong to the exchange, and why does that split let teams change routing topology without editing publishers?",
+  "Why must a consumer commit its durable side effect before sending the ack, and what does the broker do with a message that stays unacknowledged?",
+  "Since AMQP delivery is at-least-once, what does it mean for a handler to be idempotent, and how does a recorded message id make replay harmless?",
+  "When should a failed message be retried versus sent to a dead-letter queue, and what goes wrong if a poison message is requeued forever?",
+  "What does backpressure protect against in a broker-based system, and which signals tell you a queue is piling up rather than merely quiet?"
+ ],
+ "lab": {
+  "title": "Runnable lab · direct exchange routing with an unrouted counter",
+  "filename": "direct_exchange_routing_lab.rs",
+  "runKey": "ch30_ex_routing",
+  "expectedOutput": "orders.created -> billing,search\norders.cancelled -> billing\nunrouted total = 2",
+  "helperText": "Model the chapter's direct exchange: producers publish a routing key, the exchange owns bindings, and a key with no binding is counted as unrouted instead of vanishing. Fill in route so it returns the bound queues for a key and bumps the unrouted counter when nothing matches.",
+  "initialCode": "use std::collections::HashMap;\n\n#[derive(Default)]\nstruct DirectExchange {\n    bindings: HashMap<String, Vec<String>>,\n    unrouted: usize,\n}\n\nimpl DirectExchange {\n    fn bind(&mut self, routing_key: &str, queue: &str) {\n        self.bindings\n            .entry(routing_key.to_string())\n            .or_default()\n            .push(queue.to_string());\n    }\n\n    fn route(&mut self, routing_key: &str) -> Vec<String> {\n        // TODO: return the queues bound to routing_key.\n        // If the key has no binding, increment self.unrouted and return an empty Vec.\n        Vec::new()\n    }\n}\n\nfn main() {\n    let mut exchange = DirectExchange::default();\n    exchange.bind(\"orders.created\", \"billing\");\n    exchange.bind(\"orders.created\", \"search\");\n    exchange.bind(\"orders.cancelled\", \"billing\");\n\n    let created = exchange.route(\"orders.created\");\n    let cancelled = exchange.route(\"orders.cancelled\");\n    let _ = exchange.route(\"orders.refunded\");\n    let _ = exchange.route(\"orders.archived\");\n\n    println!(\"orders.created -> {}\", created.join(\",\"));\n    println!(\"orders.cancelled -> {}\", cancelled.join(\",\"));\n    println!(\"unrouted total = {}\", exchange.unrouted);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 22, 23, 25, and 26",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "Message broker fundamentals",
+  "AMQP concepts: exchanges, queues, bindings, and routing keys",
+  "RabbitMQ with Rust",
+  "Producers and consumers",
+  "Acknowledgments and retries",
+  "Dead-letter queues",
+  "Idempotency",
+  "Backpressure",
+  "Serialization for messages",
+  "Observability in broker-based systems",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: direct exchange routing",
+  "Example 2: idempotent consumer with retries and a DLQ",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A message broker lets services hand work to each other without being online at the same time. That convenience comes with a bill: routing, redelivery, idempotent consumers, dead-letter policy, and backpressure all become your responsibility. This chapter treats AMQP not as a libr",
+  "Chapter 19 covered wire DTOs and versioned envelopes. Chapters 22 and 23 covered ownership across threads, message passing, and synchronization. Chapters 25 and 26 covered Tokio, bounded queues, retries, and task orchestration. AMQP systems sit across all of that.",
+  "An order pipeline is being split into checkout, billing, search indexing, and notification services. The business requirement is reliable asynchronous handoff: route messages by contract, preserve idempotency, ack only after durable effects, isolate poison messages, and expose qu",
+  "The shape worth memorizing is a one-way pipeline with the broker sitting in the middle. A producer never names a queue; it publishes to an exchange with a routing key. The exchange consults its bindings, copies the message into every matching queue, and each queue feeds its own c",
+  "The critical operational point is this: the producer chooses a routing key, but the exchange owns routing policy. That lets teams change routing topology without turning every publisher into a queue-aware special case.",
+  "In a real Cargo service, the transport adapter typically holds the AMQP client connection and channel setup, then hands owned envelopes or commands into ordinary Rust handlers. Keep the transport edge narrow so the retry, idempotency, and serialization logic remains testable with",
+  "The single most important sequence in this chapter is the order in which a consumer commits its side effect and sends its ack. The broker holds the message as unacknowledged until the consumer says it is done. If the consumer commits the durable effect first and then acks, a cras",
+  "An ack is a promise that the work is safely done and the broker may forget the message. A retry is a decision that the work is not done yet and deserves another attempt. Both are choices the consumer makes explicitly, and getting them right is most of what separates a robust cons",
+  "Not every failure should be retried. A malformed payload or an unsupported command will fail the same way on every attempt, and requeuing it forever just blocks the queue behind a message that can never succeed. A dead-letter queue is the escape hatch: the broker moves a message ",
+  "Because delivery is at-least-once, the only way to make duplicates harmless is to make the handler idempotent: applying the same message twice must leave the system in the same state as applying it once. Sometimes that is free, when the operation is naturally a set-it-to-this ups",
+  "A duplicate delivery is not a surprising edge case. In broker-based systems, it is the design center.",
+  "A queue is a shock absorber, but a shock absorber with no limit just hides the fact that you are overloaded. Backpressure is how the system says no gracefully instead of falling over. It has two layers that are easy to confuse: the broker side, which caps how many unacked message",
+  "A message often outlives the code that produced it: it can sit in a queue across a deploy, be replayed weeks later, or be consumed by a service on an older version. That is why broker payloads earn their keep when they travel inside an explicit envelope rather than as a bare stru",
+  "A broker is a place work can pile up invisibly, so you cannot run one on faith. The signals below are the minimum set that tells you whether the system is healthy or merely quiet because nothing is being processed. A growing queue with rising message age, a climbing retry rate, o",
+  "Most engineers do not arrive at message brokers as a blank slate; they arrive with a mental model from another ecosystem. The useful thing to know is which part of that model transfers and which part will quietly mislead you. The shift is almost never about API names. It is about",
+  "A broker can decouple services, but it will not decouple you from consistency. It merely changes where the consistency work must be done.",
+  "The example keeps the routing model tiny: producers publish one routing key, the exchange owns binding policy, and queues receive only what their bindings match.",
+  "What to look at: the exchange holds a map from routing key to the set of bound queues, and publish is just a lookup that copies the message into each match. The key orders.created is bound to two queues, so one publish produces two deliveries; an unbound key produces zero and is ",
+  "An unbound key takes the other exit instead of silently vanishing:",
+  "The exchange owns routing policy and binding state.",
+  "Producers publish one semantic key such as orders.created.",
+  "Queue selection stays declarative instead of being hard-coded into every publisher.",
+  "The handler only acks successful unique work. Duplicates are counted and ignored, transient failure retries are capped, and terminal failures move to a DLQ.",
+  "What to look at: every delivery flows through one small decision machine. First the handler checks whether the message ID is already in the seen set; if so it is a duplicate and is acked without doing the work again. Otherwise it runs the handler, and the outcome routes it: succe",
+  "A completed message ID is recorded so replay becomes harmless.",
+  "Retry remains explicit, counted, and bounded by attempt number.",
+  "After the last allowed attempt, the delivery stops cycling and moves to a terminal bucket.",
+  "Processed, duplicate, retry, and DLQ counts become ordinary metrics, not incident archaeology.",
+  "The repository also includes standalone Rust source under examples/ch30_amqp_and_message_brokers/ including a small versioned message-envelope example alongside the two runnable worked examples.",
+  "The companion exercise page asks you to choose ack timing, model an idempotent consumer, add retry and DLQ handling, and design a versioned message contract that can survive mixed deployments."
+ ],
+ "codeSamples": {
+  "amqp_direct_exchange_routing": "use std::collections::HashMap;\n\n#[derive(Debug, Default)]\nstruct DirectExchange {\n    bindings: HashMap<String, Vec<String>>,\n}\n\nimpl DirectExchange {\n    fn bind(&mut self, routing_key: &str, queue: &str) {\n        self.bindings\n            .entry(routing_key.to_string())\n            .or_default()\n            .push(queue.to_string());\n    }\n\n    fn route(&self, routing_key: &str) -> Vec<String> {\n        self.bindings\n            .get(routing_key)\n            .cloned()\n            .unwrap_or_default()\n    }\n}\n\nfn main() {\n    let mut exchange = DirectExchange::default();\n\n    exchange.bind(\"orders.created\", \"billing\");\n    exchange.bind(\"orders.created\", \"search\");\n    exchange.bind(\"orders.cancelled\", \"billing\");\n\n    let created = exchange.route(\"orders.created\");\n    let cancelled = exchange.route(\"orders.cancelled\");\n\n    println!(\"created = {}\", created.join(\",\"));\n    println!(\"cancelled = {}\", cancelled.join(\",\"));\n    println!(\"unrouted = {}\", exchange.route(\"orders.refunded\").len());\n}",
+  "amqp_idempotent_consumer": "use std::collections::{HashSet, VecDeque};\n\n#[derive(Debug, Clone)]\nstruct Delivery {\n    message_id: &'static str,\n    order_id: &'static str,\n    attempt: u8,\n}\n\n#[derive(Default)]\nstruct Consumer {\n    processed_ids: HashSet<String>,\n    retry_queue: VecDeque<Delivery>,\n    dlq: Vec<Delivery>,\n    processed: usize,\n    duplicates: usize,\n    retried: usize,\n}\n\nimpl Consumer {\n    fn on_delivery(&mut self, delivery: Delivery) {\n        if self.processed_ids.contains(delivery.message_id) {\n            self.duplicates += 1;\n            return;\n        }\n\n        if delivery.order_id == \"ord-fail\" {\n            if delivery.attempt < 3 {\n                self.retried += 1;\n                self.retry_queue.push_back(Delivery {\n                    attempt: delivery.attempt + 1,\n                    ..delivery\n                });\n            } else {\n                self.dlq.push(delivery);\n            }\n            return;\n        }\n\n        self.processed += 1;\n        self.processed_ids.insert(delivery.message_id.to_string());\n    }\n}\n\nfn main() {\n    let mut consumer = Consumer::default();\n\n    consumer.on_delivery(Delivery {\n        message_id: \"msg-1\",\n        order_id: \"ord-1\",\n        attempt: 1,\n    });\n    consumer.on_delivery(Delivery {\n        message_id: \"msg-1\",\n        order_id: \"ord-1\",\n        attempt: 1,\n    });\n    consumer.on_delivery(Delivery {\n        message_id: \"msg-2\",\n        order_id: \"ord-fail\",\n        attempt: 1,\n    });\n\n    while let Some(delivery) = consumer.retry_queue.pop_front() {\n        consumer.on_delivery(delivery);\n    }\n\n    consumer.on_delivery(Delivery {\n        message_id: \"msg-3\",\n        order_id: \"ord-3\",\n        attempt: 1,\n    });\n\n    println!(\"processed = {}\", consumer.processed);\n    println!(\"duplicates = {}\", consumer.duplicates);\n    println!(\"retried = {}\", consumer.retried);\n    println!(\"dlq = {}\", consumer.dlq.len());\n}"
+ },
+ "labReferenceSolution": "use std::collections::HashMap;\n\n#[derive(Default)]\nstruct DirectExchange {\n    bindings: HashMap<String, Vec<String>>,\n    unrouted: usize,\n}\n\nimpl DirectExchange {\n    fn bind(&mut self, routing_key: &str, queue: &str) {\n        self.bindings\n            .entry(routing_key.to_string())\n            .or_default()\n            .push(queue.to_string());\n    }\n\n    fn route(&mut self, routing_key: &str) -> Vec<String> {\n        match self.bindings.get(routing_key) {\n            Some(queues) => queues.clone(),\n            None => {\n                self.unrouted += 1;\n                Vec::new()\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut exchange = DirectExchange::default();\n    exchange.bind(\"orders.created\", \"billing\");\n    exchange.bind(\"orders.created\", \"search\");\n    exchange.bind(\"orders.cancelled\", \"billing\");\n\n    let created = exchange.route(\"orders.created\");\n    let cancelled = exchange.route(\"orders.cancelled\");\n    let _ = exchange.route(\"orders.refunded\");\n    let _ = exchange.route(\"orders.archived\");\n\n    println!(\"orders.created -> {}\", created.join(\",\"));\n    println!(\"orders.cancelled -> {}\", cancelled.join(\",\"));\n    println!(\"unrouted total = {}\", exchange.unrouted);\n}"
+}

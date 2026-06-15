@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch20",
+ "num": 20,
+ "title": "Metaprogramming",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose function, generic, trait, macro, or build script honestly",
+   "objective": "Practice selecting the smallest abstraction that solves the real problem instead of reaching for macros by default.",
+   "starterPrompt": "Classify five cases: joining two labels into one string, removing repeated route-table item syntax, generating impls from a type annotation, mapping several concrete types through one algorithm, and generating a client from an external API schema.",
+   "prompts": [
+    "Which case is just a normal function?",
+    "Which case wants `macro_rules!` because syntax repetition is the real problem?",
+    "Which case wants a derive or attribute procedural macro?",
+    "Which case wants generics or a trait instead of any macro?",
+    "Which case belongs in a build script or offline generator because the source of truth is external?"
+   ],
+   "acceptanceCriteria": [
+    "You assign at least one case to a normal function and justify why a macro would be overkill.",
+    "You distinguish syntax abstraction from type or behavior abstraction clearly.",
+    "You identify one case where external-schema generation is a better fit than a public macro call site."
+   ],
+   "hints": [
+    "Ask first whether the caller is passing values, types, Rust items, or an external schema file.",
+    "A macro is strongest when syntax is the thing being abstracted."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Explain repetition and hygiene in a `macro_rules!` helper",
+   "objective": "Read a declarative macro and describe what repetition removes and why local identifiers do not collide with caller names.",
+   "starterPrompt": "Review a `macro_rules!` helper that expands a repeated list of service checks and introduces a local accumulator named `passed` inside the macro.",
+   "prompts": [
+    "Where is the repeated syntax pattern in the macro arm?",
+    "Why does the macro's local accumulator not casually overwrite a caller variable with the same spelling?",
+    "What part of the expansion still goes through normal type checking afterward?"
+   ],
+   "acceptanceCriteria": [
+    "You identify the repetition form such as `$( ... ),*` or `$( ... )*` clearly.",
+    "You explain macro hygiene in operational terms instead of saying only 'the compiler handles it.'",
+    "You state that the expanded Rust still goes through borrow checking and type checking after expansion."
+   ],
+   "hints": [
+    "The repetition operator is part of the pattern, not an implementation detail after the fact.",
+    "A good answer explains what the caller sees and what the compiler still checks next."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Write a `macro_rules!` helper for repetitive checks",
+   "objective": "Implement a small declarative macro that removes repetitive check boilerplate and stays readable at the call site.",
+   "starterPrompt": "Define a `service_checks!` macro that accepts several `name => bool` pairs and returns the number of passing checks.",
+   "prompts": [
+    "Keep the call site list-shaped and compact.",
+    "Use repetition instead of hard-coding one fixed number of inputs.",
+    "Do not push runtime business logic into the macro beyond the repetitive count pattern."
+   ],
+   "acceptanceCriteria": [
+    "The macro accepts repeated `name => bool` pairs.",
+    "The expansion counts the true cases correctly.",
+    "The runnable lab prints the expected passed and total counts.",
+    "The call site remains easier to read than the repeated code it replaced."
+   ],
+   "hints": [
+    "This page uses a simple check harness instead of real `cargo test`, but the macro shape is the same one you would use to remove repetitive test scaffolding.",
+    "A `let mut passed = 0;` block plus repetition is usually enough here."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Replace a useless macro with a normal function",
+   "objective": "Identify where a macro hides no real syntax win and refactor to a simpler API.",
+   "starterPrompt": "You inherit `route_label!(service, route)` that only expands to `format!(\"{}::{}\", service, route)` and `retry_limit!()` that only expands to a constant integer.",
+   "prompts": [
+    "Which one should become a normal function?",
+    "Which one should become a `const`, `static`, or associated constant instead?",
+    "What readability or tooling advantage appears once the macro disappears?"
+   ],
+   "acceptanceCriteria": [
+    "You replace at least one macro with an ordinary function and justify the change.",
+    "You identify one case where a constant is clearer than a macro call.",
+    "You explain the refactor in terms of call-site honesty, diagnostics, or tooling, not only personal style."
+   ],
+   "hints": [
+    "If the macro call reads like a function already, it may want to be a function.",
+    "If there is no repeated syntax and no item generation, the macro burden is harder to justify."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Sketch a derive macro API",
+   "objective": "Design a plausible derive macro boundary without overcommitting to implementation detail too early.",
+   "starterPrompt": "Sketch a derive macro such as `#[derive(EventEnvelope)]`, `#[derive(TopicKey)]`, or `#[derive(StableName)]` for a service type in your system.",
+   "prompts": [
+    "What input item shape does the derive attach to?",
+    "What helper attributes, if any, should the type support?",
+    "Which impls or helper methods should the derive emit?",
+    "What compile-time diagnostic should appear for one obvious misuse?"
+   ],
+   "acceptanceCriteria": [
+    "You describe a plausible derive macro name and target item.",
+    "You specify at least one emitted impl or generated method clearly.",
+    "You mention any supporting attributes and one misuse diagnostic.",
+    "You acknowledge that the implementation lives in a separate proc-macro crate."
+   ],
+   "hints": [
+    "A good derive macro does one type-local job well.",
+    "The best sketch says what code gets emitted, not only what the annotation is called."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose declarative macro, derive, attribute, function-like proc macro, or build script",
+   "objective": "Map several production metaprogramming needs to the correct tool without cargo-culting one mechanism.",
+   "starterPrompt": "You are designing a platform with repetitive integration tests, event types that need codec impls, handler functions that need registration metadata, a compact route-table DSL, and an API client generated from an external schema.",
+   "prompts": [
+    "Which concern wants `macro_rules!` because it is local repeated syntax?",
+    "Which concern wants a derive macro because code should attach to a type definition?",
+    "Which concern wants an attribute macro because an item needs annotation-driven rewriting or registration?",
+    "Which concern wants a function-like proc macro because a token-level DSL is the real API?",
+    "Which concern belongs in a build script or offline generator because the source of truth is external?"
+   ],
+   "acceptanceCriteria": [
+    "You map at least four distinct concerns to the correct metaprogramming or non-macro tool.",
+    "You justify one proc-macro choice and one non-macro choice in operational terms.",
+    "You mention at least one testing or observability hook, such as compile-fail tests, generated-code snapshots, or expansion-focused diagnostics."
+   ],
+   "hints": [
+    "One system can legitimately use several different code-generation strategies.",
+    "The most maintainable answer usually gives each tool one narrow job."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What operational difference separates `macro_rules!` from a procedural macro?",
+  "Why do procedural macros operate on `TokenStream` instead of inferred types?",
+  "When is a derive macro the right fit instead of an attribute macro?",
+  "Why can a public macro be harder to evolve than a public function?",
+  "What is one concrete signal that a normal function is better than a macro?"
+ ],
+ "lab": {
+  "title": "Runnable lab · `macro_rules!` helper for repetitive checks",
+  "filename": "service_checks_macro_lab.rs",
+  "runKey": "ch20_ex_service_checks_macro",
+  "expectedOutput": "passed = 2\ntotal = 3",
+  "initialCode": "macro_rules! service_checks {\n    ($($name:ident => $status:expr),* $(,)?) => {{\n        0\n    }};\n}\n\nfn main() {\n    let passed = service_checks!(\n        health => true,\n        orders => true,\n        billing => false,\n    );\n\n    println!(\"passed = {}\", passed);\n    println!(\"total = {}\", 3);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 03, 14, 18, and 19",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Where expansion sits in the pipeline",
+  "Core concepts",
+  "Declarative macros with macro_rules!",
+  "Procedural macros",
+  "Token streams",
+  "Code generation strategies",
+  "Macro hygiene",
+  "Compile-time DSLs",
+  "When not to use macros",
+  "If you are coming from another language",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: macro_rules! repetition plus hygiene",
+  "Example 2: a small compile-time DSL for route tables",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Metaprogramming in Rust is a build-time tool for removing repetitive syntax while preserving clear APIs. This chapter treats macros and generated code as maintainable compile-time infrastructure: when each kind earns its place, how expansion fits into the compiler pipeline, and w",
+  "Chapter 03 matters because proc macros and larger code generation strategies live at crate and build-system boundaries. Chapter 14 matters because many derive macros emit trait impls. Chapter 18 matters because macros and generics solve different problems. Chapter 19 matters beca",
+  "Picture a service platform that has grown a familiar set of repetitions: route declarations that all follow the same method-path-auth shape, DTO metadata duplicated next to every struct, validation boilerplate copied across handlers, and adapter glue generated by hand from an ext",
+  "The four mechanisms map onto four distinct shapes of duplication. Plain functions, generics, and traits handle anything where the variation is in values, types, or behavior. Declarative macros handle small, local syntax patterns. Procedural macros handle item-level generation tha",
+  "Read the decision as a ladder you climb only when the rung below genuinely cannot hold the weight. Each step up buys expressive power and pays for it in compile time, diagnostics, and the size of the API surface you commit to keeping stable.",
+  "The single fact that explains most macro behavior is ordering. Expansion runs near the front of compilation, and every safety check you rely on runs on the output. A macro can decide what code exists; it cannot decide what that code is allowed to do.",
+  "One correction to keep in mind: macro_rules! is not a type system escape hatch. It is a token-pattern expansion tool. Borrow checking, trait solving, and monomorphization still happen after expansion.",
+  "Procedural macros are Rust functions that run at compile time, take a token stream in, and return a token stream out. They come in three forms, distinguished by what they are attached to and what they receive. The shape below is worth fixing in your head before reading the cards:",
+  "The third form is not attached to an item at all. It receives whatever tokens sit inside its call delimiters:",
+  "Procedural macros are powerful because they can inspect and rewrite item-level syntax. They are also heavy because they add a crate boundary, compile-time work, and a bigger diagnostic surface. Reach for them only when that power is actually needed.",
+  "A procedural macro never sees your program as values or as a resolved type graph. It sees a TokenStream: a flat sequence of identifiers, literals, punctuation, and grouped sub-streams, each carrying a span that points back at the original source. Most real proc macros parse that ",
+  "One practical consequence follows immediately. Because the macro only ever holds syntax, it cannot consult inferred types or resolved trait impls to decide what to generate: that information simply does not exist yet at expansion time. If a design depends on knowing a field's con",
+  "A route table macro, a compact compile-time query wrapper, or a repetitive test-case generator can be excellent. A DSL that hides ownership, control flow, or expensive runtime work behind decorative syntax is usually not.",
+  "Every mainstream language has some form of metaprogramming, and that prior experience is the most common source of wrong instincts here. The cards below name the one mental-model shift each background tends to need. The through-line is that Rust does this work at compile time, on",
+  "The shared correction across all four: do not pick a macro because the borrow checker, the trait system, or type design felt inconvenient. A macro can change the syntax you write, but it cannot exempt the resulting code from any of those rules. When the friction is about ownershi",
+  "Macros compress source code, but they can expand maintenance cost. If the generated surface, diagnostics, and review burden are worse than the original repetition, the metaprogramming gave you nothing.",
+  "One macro introduces a local binding, another expands a repeated list. The caller keeps its own total untouched.",
+  "What to look at: both the caller and the sum_values! macro define a binding called total, yet the final outer total = 40 proves they never collide. Hygiene gives the macro's internal name a different identity from the caller's, so expansion cannot accidentally overwrite a variabl",
+  "$($value:expr),* removes the repeated accumulator code at the call site.",
+  "The macro's internal bindings do not steal the caller's total name.",
+  "This is the right scale for macro_rules!: small syntax compression, ordinary emitted Rust.",
+  "The macro call site reads like a compact route declaration, but it still expands into ordinary Rust data with explicit fields.",
+  "What to look at: each line in the macro call is one route, and the recursive @auth arms turn the public and private markers into ordinary booleans. The whole DSL expands to nothing more exotic than a Vec<Route> of plain structs, which is exactly why it stays reviewable.",
+  "The grammar is intentionally tiny: method, path, and one auth marker. Small DSLs survive reviews better.",
+  "The expansion is only a vector of Route values. No hidden IO, no hidden allocation policy surprise.",
+  "If this grammar grew much larger, a proc macro or an offline generator might become the better tool.",
+  "The repository also includes standalone Rust source under examples/ch20_metaprogramming/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor. The runnable editors focus on macro_rules! because real procedural macros require a separate proc-macr",
+  "The companion exercise page asks you to choose between functions and macros on the merits, write a small macro_rules! helper for repetitive checks, sketch a derive macro API, and map real production needs to declarative macros, procedural macros, or build-time code generation."
+ ],
+ "codeSamples": {
+  "metaprogramming_macro_rules_hygiene": "macro_rules! add_one {\n    ($value:expr) => {{\n        let temp = $value;\n        temp + 1\n    }};\n}\n\nmacro_rules! sum_values {\n    ($($value:expr),* $(,)?) => {{\n        let mut total = 0;\n        $(\n            total += $value;\n        )*\n        total\n    }};\n}\n\nfn main() {\n    let total = 40;\n    println!(\"next = {}\", add_one!(total));\n    println!(\"sum = {}\", sum_values!(1, 2, 3));\n    println!(\"outer total = {}\", total);\n}",
+  "metaprogramming_compile_time_dsl": "#[derive(Debug)]\nstruct Route {\n    method: &'static str,\n    path: &'static str,\n    auth: bool,\n}\n\nmacro_rules! routes {\n    ($( $method:ident $path:literal => $auth:ident ),* $(,)?) => {{\n        vec![\n            $(\n                Route {\n                    method: stringify!($method),\n                    path: $path,\n                    auth: routes!(@auth $auth),\n                }\n            ),*\n        ]\n    }};\n    (@auth public) => { false };\n    (@auth private) => { true };\n}\n\nfn main() {\n    let table = routes!(\n        GET \"/health\" => public,\n        POST \"/orders\" => private,\n        DELETE \"/orders/:id\" => private,\n    );\n\n    let private_count = table.iter().filter(|route| route.auth).count();\n\n    println!(\"routes = {}\", table.len());\n    println!(\"first = {} {}\", table[0].method, table[0].path);\n    println!(\"private = {}\", private_count);\n}"
+ },
+ "labReferenceSolution": null
+}

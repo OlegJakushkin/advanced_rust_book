@@ -1,0 +1,1125 @@
+{
+ "targets": [
+  "examples",
+  "exercises",
+  "solutions"
+ ],
+ "summary": {
+  "PASS": 167,
+  "SKIP_WASM": 1,
+  "STARTER_OK": 52,
+  "STARTER_NOCOMPILE": 2
+ },
+ "rows": [
+  {
+   "status": "PASS",
+   "path": "examples/ch01_why_rust_feels_different/ownership_thread_handoff.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch01_why_rust_feels_different/zero_cost_pipeline.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch02_the_rust_mental_model/expression_blocks_and_heap.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch02_the_rust_mental_model/move_and_drop_timeline.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch03_project_structure_and_tooling/feature_gated_metrics.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch03_project_structure_and_tooling/module_visibility_service.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch04_ownership_borrowing_and_lifetimes/lifetimes_and_owned_boundaries.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch04_ownership_borrowing_and_lifetimes/shared_and_mutable_borrows.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch05_ownership_inside_structs/owned_buffer_views.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch05_ownership_inside_structs/pointer_choices_inside_structs.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch06_ownership_inside_vectors/index_handles_instead_of_refs.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch06_ownership_inside_vectors/vec_box_stable_addresses.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch07_copying_data_vs_cloning_data/cow_and_arc_clone_costs.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch07_copying_data_vs_cloning_data/move_copy_clone_receivers.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch08_undefined_behavior_and_unsafe_rust/fill_window_with_raw_pointers.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch08_undefined_behavior_and_unsafe_rust/maybe_uninit_header.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch09_smart_pointers_and_pinning/pin_box_and_poll.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch09_smart_pointers_and_pinning/rc_weak_tree.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch10_arrays_slices_and_vectors/slice_first_api.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch10_arrays_slices_and_vectors/vec_capacity_and_growth.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch11_hash_maps_and_sets/borrowed_lookup_and_ordered_output.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch11_hash_maps_and_sets/entry_api_owned_keys.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch12_matrices_and_multidimensional_data/matrix_views_and_const_generics.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch12_matrices_and_multidimensional_data/row_major_matrix.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch13_arena_allocation_and_region_based_memory/arena_indexed_ast.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch13_arena_allocation_and_region_based_memory/fixed_bump_buffer.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch14_interfaces_in_rust_traits/dyn_plugin_pipeline.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch14_interfaces_in_rust_traits/trait_bounds_associated_types.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch15_oop_models_in_rust/composition_and_traits.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch15_oop_models_in_rust/enum_state_machine.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch16_domain_driven_design_in_rust/event_sourced_account.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch16_domain_driven_design_in_rust/order_aggregate.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch17_refactoring_toward_idiomatic_rust/result_owned_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch17_refactoring_toward_idiomatic_rust/traits_enums_testable.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch18_generics_instead_of_templates/associated_types_const_generics.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch18_generics_instead_of_templates/generic_batch_bounds.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch19_serialization_and_data_contracts/custom_serializer_and_zero_copy.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch19_serialization_and_data_contracts/versioned_domain_event.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch20_metaprogramming/compile_time_dsl_routes.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch20_metaprogramming/macro_rules_hygiene_and_repetition.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch21_reflection_and_type_introspection/plugin_metadata_and_downcasting.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch21_reflection_and_type_introspection/type_id_typemap.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch22_multithreading_in_rust/owned_jobs_over_channel.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch22_multithreading_in_rust/scoped_threads_slice_sum.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch22_multithreading_in_rust/shared_state_route_counts.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch23_synchronization_primitives/atomics_acquire_release_publish.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch23_synchronization_primitives/mutex_condvar_batch_queue.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch23_synchronization_primitives/rwlock_barrier_startup.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch24_coroutines_futures_and_async_rust/async_fn_and_manual_block_on.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch24_coroutines_futures_and_async_rust/manual_future_state_machine.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch25_tokio/task_boundaries_and_backpressure.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch25_tokio/tcp_graceful_shutdown.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch26_task_libraries_and_parallel_execution/rayon_crossbeam_bounded_pipeline.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch26_task_libraries_and_parallel_execution/tokio_joinset_backpressure.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch27_io_tricks_and_systems_programming_patterns/buffered_bounded_pipeline.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch27_io_tricks_and_systems_programming_patterns/scatter_gather_socket_handoff.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch28_cpp_integration/calling_c_from_rust.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch28_cpp_integration/exporting_rust_c_abi.rs",
+   "detail": ""
+  },
+  {
+   "status": "SKIP_WASM",
+   "path": "examples/ch29_js_and_cpp_integration_for_wasm/wasm_bindgen_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch29_js_and_cpp_integration_for_wasm/wasm_cpp_ffi_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch30_amqp_and_message_brokers/direct_exchange_routing.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch30_amqp_and_message_brokers/idempotent_consumer_retry_dlq.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch31_distributed_task_execution/lease_queue_idempotent_worker.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch31_distributed_task_execution/task_graph_scheduler_and_trace.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch32_mpi_and_high_performance_computing/mpi_collective_counts_and_allreduce.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch32_mpi_and_high_performance_computing/mpi_partition_dense_rows.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch33_performance_oriented_rust/allocation_borrowed_filter.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch33_performance_oriented_rust/row_major_scan.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch34_memory_profiling/clone_pressure_counter.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch34_memory_profiling/rc_cycle_leak_detection.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch35_performance_profiling/hot_stage_summary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch35_performance_profiling/pipeline_bottleneck.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch36_distributed_tasks_profiling/latency_window_and_saturation.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch36_distributed_tasks_profiling/task_graph_critical_path.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch37_cuda_and_gpu_acceleration/safe_kernel_launch_wrapper.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch37_cuda_and_gpu_acceleration/transfer_budget_estimator.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch38_merkle_tree_games_and_challenges/basic_merkle_tree.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch38_merkle_tree_games_and_challenges/parallel_merkle_levels.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch39_graph_search_games/bfs_adjacency_handles.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch39_graph_search_games/weighted_graph_dijkstra_astar.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch40_matrix_optimization_games/row_major_tiled_matmul.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch40_matrix_optimization_games/sparse_frontier_csr.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch41_error_handling_in_large_systems/async_context_propagation.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch41_error_handling_in_large_systems/domain_and_infrastructure_errors.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch42_testing_advanced_rust_systems/async_idempotent_delivery_harness.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch42_testing_advanced_rust_systems/property_invariant_harness.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch43_observability/metrics_slo_window.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch43_observability/tracing_tokio_worker.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch44_packaging_and_deployment/release_bundle.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch44_packaging_and_deployment/target_matrix.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch45_capstone_distributed_rust_system/task_envelope_and_routing.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch45_capstone_distributed_rust_system/worker_pool_graph_and_matrix.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch46_fastapi_style_web_apps_swagger_and_openapi_codegen/handler_service_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch46_fastapi_style_web_apps_swagger_and_openapi_codegen/openapi_contract_codegen_scaffold.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch47_grpc_services_protobuf_service_api_codegen/status_deadline_retry.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch47_grpc_services_protobuf_service_api_codegen/transport_mapping.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch48_websockets_long_lived_connections/bounded_fanout_slow_consumers.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch48_websockets_long_lived_connections/channel_separated_connection_loop.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch49_https_tls_secure_service_boundaries/security_defaults_and_rotation.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch49_https_tls_secure_service_boundaries/tls_termination_topology.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch50_libp2p_peer_to_peer_rust_systems/state_sync_conflict_resolution.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch50_libp2p_peer_to_peer_rust_systems/swarm_event_loop.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch51_zero_knowledge_proofs_rust_engineers/proof_boundary_types.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch51_zero_knowledge_proofs_rust_engineers/transcript_domain_separation.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch52_zokrates_workflows_and_ethereum_verifiers/ethereum_verifier_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch52_zokrates_workflows_and_ethereum_verifiers/workflow_orchestration_plan.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch53_ezkl_verifiable_llm_inference_gpu_zkml/proving_queue_profile.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch53_ezkl_verifiable_llm_inference_gpu_zkml/verification_boundary_types.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch54_onnx_model_inference_in_rust/onnx_session_load_run.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch54_onnx_model_inference_in_rust/onnx_tensor_batch_argmax.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch55_smart_contracts_in_rust_solana_sei_and_beyond/platform_compare.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch55_smart_contracts_in_rust_solana_sei_and_beyond/solana_counter_program.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch56_no_std_rust_and_constrained_runtime_derivatives/fixed_capacity_dma.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "examples/ch56_no_std_rust_and_constrained_runtime_derivatives/portable_surface.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch01_why_rust_feels_different/parse_limit_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch02_the_rust_mental_model/classify_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch03_project_structure_and_tooling/feature_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch04_ownership_borrowing_and_lifetimes/build_cache_key_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch05_ownership_inside_structs/audit_line_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch06_ownership_inside_vectors/task_handle_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch07_copying_data_vs_cloning_data/manual_clone_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch08_undefined_behavior_and_unsafe_rust/write_magic_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch09_smart_pointers_and_pinning/weak_parent_edge_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch10_arrays_slices_and_vectors/window_sum_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch11_hash_maps_and_sets/hash_maps_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch12_matrices_and_multidimensional_data/row_major_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch13_arena_allocation_and_region_based_memory/bump_allocator_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch14_interfaces_in_rust_traits/stage_pipeline_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch15_oop_models_in_rust/typestate_workflow_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch16_domain_driven_design_in_rust/order_aggregate_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch17_refactoring_toward_idiomatic_rust/parse_port_refactor_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch18_generics_instead_of_templates/fixed_batch_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch19_serialization_and_data_contracts/versioned_record_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch20_metaprogramming/service_checks_macro_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch21_reflection_and_type_introspection/typemap_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_NOCOMPILE",
+   "path": "exercises/ch22_multithreading_in_rust/owned_jobs_channel_lab.rs",
+   "detail": "to take ownership of `worker` (and any other referenced variables), use the `move` keyword\n   |\n14 |     thread::spawn(move || {\n   |                   ++++\n\nwarning: unused variable: `jobs`\n  --> /work/exercises/ch22_multithreading_in_rust/owned_jobs_channel_lab.rs:12:5\n   |\n12 |     jobs: Vec<Job>,\n   |     ^^^^ help: if this is intentional, prefix it with an underscore: `_jobs`\n   |\n   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nerror: aborting due to 2 previous errors; 1 warning emitted\n\nFor more information about this error, try `rustc --explain E0373`."
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch23_synchronization_primitives/acquire_release_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch24_coroutines_futures_and_async_rust/handshake_future_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch25_tokio/bounded_queue_backpressure_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch26_task_libraries_and_parallel_execution/bounded_queue_retry_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_NOCOMPILE",
+   "path": "exercises/ch27_io_tricks_and_systems_programming_patterns/buffered_pipeline_lab.rs",
+   "detail": "table\n  --> /work/exercises/ch27_io_tricks_and_systems_programming_patterns/buffered_pipeline_lab.rs:47:28\n   |\n23 |     let mut writer = BufWriter::new(&mut out);\n   |                                     -------- mutable borrow occurs here\n...\n47 |     println!(\"bytes = {}\", out.len());\n   |                            ^^^ immutable borrow occurs here\n48 |     Ok(())\n49 | }\n   | - mutable borrow might be used here, when `writer` is dropped and runs the `Drop` code for type `BufWriter`\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0502`."
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch28_cpp_integration/cpp_integration_status_seam_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch29_js_and_cpp_integration_for_wasm/wasm_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch30_amqp_and_message_brokers/direct_exchange_routing_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch31_distributed_task_execution/lease_idempotent_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch32_mpi_and_high_performance_computing/mpi_block_partition_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch33_performance_oriented_rust/hot_routes_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch34_memory_profiling/clone_pressure_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch35_performance_profiling/dominant_layer_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch36_distributed_tasks_profiling/retry_storm_window_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch37_cuda_and_gpu_acceleration/safe_launch_wrapper_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch38_merkle_tree_games_and_challenges/merkle_proof_verify_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch39_graph_search_games/graph_bfs_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch40_matrix_optimization_games/ikj_matmul_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch41_error_handling_in_large_systems/typed_error_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch42_testing_advanced_rust_systems/property_invariant_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch43_observability/trace_service_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch44_packaging_and_deployment/packaging_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch47_grpc_services_protobuf_service_api_codegen/grpc_transport_mapping_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch48_websockets_long_lived_connections/bounded_fanout_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch49_https_tls_secure_service_boundaries/harden_edge_policy_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch50_libp2p_peer_to_peer_rust_systems/swarm_loop_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch51_zero_knowledge_proofs_rust_engineers/proof_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch52_zokrates_workflows_and_ethereum_verifiers/verifier_request_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch53_ezkl_verifiable_llm_inference_gpu_zkml/gpu_queue_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch55_smart_contracts_in_rust_solana_sei_and_beyond/solana_counter_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "STARTER_OK",
+   "path": "exercises/ch56_no_std_rust_and_constrained_runtime_derivatives/fixed_capacity_pool_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch01_why_rust_feels_different/parse_limit_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch02_the_rust_mental_model/classify_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch03_project_structure_and_tooling/feature_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch04_ownership_borrowing_and_lifetimes/build_cache_key_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch05_ownership_inside_structs/audit_line_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch06_ownership_inside_vectors/task_handle_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch07_copying_data_vs_cloning_data/manual_clone_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch08_undefined_behavior_and_unsafe_rust/write_magic_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch09_smart_pointers_and_pinning/weak_parent_edge_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch10_arrays_slices_and_vectors/window_sum_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch11_hash_maps_and_sets/hash_maps_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch12_matrices_and_multidimensional_data/row_major_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch13_arena_allocation_and_region_based_memory/bump_allocator_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch14_interfaces_in_rust_traits/stage_pipeline_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch15_oop_models_in_rust/typestate_workflow_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch16_domain_driven_design_in_rust/order_aggregate_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch17_refactoring_toward_idiomatic_rust/parse_port_refactor_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch18_generics_instead_of_templates/fixed_batch_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch19_serialization_and_data_contracts/versioned_record_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch20_metaprogramming/service_checks_macro_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch21_reflection_and_type_introspection/typemap_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch22_multithreading_in_rust/owned_jobs_channel_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch23_synchronization_primitives/acquire_release_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch24_coroutines_futures_and_async_rust/handshake_future_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch25_tokio/bounded_queue_backpressure_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch26_task_libraries_and_parallel_execution/bounded_queue_retry_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch27_io_tricks_and_systems_programming_patterns/buffered_pipeline_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch28_cpp_integration/cpp_integration_status_seam_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch29_js_and_cpp_integration_for_wasm/wasm_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch30_amqp_and_message_brokers/direct_exchange_routing_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch31_distributed_task_execution/lease_idempotent_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch32_mpi_and_high_performance_computing/mpi_block_partition_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch33_performance_oriented_rust/hot_routes_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch34_memory_profiling/clone_pressure_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch35_performance_profiling/dominant_layer_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch36_distributed_tasks_profiling/retry_storm_window_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch37_cuda_and_gpu_acceleration/safe_launch_wrapper_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch38_merkle_tree_games_and_challenges/merkle_proof_verify_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch39_graph_search_games/graph_bfs_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch40_matrix_optimization_games/ikj_matmul_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch41_error_handling_in_large_systems/typed_error_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch42_testing_advanced_rust_systems/property_invariant_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch43_observability/trace_service_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch44_packaging_and_deployment/packaging_matrix_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch47_grpc_services_protobuf_service_api_codegen/grpc_transport_mapping_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch48_websockets_long_lived_connections/bounded_fanout_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch49_https_tls_secure_service_boundaries/harden_edge_policy_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch50_libp2p_peer_to_peer_rust_systems/swarm_loop_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch51_zero_knowledge_proofs_rust_engineers/proof_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch52_zokrates_workflows_and_ethereum_verifiers/verifier_request_boundary.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch53_ezkl_verifiable_llm_inference_gpu_zkml/gpu_queue_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch55_smart_contracts_in_rust_solana_sei_and_beyond/solana_counter_boundary_lab.rs",
+   "detail": ""
+  },
+  {
+   "status": "PASS",
+   "path": "solutions/ch56_no_std_rust_and_constrained_runtime_derivatives/fixed_capacity_pool_lab.rs",
+   "detail": ""
+  }
+ ]
+}

@@ -6,6 +6,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -27,15 +28,19 @@ const mentalModelPoints = [
 const comparisons = [
   {
     title: "C++ background",
-    body: "Do not map modules to headers. A Rust crate is closer to a compiled target with an explicit surface, while Cargo resolves the graph and the module tree shapes internal structure.",
+    body: "Your instinct is to map a module to a header and a translation unit. Resist it: the compilation unit in Rust is the whole crate, not the file, so moving code between files inside a crate does not create a new compile boundary the way splitting a .cpp file does. Cargo is also a real dependency resolver and build system in one, not a hand-written Makefile plus a package manager you bolted on afterward.",
   },
   {
     title: "C# background",
-    body: "A crate is not an assembly plus reflection-friendly metadata. Rust pushes API boundaries toward explicit exports, traits, and compile-time feature selection rather than runtime discovery.",
+    body: "A crate is not an assembly you load and inspect at runtime. There is no reflection-friendly metadata or runtime type discovery to fall back on, so the API surface has to be made explicit at compile time through exports, traits, and features. The shift is that what an assembly would decide late, a crate decides when it builds.",
   },
   {
     title: "Go background",
-    body: "Go packages are directory-shaped by default. Rust separates concerns more sharply: package for Cargo, crate for compilation, and module for source layout inside the crate.",
+    body: "Go fuses the ideas: a directory is a package is the unit of import and roughly the unit of build. Rust pulls them apart into three distinct things — a package is what Cargo manages, a crate is what the compiler builds, and a module is how source is organized inside that crate. Once you keep those three words separate, the rest of the chapter stops feeling arbitrary.",
+  },
+  {
+    title: "Python background",
+    body: "There is no runtime import system discovering modules from the filesystem as the program starts. Visibility, the dependency graph, and optional capabilities are all decided when the crate compiles, not when it runs, so a missing or private item is a build error rather than an ImportError or AttributeError you hit on a code path in production.",
   },
 ]
 
@@ -219,6 +224,18 @@ export function PageCh03ProjectStructureAndTooling() {
               </div>
             </div>
 
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The relationship is strictly nested, and the diagram is worth fixing in memory before anything else: a
+              workspace contains packages, each package is defined by exactly one{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cargo.toml</code> and produces one or
+              more crates, and each crate contains a tree of modules. Note where the units do and do not line up: one
+              package can yield several crates, but a module never escapes its crate.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  W[Workspace one Cargo.lock and target dir] --> P1[Package domain]\n  W --> P2[Package api]\n  P1 --> L1[lib crate]\n  P2 --> B1[bin crate]\n  P2 --> L2[lib crate]\n  L1 --> M1[mod model]\n  L1 --> M2[mod error]\n  B1 --> M3[mod routes]`}
+              caption="Workspace contains packages, a package can build several crates, and modules live inside one crate. Cargo manages the package; the compiler manages the crate."
+            />
+
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="font-medium text-foreground mb-3">A practical workspace layout</div>
@@ -265,6 +282,17 @@ export function PageCh03ProjectStructureAndTooling() {
               </div>
             </div>
 
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              What to look at: visibility is a ladder, not a switch. Each rung widens who can reach an item, and each
+              rung up is harder to walk back later because more callers can depend on it. Climb only as far as a real
+              caller forces you to, and shape the public path with a deliberate{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub use</code> at the crate root.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A[private default] --> B[pub super]\n  B --> C[pub crate]\n  C --> D[pub re-exported at crate root]\n  D --> E[external callers]\n  A -.->|widening is an API promise| E`}
+              caption="Each step widens the audience for an item. Default private is the cheapest to change; a name re-exported at the crate root is the hardest, because outside code can now depend on it."
+            />
+
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <div className="font-medium text-foreground mb-3">Visibility rule of thumb</div>
               <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -296,6 +324,23 @@ export function PageCh03ProjectStructureAndTooling() {
                 </p>
               </div>
             </div>
+
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              What to look at in the diagram: the feature is decided once, on the left, before the compiler runs, and
+              everything downstream is fixed for that whole build. A runtime decision sits on the opposite side — it
+              branches per request inside a single binary. Choosing the wrong side is the classic feature-flag mistake.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  F[Cargo feature on or off] --> R[Cargo resolves graph once]\n  R --> G1[cfg metrics on: code compiled in]\n  R --> G2[cfg metrics off: code absent from binary]`}
+              caption="Compile-time side: a feature is a fork resolved once, before the binary exists. The code is either compiled in or absent from the shipped binary."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The runtime side is the opposite: one already-built binary that branches per request.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph Runtime[Single built binary]\n    CFG[config or env var] --> Mode1[mode A this request]\n    CFG --> Mode2[mode B next request]\n  end`}
+              caption="Runtime side: a mode is a branch inside the one binary you shipped, chosen per request. Capability belongs on the compile-time side; operational state belongs here."
+            />
 
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
@@ -379,17 +424,25 @@ export function PageCh03ProjectStructureAndTooling() {
               <li>Only benchmark after the boundary and ownership model are stable enough to interpret the numbers.</li>
             </ol>
           </div>
+        </section>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">How prior instincts translate</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisons.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How prior instincts translate</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Almost every confusion in this chapter comes from carrying a structural assumption from another language and
+            quietly assuming Rust agrees. It usually does not. The cards below name the one shift to make for each
+            background before any of the concrete layout advice will land.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {comparisons.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -455,6 +508,16 @@ export function PageCh03ProjectStructureAndTooling() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">service_name</code> is
+              public, but <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">bind_addr</code> is a
+              private field reached only through a method. Callers get the value without getting the right to depend on
+              how it is stored, which is exactly the seam the diagram traces.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  C[main caller] -->|new| K[AppConfig::new constructor]\n  K --> S[(private bind_addr field)]\n  C -->|read| A[bind_addr accessor]\n  A --> S\n  C -.->|cannot touch directly| S`}
+              caption="The caller reaches the private field only through the constructor and accessor. The dashed edge is the path the compiler refuses, which is what frees you to change the field's storage later."
+            />
             <RustCodeEditor
               code={codes.project_structure_module_visibility}
               onChange={(newCode) => updateCode("project_structure_module_visibility", newCode)}
@@ -496,6 +559,17 @@ export function PageCh03ProjectStructureAndTooling() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the example uses a plain{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">const</code> so it runs in one file,
+              but read it as the right-hand runtime branch in the diagram below. The exercise is to decide whether this
+              choice should instead move left, to a compile-time feature, so the unused backend never enters the binary
+              at all.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q[Is this a capability or a mode?] --> Cap[Capability: optional integration]\n  Q --> Mode[Mode: which way today]\n  Cap --> Feat[cfg feature metrics at compile time]\n  Mode --> Const[const or env check at runtime]\n  Const --> Out[metrics backend = disabled]`}
+              caption="The decision tree behind the example: a true optional capability belongs in a Cargo feature, while a 'which mode right now' question belongs at runtime. The const here stands in for the runtime branch."
+            />
             <RustCodeEditor
               code={codes.project_structure_feature_flags}
               onChange={(newCode) => updateCode("project_structure_feature_flags", newCode)}

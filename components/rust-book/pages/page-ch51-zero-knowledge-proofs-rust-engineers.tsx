@@ -1,26 +1,27 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Users, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 
 const mentalModelPoints = [
   {
     title: "A proof is about a statement, not about a secret blob.",
-    body: "The verifier checks that one public claim is true. The witness is private data that makes the claim true. If you blur those roles in your Rust types, you usually leak secrets into the wrong boundary later.",
+    body: "The verifier checks that one public claim holds. The witness is the private data that makes the claim true, and it never travels with the proof. New engineers often picture the proof as an encrypted copy of the secret; it is not. It is evidence about a statement. If your Rust types blur the two roles, the secret eventually leaks across a boundary where only the statement belonged.",
   },
   {
     title: "Constraint systems are compiled operating models.",
-    body: "A ZK system does not prove your Rust function directly. It proves a lower-level constraint model or circuit. Arithmetic, hashes, ranges, and comparisons all have different constraint costs.",
+    body: "The prover does not run your Rust function. It satisfies a lower-level constraint model the function was compiled into, the way a CPU runs machine code rather than source. That compilation throws away the cost intuition you brought with you. Field arithmetic is cheap, but ranges, comparisons, and hashes expand into gadgets with their own size. Reviewing a circuit is therefore an architecture review, not just a math check.",
   },
   {
     title: "Proof generation and verification have asymmetric cost.",
-    body: "Proving is often heavy in CPU, memory, and wall time. Verification is usually smaller, but not free. Design the proving side like a specialized worker lane, not like a tiny inline helper.",
+    body: "These two halves are not mirror images. Proving is often the heaviest thing in the system, measured in seconds, gigabytes, and sometimes a GPU. Verification is comparatively small but never truly free, since the verifier still parses, validates, and version-checks the request. Design the proving side as a specialized worker lane with real resource limits, and the verifier side as a thin, fast edge.",
   },
 ]
 
@@ -172,15 +173,19 @@ const securityChecklist = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Think of the circuit as compiled IR with a separate proving runtime, not as a direct template-like execution of your Rust function. Artifact custody and verifier integration matter as much as the math.",
+    body: "You already think in terms of a compile step that produces an artifact with its own runtime cost. Carry that instinct here: your Rust logic is not executed by the prover, it is compiled into a constraint system the way source is compiled into an object file. The trap is assuming the cost model survives compilation. A branch or a comparison is nearly free in C++; in a circuit it expands into a range-check gadget. Treat artifact custody and verifier integration as seriously as you would treat ABI stability across a shared-library boundary.",
   },
   {
     title: "C# background",
-    body: "Do not expect runtime reflection or serializer attributes to rescue a proof boundary later. Rust ZK integrations are calmer when public inputs, witnesses, and artifact types are explicit from the start.",
+    body: "There is no managed runtime, reflection, or serializer attribute that will reconstruct intent at the boundary for you. In a .NET service you can often defer the shape of a contract because the runtime fills gaps; a ZK boundary punishes that. Decide up front, in the type system, what is a public statement, what is a private witness, and what is a proof artifact. The mental shift is from late binding to a contract that is fixed before the first proof is ever generated.",
   },
   {
     title: "Go background",
-    body: "A proof request should look more like a heavy queued job than like one lightweight handler branch. Keep backpressure, retry policy, and proof artifact custody visible in the service design.",
+    body: "Your instinct to model work as a job moving through goroutines and channels is exactly right, but a proof request is a heavy job, not a cheap handler branch. Do not inline proving into the request path the way you might inline a quick computation. Push it onto a bounded worker lane with explicit backpressure, retry policy, and artifact ownership, and keep the verifier as the small, fast edge that goroutines and load balancers expect.",
+  },
+  {
+    title: "Python background",
+    body: "If you arrive through ML tooling such as EZKL, resist treating the proving pipeline like a notebook cell where compile, witness, prove, and verify blur into one call. Rust forces the artifacts apart, and that is the point: the model export, the witness, the proving parameters, and the proof are distinct files with distinct trust and versioning. The shift is from dynamic, single-process convenience to an explicit multi-stage pipeline you can audit stage by stage.",
   },
 ]
 
@@ -261,8 +266,11 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Zero-knowledge proof integration needs a public statement, private witness custody, versioned artifacts, proving
-          capacity, and small verifier APIs. This chapter maps those requirements into Rust service boundaries.
+          A zero-knowledge proof lets one party convince another that a statement is true without revealing why it is
+          true. For a Rust engineer the cryptography is rarely the hard part to ship. The hard part is the systems
+          shape: a public statement, private witness custody, versioned artifacts, expensive proving capacity, and a
+          small verifier API. This chapter treats those as boundaries you can name and review, not as one opaque
+          call to a crate.
         </p>
       </div>
 
@@ -298,21 +306,24 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service must verify billing or scoring claims without exposing private inputs. The business requirement is
-            to separate public statements, private witnesses, constraints, proof artifacts, verifier metadata, and proving
-            capacity so the verifier learns only the intended claim.
+            Picture a service that has to vouch for a number it is not allowed to disclose. A lender wants to confirm
+            that a customer&apos;s committed order total stays under their published credit limit without seeing the line
+            items. A risk team wants to prove a score was computed from an approved model without exposing the model
+            inputs. In both cases the business requirement is the same shape: let the verifier learn one specific claim
+            and nothing else. To deliver that, you have to keep public statements, private witnesses, constraints, proof
+            artifacts, verifier metadata, and proving capacity as separate, named things rather than letting them
+            collapse into a single function that &quot;does the proof.&quot;
           </p>
-          <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="font-medium text-foreground mb-2">One practical proof pipeline</div>
-            <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{`statement(public) + witness(private)
-          -> witness generation
-          -> constraints / circuit
-          -> prover(proving key, transcript)
-          -> proof artifact
-          -> verifier(verification key, statement, transcript)`}</code>
-            </pre>
-          </div>
+          <p className="mt-4 text-sm text-muted-foreground leading-6">
+            The pipeline below is the spine of the whole chapter. Read it left to right and notice where the boundary
+            flips: everything up to and including the prover holds the secret witness, and from the proof artifact
+            onward only public data crosses. That single handoff is what every design decision in this chapter is
+            protecting.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  S[public statement] --> WG[witness generation]\n  W[private witness] --> WG\n  WG --> C[constraints / circuit]\n  C --> P[prover]\n  PK[proving key] --> P\n  P --> Proof[proof artifact]\n  Proof --> V[verifier]\n  VK[verification key] --> V\n  S --> V\n  V --> Out[accept / reject]`}
+            caption="The proving side owns the witness; only the proof artifact and public statement cross to the verifier."
+          />
         </section>
 
         <section className="space-y-4">
@@ -320,6 +331,11 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Before any crate names or APIs, three ideas reorganize how you reason about this topic. Each one is a place
+            where the obvious intuition from ordinary backend work quietly leads you wrong, and each one shows up later
+            as a concrete type or service boundary.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -338,8 +354,15 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              ZKP mental model: statements, witnesses, constraints, keys, proofs, and verifiers
+              The seven things a proof system actually traffics in
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When people say &quot;the ZK part&quot; they usually mean a tangle of seven distinct objects. The reason
+              integrations rot is that teams keep them implicit and let two of them merge. The fastest way to stay sane
+              is to give each one a name and a home in your type system, exactly as you would for the inputs, outputs,
+              and configuration of any other pipeline. The diagram earlier is just these seven objects wired together;
+              the cards below define each one on its own terms.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {artifactCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -352,6 +375,13 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">What zero knowledge does and does not guarantee</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              It is worth being blunt about the boundaries of the guarantee, because &quot;zero knowledge&quot; sounds
+              like it solves more than it does. The math protects one thing well: a verifier can be convinced of a
+              statement without learning the witness, provided the proving system is sound and the circuit is correct.
+              Everything outside that sentence is still your problem. The two columns below separate the promise from
+              the things teams keep wishing it covered.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {guaranteeCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -370,6 +400,13 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <h4 className="font-semibold text-foreground mb-3">
               SNARKs, STARKs, commitments, hashes, and circuits at a pragmatic level
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              You do not need to derive these systems to integrate them well, but you do need a working sense of the
+              tradeoffs they push onto your service. The choice between a SNARK and a STARK is rarely about elegance; it
+              shows up in your design as proof size on the wire, verifier cost, and whether you inherit a trusted-setup
+              ceremony you now have to document and defend. The summaries below are deliberately operational rather than
+              mathematical.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {proofSystemCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -383,11 +420,31 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Encoding computations as constraints</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Engineers coming from C++, C#, or Go often expect the cost model of the original function to carry over.
-              It does not. A simple sum is usually cheap in constraints. Range checks, hashes, Merkle paths, and non-native
-              field arithmetic are often much more expensive. That is why constraint review is an architecture review, not
-              only a math exercise.
+              Engineers coming from C++, C#, or Go usually expect the cost model of the original function to carry over.
+              It does not. A simple sum is cheap in constraints because it maps almost directly onto field arithmetic.
+              Range checks, hashes, Merkle paths, and non-native field arithmetic are often far more expensive, because
+              each one expands into a gadget made of many low-level constraints. The lesson is uncomfortable but useful:
+              a one-line operation in your source can be the dominant cost in the circuit, so constraint review is an
+              architecture review, not only a math exercise.
             </p>
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              Look at the small example below before reading the listing. It proves that two private amounts sum to a
+              public total, stay under a limit, and match a public commitment. Watch the right-hand column of the
+              diagram: the addition stays cheap, but the innocent-looking <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">total &lt;= limit</code> and the hash each blow up into a multi-constraint gadget. That asymmetry is the
+              whole point.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A[line_a + line_b = total] --> G1[a few add constraints]\n  G1 --> Cost[total prover cost]`}
+              caption="The cheap row: a sum maps almost directly onto field arithmetic."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The other two rows look just as innocent in source, but each expands into a gadget that
+              dominates the same total cost:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  B[total less-equal limit] --> G2[range-check gadget: many bit constraints]\n  C[hash equals commitment] --> G3[hash gadget: many round constraints]\n  G2 --> Cost[total prover cost]\n  G3 --> Cost`}
+              caption="The expensive rows: a comparison and a hash each blow up into many constraints."
+            />
             <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
               <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Pseudo-code · conceptual circuit</div>
               <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
@@ -395,8 +452,9 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
               </pre>
             </div>
             <p className="mt-4 text-sm text-muted-foreground leading-6">
-              The key subtlety is intentional: inequality and hashing are written as one line here, but they are not one
-              cheap primitive inside most proving systems. They expand into gadgets with real prover and verifier cost.
+              The subtlety is intentional. Inequality and hashing are written as a single line each, but neither is one
+              cheap primitive inside most proving systems. They expand into gadgets with real prover and verifier cost,
+              which is exactly why estimating circuit size from the source listing alone will mislead you.
             </p>
           </article>
 
@@ -404,6 +462,18 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <h4 className="font-semibold text-foreground mb-3">
               Rust integration patterns for proof generation and verification boundaries
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The single most important architectural decision is to stop treating proving and verifying as two ends of
+              one function. They want to live on different machines, scale on different curves, and fail in different
+              ways. The diagram shows the topology that keeps working whether the underlying prover is pure Rust,
+              FFI-backed, GPU-backed, or a separate toolchain process: a thin API that enqueues owned proof requests, a
+              bounded prover lane that holds all the heavy state, and a small verifier edge that only ever sees public
+              data. The cards then break down the boundaries that diagram implies.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Client -->|proof request| API[thin API]\n  API -->|owned request| Queue[(bounded queue)]\n  Queue --> Prover[prover worker lane]\n  Prover -->|proof + public output| Store[(artifact store)]\n  Client -->|public inputs + proof| Verifier[verifier edge]\n  Store --> Verifier\n  Verifier --> Result[accept / reject]`}
+              caption="Heavy proving lives behind a queue; the verifier edge stays small and never touches the witness."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {integrationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -426,6 +496,14 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <h4 className="font-semibold text-foreground mb-3">
               Serialization, transcript handling, deterministic inputs, and domain separation
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Most non-cryptographic proof failures trace back to this section. Prover and verifier must agree, byte for
+              byte, on what was hashed and in what order, and they must derive their challenges from the same transcript.
+              A transcript is just the running record of public values and messages that both sides absorb to derive
+              challenges; if one side serializes a map in a different iteration order, or shares challenge space between
+              two unrelated protocols, the proof becomes unverifiable even though the math is correct. These rules are
+              protocol requirements, not cleanup tasks, and they belong in tests from the first commit.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {transcriptRules.map((rule) => (
                 <li key={rule}>{rule}</li>
@@ -435,6 +513,13 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Performance, memory, and hardware considerations</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Teams new to this work tend to budget for the prover and forget everything around it. In practice the cost
+              is spread across the pipeline, and the surprise is usually that witness preparation, not the prover itself,
+              is the first thing to fall over. Read these four notes as a profiling checklist: find where wall time and
+              peak memory actually go before you reach for a GPU, because hardware acceleration only pays off for some
+              backends and some batch shapes.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {performanceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -447,6 +532,14 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Security review checklist and production caveats</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A proof-backed system has two review surfaces that are easy to confuse, and confusing them is how sound
+              cryptography still ships an insecure service. One surface is the cryptography: soundness, the trusted-setup
+              or transparency story, circuit correctness, transcript construction. The other is the ordinary Rust
+              systems surface: secret handling, canonical serialization, resource budgets, unsafe FFI wrappers, log
+              redaction. A sound proving system put behind a leaky, non-deterministic integration is still a broken
+              system, so both columns below need an owner.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {cryptoVsRustCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -465,17 +558,26 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             </div>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </article>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The cryptography is the same regardless of where you came from, but the instinct that misleads you is not.
+            Each of these backgrounds brings one habit that helps here and one that quietly works against you. Read the
+            card for your starting language as a mental-model adjustment, not a list of crate equivalents.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-xl border border-border bg-card p-5">
+                <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -483,6 +585,12 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <Wrench className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            None of these patterns are exotic. They are the same separation-of-concerns and versioning discipline you
+            would apply to any pipeline that crosses a trust boundary, applied here to the specific artifacts a proof
+            system produces. The thread running through all of them is to keep the four moving parts, witness, proof,
+            verifier request, and circuit version, individually nameable and testable.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
@@ -497,6 +605,11 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
             <Bug className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Each of these is a real way teams have shipped a proof-backed system that looked correct and was not. They
+            cluster around two illusions: that a proof equals privacy, and that a passing verification equals a correct
+            circuit. Hold both of those suspect.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
@@ -523,9 +636,10 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm text-muted-foreground leading-6">
-              The runnable examples here model proof boundaries and transcript discipline without depending on one specific
-              proving crate. They are intentionally about systems shape, not about claiming a browser demo is real
-              cryptography.
+              The runnable examples model proof boundaries and transcript discipline without depending on one specific
+              proving crate. They are intentionally about systems shape rather than real cryptography, so a browser demo
+              cannot mislead you into thinking it produced a sound proof. What they do show faithfully is how the types
+              keep the witness on one side of the boundary and how both sides agree on a transcript.
             </p>
           </div>
 
@@ -536,8 +650,10 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
                   Example 1: keep statement, witness, and proof artifact separate
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The verifier checks only the public statement plus proof artifact. The witness exists only on the proving
-                  side. That separation is the main systems lesson.
+                  Before you read the code, fix the one rule it enforces in your head: the witness never appears in any
+                  type the verifier touches. Follow the data in the diagram below. The witness flows only into the
+                  prover; the verifier is handed a statement and a proof and nothing else. If you ever find the witness
+                  type imported on the verifier side, the design has already drifted.
                 </p>
               </div>
               {codes.zkp_statement_witness_proof !== DEFAULT_CODES.zkp_statement_witness_proof && (
@@ -551,6 +667,10 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Witness[Witness: private amounts] --> Prover\n  Statement[Statement: public total] --> Prover\n  Prover --> Proof[Proof artifact]\n  Statement --> Verifier\n  Proof --> Verifier\n  Verifier --> OK[verified = true]`}
+              caption="The witness type reaches the prover only; the verifier sees statement and proof."
+            />
             <RustCodeEditor
               code={codes.zkp_statement_witness_proof}
               onChange={(newCode) => updateCode("zkp_statement_witness_proof", newCode)}
@@ -593,8 +713,11 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
                   Example 2: domain-separated transcripts and deterministic public inputs
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The transcript here is intentionally simple and not cryptographic. The point is that prover and verifier
-                  must derive the same challenge for the same domain and a different challenge for a different protocol.
+                  The transcript here is intentionally simple and not cryptographic. The behavior to watch is the
+                  branching shown below: the same public inputs under the same domain string must converge on one
+                  challenge, while a different domain must land on a different one. The first property gives prover and
+                  verifier a shared challenge; the second keeps a billing proof from ever colliding with an inventory
+                  proof in the same challenge space.
                 </p>
               </div>
               {codes.zkp_transcript_domain_separation !== DEFAULT_CODES.zkp_transcript_domain_separation && (
@@ -608,6 +731,10 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Inputs[public inputs] --> Absorb[absorb into transcript]\n  Domain[domain string] --> Absorb\n  Absorb --> Challenge[derive challenge]\n  Challenge --> Same{same domain and inputs?}\n  Same -->|yes| Match[challenge match = true]\n  Same -->|no| Diff[domain separation = true]`}
+              caption="Same domain and inputs converge on one challenge; a different domain diverges by design."
+            />
             <RustCodeEditor
               code={codes.zkp_transcript_domain_separation}
               onChange={(newCode) => updateCode("zkp_transcript_domain_separation", newCode)}

@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch43",
+ "num": 43,
+ "title": "Observability",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Pick logs, metrics, traces, or profiles from the symptom",
+   "objective": "Practice choosing the observability signal that answers the real incident question instead of defaulting to whichever tool is easiest to add first.",
+   "starterPrompt": "Classify four symptoms: a queue-backed request path misses p99 while handler p50 stays calm, a sudden spike in rejected payloads appears after one rollout, CPU on one reducer climbs while queue age stays flat, and one service-to-service hop keeps timing out only for one tenant.",
+   "prompts": [
+    "Which symptom wants metrics first?",
+    "Which symptom wants structured logs first?",
+    "Which symptom wants a trace first?",
+    "Which symptom wants a profile first?"
+   ],
+   "acceptanceCriteria": [
+    "You map each symptom to a primary signal with a concrete reason.",
+    "You distinguish queue wait from handler CPU clearly.",
+    "You avoid treating raw log volume as a substitute for one well-chosen metric or span."
+   ],
+   "hints": [
+    "Start by asking whether the question is aggregate health, one event, one causal path, or one cost hotspot.",
+    "A strong answer uses more than one tool eventually, but still picks a sane first one."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read a Tokio worker that lost trace context at spawn",
+   "objective": "Explain why one async service emits traces for local work but still cannot correlate queue claim, handler execution, and downstream publish under one path.",
+   "starterPrompt": "Review a worker loop that receives a task from `mpsc`, then does `tokio::spawn(handle(task))` without `info_span!`, without `.instrument(...)`, and without putting trace identity in the task envelope.",
+   "prompts": [
+    "Which context is missing from the task boundary?",
+    "What should the envelope carry if the task may cross queue or retry boundaries later?",
+    "Would `#[instrument]` on the handler alone be enough?",
+    "Which one summary line would you want the browser runner or a test harness to prove is now wired correctly?"
+   ],
+   "acceptanceCriteria": [
+    "You identify the missing spawn-boundary context precisely.",
+    "You name at least one field such as `trace_id`, `route`, `task_id`, or `attempt` that should cross the boundary explicitly.",
+    "You explain why handler spans alone are incomplete when queue or worker spans are missing."
+   ],
+   "hints": [
+    "If the trace stops at `tokio::spawn`, the instrumentation boundary is too small.",
+    "A task envelope is already a contract. Let it carry observability identity too."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Design metrics for backpressure and latency",
+   "objective": "Define a minimal but useful metric surface for a bounded Tokio or broker-backed service.",
+   "starterPrompt": "Design metrics for `accept -> queue -> worker -> publish`, with occasional retries and one bounded worker pool.",
+   "prompts": [
+    "Which counters should exist for accepted work, completed work, retries, and duplicate suppression?",
+    "Which gauges should exist for queue depth, oldest visible age, and busy workers?",
+    "Which histograms should exist for queue wait, run time, and end-to-end latency?",
+    "Which labels would you explicitly forbid because they create dangerous cardinality?"
+   ],
+   "acceptanceCriteria": [
+    "You propose at least one counter, one gauge, and one histogram family.",
+    "You tie each metric to one operational question instead of only listing nouns.",
+    "You forbid at least one high-cardinality label such as `trace_id` or `task_id`."
+   ],
+   "hints": [
+    "The best metric set is small enough to operate and rich enough to explain one incident quickly.",
+    "Queue age and queue depth together often tell a better story than throughput alone."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair async tracing and structured logs together",
+   "objective": "Refactor a worker path so logs and traces share enough identity to explain one retry or dead-letter path without guesswork.",
+   "starterPrompt": "A service currently logs `retrying task` and `dead-lettered` as plain strings, but the logs do not include `task_id`, `queue`, `attempt`, or `trace_id`, and the retry span is not linked to the original claim span.",
+   "prompts": [
+    "Which fields should become structured log fields immediately?",
+    "Which span relationship should be explicit across claim, retry, and terminal routing?",
+    "How would you keep the extra fields low-cardinality enough for logs while still useful for traces?",
+    "What should the single log-emitting boundary be for a permanent failure?"
+   ],
+   "acceptanceCriteria": [
+    "You add at least three structured fields that make correlation materially better.",
+    "You describe one parent-child or retry-lineage tracing repair.",
+    "You identify one boundary that should log the permanent failure once."
+   ],
+   "hints": [
+    "The most useful log field is the one that lets you pivot to the trace or durable record immediately.",
+    "A permanent failure path should not produce identical error logs at five layers."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Connect logs, metrics, and traces in one incident narrative",
+   "objective": "Practice telling one coherent production story from three signal types instead of reading each one in isolation.",
+   "starterPrompt": "Metrics show oldest visible age rising from 200 ms to 4 s. One trace shows a task waited 3.6 s before claim and then only 80 ms in the handler. Structured logs show the same task retried twice because a downstream store timed out.",
+   "prompts": [
+    "Which layer actually dominates end-to-end latency here?",
+    "Which metric should have paged first?",
+    "Which trace fields or log fields make the retry path attributable?",
+    "Which refactor would you test before touching handler CPU?"
+   ],
+   "acceptanceCriteria": [
+    "You identify queue wait and replay pressure, not handler CPU, as the dominant story.",
+    "You cite at least one metric and one identity field that connect the evidence.",
+    "You propose one refactor tied to the real bottleneck, such as retry budgeting, queue split, or more downstream capacity."
+   ],
+   "hints": [
+    "This exercise is about causality, not about one favorite dashboard.",
+    "If queue wait dominates already, optimizing 80 ms of handler CPU is probably not first."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Turn observability into SLOs, alerts, and refactoring policy",
+   "objective": "Design the outer observability contract for a service another team will operate under real failure and capacity pressure.",
+   "starterPrompt": "You are designing a scoring service with HTTP intake, an internal bounded queue, a GPU-backed worker lane, and a brokered outcome publisher. Operators require end-to-end latency and success SLOs plus a clear story for continuous profiling and OpenTelemetry export.",
+   "prompts": [
+    "Which SLOs would you publish: success rate, oldest visible age, e2e latency, freshness, or a subset?",
+    "Which alerts should fire from burn rate versus absolute queue age or worker saturation?",
+    "Where should OpenTelemetry exporter wiring live relative to domain and transport code?",
+    "Which profiling signals would you sample continuously and which would stay incident-driven?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least two SLO-style promises that map to concrete metrics.",
+    "You distinguish burn-style alerting from raw threshold alerting with one reason for each.",
+    "You keep exporter or collector wiring at the platform edge instead of leaking it into domain logic.",
+    "You mention at least one continuous profile signal and one incident-driven deeper measurement."
+   ],
+   "hints": [
+    "An SLO is useful only if someone can still act on it.",
+    "Exporter wiring is usually platform configuration, not business behavior."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What does structured logging solve that plain text logs do not solve well?",
+  "Why should queue wait be a first-class latency signal in async and distributed Rust services?",
+  "What is the practical difference between trace identity and metric labels?",
+  "Why is OpenTelemetry usually an export and propagation concern rather than a domain-model concern?",
+  "How does observability-driven refactoring differ from profiling-driven local optimization?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Instrument a Tokio worker with spans",
+  "filename": "trace_service_lab.rs",
+  "runKey": "ch43_ex_trace_service",
+  "expectedOutput": "instrumented = true\nprocessed = 2\nlast trace = req-12",
+  "initialCode": "use tokio::sync::mpsc;\nuse tracing::{info_span, instrument, Instrument};\n\n#[derive(Debug, Clone)]\nstruct Request {\n    trace_id: &'static str,\n    route: &'static str,\n    bytes: usize,\n}\n\nasync fn handle(request: Request) -> Result<usize, &'static str> {\n    if request.bytes == 0 {\n        return Err(\"empty payload\");\n    }\n\n    Ok(request.bytes / 10)\n}\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Request>(4);\n\n    tx.send(Request {\n        trace_id: \"req-11\",\n        route: \"/score\",\n        bytes: 200,\n    })\n    .await\n    .unwrap();\n\n    tx.send(Request {\n        trace_id: \"req-12\",\n        route: \"/health\",\n        bytes: 100,\n    })\n    .await\n    .unwrap();\n\n    drop(tx);\n\n    let mut processed = 0_usize;\n    let mut last_trace = \"none\";\n\n    while let Some(request) = rx.recv().await {\n        last_trace = request.trace_id;\n\n        match handle(request).await {\n            Ok(_) => processed += 1,\n            Err(_) => {}\n        }\n    }\n\n    println!(\"processed = {}\", processed);\n    println!(\"last trace = {}\", last_trace);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 25, 30, 31, 35, 36, and 42",
+  "Opening scenario",
+  "A practical incident loop",
+  "At a glance",
+  "Signal-selection checklist",
+  "Mental model",
+  "Core concepts",
+  "The four signals and the questions they answer",
+  "Logging and structured logs",
+  "Metrics",
+  "Tracing, async tracing, and distributed tracing",
+  "OpenTelemetry and crossing the wire",
+  "Profiling in production",
+  "Alerting and SLOs",
+  "Observability-driven refactoring",
+  "How this maps from your background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: instrument a Tokio worker with structured spans",
+  "Example 2: summarize latency, success rate, and alert state from one SLO window",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Observability is what lets you explain a production Rust service after the fact, without redeploying with more print statements. This chapter walks through the four signals an operator actually reaches for — structured logs, metrics, traces, and profiles — and ties them to servic",
+  "Chapter 25 covered Tokio task boundaries. Chapter 30 covered broker delivery and retry signals. Chapter 31 made queue wait and replay part of distributed work. Chapters 35 and 36 separated profiling, tracing, and distributed latency analysis. Chapter 42 added deterministic test h",
+  "A queue-backed scoring service misses its latency SLO right after a rollout, yet CPU usage and the handler&rsquo;s median runtime both look perfectly healthy. Nothing in the obvious dashboard is red. This is the everyday shape of a real incident: the symptom is visible but the ca",
+  "Good debugging under pressure follows a loop rather than a hunch. Notice the shape below: you always start from one symptom, pivot to a single trace or log line through a stable id, decompose the latency by stage, fix the stage that dominates, and then re-measure the same signal ",
+  "Before the individual tools, hold the whole picture in view. One request enters the system and produces all four kinds of signal as it flows through. They are not redundant — each answers a question the others cannot. When you look at the diagram, notice that logs and traces are ",
+  "The other two signals are not emitted per request — metrics aggregate across every request and profiles sample the process as a whole — yet they feed the same operator answering the same incident:",
+  "A useful default split is counter + gauge + histogram: counters for accepted and retried work, gauges for queue depth and busy workers, histograms for queue wait, run time, and end-to-end latency.",
+  "What to look at first: the struct below is the whole point. A producer finishes its span, copies the live trace_id and parent_span_id into a TaskEnvelope, and serializes it onto the queue. The consumer parses the envelope and re-opens a child span from those fields. Without this ",
+  "Profiling belongs in an observability chapter because hot CPU, queue wait, lock contention, and serialization cost are often all part of the same incident. The best production profile is the one you can line up next to one trace and one SLO graph.",
+  "Every one of these languages can be observed well — the concepts of logs, metrics, traces, and profiles are universal. What changes in Rust is mostly how much is automatic versus how much you wire on purpose. The recurring theme below is the same: there is less ambient context ma",
+  "These are the habits that pay off before an incident rather than during one. The common thread is doing the cheap, deliberate work up front — naming fields, publishing the boring backlog metrics, propagating context across every handoff — so that when something breaks the data is",
+  "Almost every entry below is a case of the right idea applied to the wrong signal: detail where you needed aggregation, aggregation where you needed identity, or instrumentation that stopped exactly at the boundary that mattered. Read them as the failure modes of the four signals,",
+  "The most common observability failure is not “too little telemetry.” It is the wrong telemetry at the wrong boundary: unstructured logs, invisible queue wait, or metrics so high-cardinality that nobody can query them when the incident actually starts.",
+  "The browser runner summarizes instrumentation so output stays deterministic. In a real Cargo service, the same code would normally pair these spans with a subscriber or an OpenTelemetry bridge.",
+  "The request handler records structured fields, the worker adds a parent span, and the summary makes success, failure, and last-seen trace identity explicit.",
+  "What to look at first: follow one request id through the nesting below before reading the code. The request span is the parent; when work is handed to the worker, the worker span is attached explicitly so it nests under the right request instead of running detached. The success a",
+  "The handler emits fields that are filterable later instead of burying `trace_id` and `route` inside prose.",
+  "The worker span is explicit, so a later queue or task analysis still knows which runtime boundary owned the request.",
+  "One empty payload becomes one structured reject instead of one mysterious count drop somewhere in a dashboard.",
+  "This is the kind of aggregate view an operator or an alert rule wants: a conservative latency budget, success budget, and whether the window already looks unhealthy. Note that p95(queue) + p95(handler) is an upper bound, not the true end-to-end p95 — percentiles are not additive.",
+  "What to look at first: this is a small pipeline, not a clever algorithm. Two separate latency histograms (queue and handler) feed a conservative latency budget; accepted and failed counts feed a success rate; both results plus a saturation check feed one boolean alert. Trace the ",
+  "Queue p95 and handler p95 are kept separate so end-to-end latency can be decomposed honestly.",
+  "One burn-style rule can combine latency, success rate, and saturation instead of paging on one raw error counter.",
+  "A window like this tells you whether the next fix belongs in worker capacity, admission control, or handler code.",
+  "The repository also includes standalone Rust source under examples/ch43_observability/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to instrument a Tokio service with spans, design metrics for latency and backpressure, connect logs, metrics, and traces in one incident narrative, and turn SLOs into concrete alerts and refactoring decisions."
+ ],
+ "codeSamples": {
+  "observability_tracing_tokio_spans": "use tokio::sync::mpsc;\nuse tracing::{error, info, info_span, instrument, Instrument};\n\n#[derive(Debug, Clone)]\nstruct Request {\n    trace_id: &'static str,\n    route: &'static str,\n    bytes: usize,\n}\n\n#[instrument(\n    name = \"handle_request\",\n    skip(request),\n    fields(trace_id = %request.trace_id, route = request.route, bytes = request.bytes)\n)]\nasync fn handle_request(request: Request) -> Result<usize, &'static str> {\n    if request.bytes == 0 {\n        error!(status = \"reject\", \"empty payload\");\n        return Err(\"empty payload\");\n    }\n\n    info!(status = \"ok\", \"request handled\");\n    Ok(request.bytes / 10)\n}\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Request>(4);\n\n    tx.send(Request {\n        trace_id: \"req-7\",\n        route: \"/score\",\n        bytes: 640,\n    })\n    .await\n    .unwrap();\n\n    tx.send(Request {\n        trace_id: \"req-8\",\n        route: \"/score\",\n        bytes: 0,\n    })\n    .await\n    .unwrap();\n\n    tx.send(Request {\n        trace_id: \"req-9\",\n        route: \"/health\",\n        bytes: 120,\n    })\n    .await\n    .unwrap();\n\n    drop(tx);\n\n    let worker = info_span!(\"worker\", worker = \"ingest-a\");\n    let mut processed = 0_usize;\n    let mut failures = 0_usize;\n    let mut last_trace = \"none\";\n\n    while let Some(request) = rx.recv().await {\n        last_trace = request.trace_id;\n\n        match handle_request(request).instrument(worker.clone()).await {\n            Ok(_units) => processed += 1,\n            Err(_error) => failures += 1,\n        }\n    }\n\n    println!(\"instrumented = {}\", true);\n    println!(\"processed = {}\", processed);\n    println!(\"failures = {}\", failures);\n    println!(\"last trace = {}\", last_trace);\n}",
+  "observability_metrics_slo_window": "#[derive(Debug, Clone, Copy)]\nstruct WindowStats {\n    requests: u64,\n    errors: u64,\n    queue_p95_ms: u64,\n    handler_p95_ms: u64,\n    busy_workers: u32,\n    total_workers: u32,\n}\n\nfn success_rate(stats: &WindowStats) -> f64 {\n    1.0 - stats.errors as f64 / stats.requests as f64\n}\n\nfn latency_budget_ms(stats: &WindowStats) -> u64 {\n    stats.queue_p95_ms + stats.handler_p95_ms\n}\n\nfn saturation(stats: &WindowStats) -> f64 {\n    stats.busy_workers as f64 / stats.total_workers as f64\n}\n\nfn burn_alert(stats: &WindowStats) -> bool {\n    latency_budget_ms(stats) > 350 || success_rate(stats) < 0.995 || saturation(stats) > 0.90\n}\n\nfn main() {\n    let stats = WindowStats {\n        requests: 5_000,\n        errors: 40,\n        queue_p95_ms: 180,\n        handler_p95_ms: 210,\n        busy_workers: 19,\n        total_workers: 20,\n    };\n\n    println!(\"latency budget = {}\", latency_budget_ms(&stats));\n    println!(\"success rate = {:.4}\", success_rate(&stats));\n    println!(\"alert = {}\", burn_alert(&stats));\n}"
+ },
+ "labReferenceSolution": null
+}

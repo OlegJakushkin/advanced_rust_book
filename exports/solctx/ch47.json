@@ -1,0 +1,215 @@
+{
+ "chapterKey": "ch47",
+ "num": 47,
+ "title": "gRPC Services with Protobuf and Service API Codegen",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose unary, server streaming, client streaming, or bidirectional streaming from the contract",
+   "objective": "Practice selecting the RPC shape from data flow and pacing instead of choosing streaming by novelty.",
+   "starterPrompt": "Classify four endpoints: create one invoice, watch invoice events over time, upload many invoices then get one summary, and a long-lived sync conversation where both peers keep sending updates.",
+   "prompts": [
+    "Which endpoint is a unary call and why?",
+    "Which endpoint wants server streaming because one request opens one subscription?",
+    "Which endpoint wants client streaming because the client owns accumulation into one summary result?",
+    "Which endpoint truly wants bidirectional streaming, and what backpressure question appears immediately after that choice?"
+   ],
+   "acceptanceCriteria": [
+    "You map each workload to a plausible gRPC method shape with a transport reason.",
+    "You identify at least one pacing or buffering implication for the streaming cases.",
+    "You avoid using bidirectional streaming as the default when a simpler shape already fits."
+   ],
+   "hints": [
+    "Ask who sends once, who sends many times, and who controls pace.",
+    "A streaming method is also a lifecycle and buffer contract."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read generated transport types without contaminating the domain model",
+   "objective": "Explain where generated protobuf messages belong and where a hand-written application command should begin.",
+   "starterPrompt": "A service method currently accepts `CreateInvoiceRequest` directly from generated code and passes it unchanged into a domain aggregate constructor.",
+   "prompts": [
+    "Which fields or types are transport concerns rather than domain concerns?",
+    "Where should tenant, caller identity, or metadata-derived fields be attached?",
+    "Which hand-written command type would make the service boundary calmer?",
+    "What becomes easier to test once the mapping seam exists explicitly?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish generated DTOs from domain or application commands clearly.",
+    "You identify at least one metadata-derived field that should be attached outside generated message code.",
+    "You name at least one testing or refactoring benefit of the separated seam."
+   ],
+   "hints": [
+    "Generated messages are transport types with field tags and serialization rules attached.",
+    "The application service usually wants a smaller, more domain-specific command."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Map a generated request into a domain command",
+   "objective": "Build the small adapter that moves one generated transport request into one application command without leaking gRPC into business code.",
+   "starterPrompt": "Implement `into_command(request, tenant)` so it validates the generated request, moves owned fields into a separate command type, and returns a typed result.",
+   "prompts": [
+    "Reject empty customer IDs or empty line sets explicitly.",
+    "Move owned Strings and Vecs into the command rather than cloning them gratuitously.",
+    "Keep the result type small and transport-facing only at the adapter layer.",
+    "Print tenant, customer, and total cents from the mapped command in the runnable lab."
+   ],
+   "acceptanceCriteria": [
+    "The mapping step returns a separate command type rather than the generated request type itself.",
+    "The adapter validates at least one transport-level shape problem explicitly.",
+    "The runnable lab prints the expected tenant, customer, and total cents.",
+    "The code does not make the downstream service depend on gRPC request wrappers or metadata APIs."
+   ],
+   "hints": [
+    "This is the same seam you would unit test heavily even if the live service used tonic.",
+    "Move data once. The generated message already owns its fields."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Diagnose a deadline, cancellation, or streaming backpressure bug",
+   "objective": "Repair one of the most common production problems in gRPC systems: work keeps flowing after the caller or the stream has already told you to stop.",
+   "starterPrompt": "A streaming handler keeps buffering items into a local channel even after the client disconnects, and one unary handler keeps doing CPU-heavy work after the deadline has already expired.",
+   "prompts": [
+    "Where should cancellation or deadline checks happen relative to expensive work?",
+    "Which queue or buffer should be bounded before the stream fan-out gets large?",
+    "Which status code should the server or client surface for deadline expiry or caller cancellation?",
+    "What metric or trace field would prove the repair helped?"
+   ],
+   "acceptanceCriteria": [
+    "You place at least one cancellation or deadline check at a meaningful work boundary.",
+    "You propose at least one boundedness repair for stream buffering or worker admission.",
+    "You identify one observability signal such as in-flight stream items, cancelled RPC count, or deadline-exceeded count."
+   ],
+   "hints": [
+    "A disconnected client is a pacing signal, not only a transport curiosity.",
+    "If the buffer is unbounded, the stream still has an ownership bug even before it has a cancellation bug."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Test generated APIs and prevent breaking protobuf changes",
+   "objective": "Design the CI and test surface that catches schema drift before partner teams regenerate or deploy stale code.",
+   "starterPrompt": "You added one field, removed another, and changed one method shape from unary to streaming. Now several languages regenerate from the same .proto.",
+   "prompts": [
+    "Which changes are additive and which are breaking?",
+    "Which contract artifact should be diffed or checked in CI?",
+    "Which transport tests should run against generated client and server code?",
+    "Which protobuf tags or names should be reserved after removal?"
+   ],
+   "acceptanceCriteria": [
+    "You classify at least one additive change and one breaking change correctly.",
+    "You define at least one schema-drift or breaking-change CI gate.",
+    "You mention one generated-client or generated-server compile or contract test.",
+    "You explicitly reserve removed field tags or names in the policy."
+   ],
+   "hints": [
+    "Changing a method shape is usually a bigger break than adding an optional field.",
+    "Broken codegen drift is still contract drift even if the Rust server compiles locally."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design a polyglot gRPC service lane with auth, tracing, and retries",
+   "objective": "Turn the chapter topics into one production design another language team can consume safely.",
+   "starterPrompt": "You are designing a billing gRPC service consumed by Go workers, a C# admin tool, and one C++ plugin process. Operators require auth metadata, tracing, retry guidance, and bounded streaming behavior.",
+   "prompts": [
+    "Which metadata should travel on every call or stream session?",
+    "Which status codes should clients treat as retryable and under what idempotency rule?",
+    "Which routes or methods deserve stream-specific queue budgets or concurrency caps?",
+    "What telemetry should exist before rollout?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least one auth or caller-context rule and one trace-propagation rule.",
+    "You classify retryable versus terminal status behavior explicitly.",
+    "You include at least one boundedness or concurrency rule for a streaming path.",
+    "You mention at least three observability hooks such as status code family counts, stream lifetime, cancelled RPCs, or queue age."
+   ],
+   "hints": [
+    "The contract is polyglot, so review the .proto and retry guidance as public artifacts.",
+    "A stream without boundedness policy is already under-specified for production."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why should generated protobuf types usually stop at the transport boundary instead of becoming the domain model?",
+  "What makes field tags more durable than field names in protobuf evolution?",
+  "Why are deadlines, cancellation, and backpressure part of the API design rather than only runtime behavior?",
+  "What is the practical difference between a retryable Unavailable and a non-retryable InvalidArgument?",
+  "Why should generated client and server artifacts be rebuilt or checked in CI whenever the .proto changes?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Map a generated request into a domain command",
+  "filename": "grpc_transport_mapping_lab.rs",
+  "runKey": "ch47_ex_transport_mapping",
+  "expectedOutput": "tenant = acme\ncustomer = cust-7\ntotal cents = 4200",
+  "initialCode": "#[derive(Debug, Clone)]\nstruct CreateInvoiceRequest {\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\n#[derive(Debug, Clone)]\nstruct CreateInvoiceCommand {\n    tenant: String,\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\nfn into_command(\n    request: CreateInvoiceRequest,\n    tenant: &str,\n) -> Result<CreateInvoiceCommand, &'static str> {\n    Err(\"unfinished\")\n}\n\nfn main() {\n    let request = CreateInvoiceRequest {\n        customer_id: String::from(\"cust-7\"),\n        line_totals: vec![1_200_u64, 3_000],\n    };\n\n    let command = into_command(request, \"acme\").unwrap();\n    let total_cents: u64 = command.line_totals.iter().copied().sum();\n\n    println!(\"tenant = {}\", command.tenant);\n    println!(\"customer = {}\", command.customer_id);\n    println!(\"total cents = {}\", total_cents);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 25, 41, 43, and 46",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "The protobuf contract: messages, fields, services, and streaming shapes",
+  "How a .proto file becomes Rust types: the build-time codegen pipeline",
+  "Reading the four streaming shapes off the generated server trait",
+  "Mapping generated transport types into domain models",
+  "Error models: status codes, rich errors, retries, deadlines, and cancellation",
+  "Interceptors, authentication metadata, tracing, and observability",
+  "Staying compatible across Go, C#, C++, Python, and the rest of the fleet",
+  "Testing generated APIs and preventing breaking protobuf changes",
+  "What changes by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: map a generated request into a domain command",
+  "Example 2: classify retry and cancellation decisions explicitly",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A gRPC service is really two things at once: a protobuf schema that several languages share, and a pile of generated Rust code that turns that schema into types, clients, and a server trait. This chapter is about keeping those two things in their place — letting codegen remove bo",
+  "Chapter 19 established transport DTO discipline. Chapter 25 covered async runtime boundaries. Chapter 41 separated domain, infrastructure, and transport errors. Chapter 43 covered tracing and metrics. Chapter 46 established OpenAPI and generated-API workflows on the HTTP side. Th",
+  "A new Rust service is joining a gRPC fleet that already has Go, C#, and C++ services talking to each other through shared protobuf contracts. Nobody is asking you to invent the contract — it exists, other teams generate from it, and breaking it breaks them. The job is narrower an",
+  "The diagram below is the shape worth holding onto for the rest of the chapter. One .proto file is the single source of truth; each language runs its own code generator and gets its own local API. Rust is just one of those consumers, and the part you control is the thin adapter be",
+  "The Rust branch off that same schema is the part you actually own — it runs one more step than the others:",
+  "gRPC design starts in the schema, not in handler code, and the schema carries two distinct kinds of decision. The message blocks describe data: each field has a name, a type, and — most importantly — a number. Those numbers, not the names, are what actually go on the wire, which ",
+  "When you read the schema below, look at two things before anything else. First, the field numbers (= 1, = 2) — those are the durable identity you must not reuse. Second, the four rpc lines and where stream appears, because that one keyword decides whether a method is a request-re",
+  "Each rpc line in that service maps to exactly one of four communication shapes, and the position of the stream keyword is the whole difference. The cards below name them; the rest of the chapter keeps coming back to the operational cost each one carries.",
+  "In Rust the standard tool for this is tonic together with its companion build crate. The mechanism is a Cargo build.rs script that runs before your crate compiles: it reads the .proto files, generates Rust source into Cargo's output directory, and a small include_proto! macro pul",
+  "The flow below is worth tracing once end to end. The thing to notice is the rerun-if-changed line in the build script: it tells Cargo to re-run codegen whenever the schema changes, so editing the .proto is enough to regenerate everything downstream. You never hand-edit generated ",
+  "In practice, many Rust teams keep generated protobuf and tonic surfaces in a transport crate or module, then make the application crate depend on a smaller hand-written interface. That keeps protobuf churn from looking like domain churn.",
+  "The four rpc shapes from the schema turn directly into a Rust trait, and you can read the operational contract straight off each method signature. The diagram below shows what each shape looks like as message flow between client and server — one message each way, a fan-out of res",
+  "The two streaming shapes that flip the fan-in direction round out the set:",
+  "Now read the trait against that picture. Codegen produces the trait below; your server type writes the impl block that fills in real bodies. The detail that catches people new to tonic is the two associated type declarations: a server-streaming method does not return a concrete s",
+  "Streaming APIs are rarely “just like unary but more advanced.” They are pacing systems. If message rate, buffer size, and cancellation rules are vague, the streaming design is still unfinished.",
+  "This is the single most consequential habit in the chapter, and it is easy to skip because the generated types are right there and already own their data. The temptation is to pass a CreateInvoiceRequest straight into business logic. Resist it. A generated message is a data trans",
+  "gRPC's error vocabulary is a small set of status codes, and the discipline is choosing them by what the caller should do next rather than by what went wrong internally. A code like InvalidArgument tells the caller \"fix your request and stop retrying\"; Unavailable tells it \"I am t",
+  "gRPC carries side-band data — auth tokens, trace IDs, tenant identifiers — in per-call metadata, the protobuf equivalent of HTTP headers. An interceptor is the seam that runs before your handler, reads that metadata, and either rejects the call or enriches it. The pattern that ke",
+  "The sketch below is exactly that flow: pull the authorization metadata, turn a missing token into an Unauthenticated status before any handler runs, and otherwise insert a typed caller context. Read it against this sequence:",
+  "In a polyglot fleet the schema is a shared interface, and the rule of thumb is that protobuf evolution must be additive and boring. Field numbers are the wire identity, so the safe moves are narrow: add new fields with new numbers, mark removed fields as reserved so nobody recycl",
+  "Go, C#, C++, and Rust will each generate a different local API shape from the same protobuf. Review the schema as the contract and treat generated language surfaces as adapters around that contract.",
+  "Testing splits cleanly into two questions: does your adapter behave, and is the schema still safe for everyone else. The first is ordinary unit testing of the mapping seam — cheap, fast, and the place most real bugs hide. The second needs tooling the compiler cannot provide, beca",
+  "The most useful breaking-change gate is the one that runs before a partner team regenerates from a stale contract. Treat schema drift as a build failure, not as a post-rollout surprise.",
+  "Every language in this list generates from the same protobuf, so the wire is not where you will be surprised. The surprise is what each ecosystem used to do for you automatically that Rust now asks you to state. Read your own row as the habit you most need to unlearn.",
+  "The most expensive gRPC mistake is often not a tonic call-site bug. It is one contract that kept compiling locally while schema evolution, retries, or streaming pace drifted apart across services.",
+  "The transport request owns strings and vectors already. The adapter converts it into one application command, and the service never learns about gRPC metadata or generated transport wrappers.",
+  "What to look at: into_command is the entire boundary. It runs two validation checks, and only on success does it move the request's owned strings and vectors into a CreateInvoiceCommand. A missing customer or an empty invoice never reaches InvoiceService; it returns a TransportEr",
+  "The request type is transport-owned input, not the application service contract itself.",
+  "into_command is where request validation and naming translation stay explicit.",
+  "Strings and vectors are owned once at the transport edge, then moved into the application command."
+ ],
+ "codeSamples": {
+  "grpc_transport_to_domain_mapping": "#[derive(Debug, Clone)]\nstruct CreateInvoiceRequest {\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\n#[derive(Debug, Clone)]\nstruct CreateInvoiceCommand {\n    tenant: String,\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\n#[derive(Debug)]\nenum TransportError {\n    MissingCustomer,\n    EmptyInvoice,\n}\n\nfn into_command(\n    request: CreateInvoiceRequest,\n    tenant: &str,\n) -> Result<CreateInvoiceCommand, TransportError> {\n    if request.customer_id.trim().is_empty() {\n        return Err(TransportError::MissingCustomer);\n    }\n\n    if request.line_totals.is_empty() {\n        return Err(TransportError::EmptyInvoice);\n    }\n\n    Ok(CreateInvoiceCommand {\n        tenant: tenant.to_string(),\n        customer_id: request.customer_id,\n        line_totals: request.line_totals,\n    })\n}\n\nstruct InvoiceService;\n\nimpl InvoiceService {\n    fn create(&self, command: &CreateInvoiceCommand) -> String {\n        format!(\"inv-{}\", command.customer_id)\n    }\n}\n\nfn main() {\n    let request = CreateInvoiceRequest {\n        customer_id: String::from(\"cust-7\"),\n        line_totals: vec![1_200_u64, 3_000],\n    };\n\n    let command = into_command(request, \"acme\").unwrap();\n    let total_cents: u64 = command.line_totals.iter().copied().sum();\n    let service = InvoiceService;\n    let invoice_id = service.create(&command);\n\n    println!(\"tenant = {}\", command.tenant);\n    println!(\"customer = {}\", command.customer_id);\n    println!(\"total cents = {}\", total_cents);\n    println!(\"invoice = {}\", invoice_id);\n}",
+  "grpc_status_deadline_retry": "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nenum GrpcCode {\n    InvalidArgument,\n    DeadlineExceeded,\n    Unavailable,\n    Cancelled,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct GrpcStatus {\n    code: GrpcCode,\n    message: &'static str,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct RetryDecision {\n    retry: bool,\n    reason: &'static str,\n}\n\nfn classify(status: GrpcStatus, idempotent: bool) -> RetryDecision {\n    match status.code {\n        GrpcCode::Unavailable | GrpcCode::DeadlineExceeded if idempotent => RetryDecision {\n            retry: true,\n            reason: \"transient\",\n        },\n        GrpcCode::Cancelled => RetryDecision {\n            retry: false,\n            reason: \"caller_cancelled\",\n        },\n        _ => RetryDecision {\n            retry: false,\n            reason: \"do_not_retry\",\n        },\n    }\n}\n\nfn should_abort(deadline_ms: u64, elapsed_ms: u64, cancelled: bool) -> bool {\n    cancelled || elapsed_ms >= deadline_ms\n}\n\nfn main() {\n    let unavailable = GrpcStatus {\n        code: GrpcCode::Unavailable,\n        message: \"peer restarting\",\n    };\n    let invalid = GrpcStatus {\n        code: GrpcCode::InvalidArgument,\n        message: \"line_totals must not be empty\",\n    };\n\n    let retry_unavailable = classify(unavailable, true);\n    let retry_invalid = classify(invalid, true);\n\n    println!(\"retry unavailable = {}\", retry_unavailable.retry);\n    println!(\"retry invalid = {}\", retry_invalid.retry);\n    println!(\"cancelled = {}\", should_abort(150, 120, true));\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,60 +1,65 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Rust performance is about work, movement, and layout",
-    body: "The language removes many accidental costs, but it does not remove actual work. Allocation, copying, cache misses, branch misses, syscalls, and synchronization still dominate when they dominate.",
+    title: "Performance is work, movement, and layout",
+    body: "Strip away the framing and a hot path is doing a small number of expensive things: allocating and freeing memory, copying bytes, missing the cache, mispredicting a branch, making a syscall, or waiting on a lock. Rust removes accidental versions of these, but the genuine ones still dominate when they dominate. Naming which one you are paying for is most of the diagnosis.",
   },
   {
-    title: "Ownership shows where cost is introduced",
-    body: "A clone, an owned boundary, or a task handoff is not only a type-system event. It is often an allocation or copy decision. Rust makes those choices visible enough to review.",
+    title: "Ownership is where cost is introduced",
+    body: "In Rust the expensive decisions are written down in the type system. A clone is usually an allocation plus a copy. An owned function boundary is a decision to duplicate or transfer rather than borrow. A task handoff is a move across a thread. Because these are visible in the signatures, a performance review can read them off the code instead of reverse-engineering them from a profiler.",
   },
   {
-    title: "Measure with the right tool for the right question",
-    body: "Benchmarking compares alternatives under controlled inputs. Profiling finds hot code paths. Tracing shows timelines and causality. Production observability shows what the real service is doing under real load.",
+    title: "Each measuring tool answers a different question",
+    body: "Benchmarking compares two alternatives under a fixed input. Profiling finds which code path eats the time or the allocations. Tracing reconstructs a timeline and shows causality across queues and services. Production observability tells you whether any of it matters under real load. Mixing them up is how teams optimize a path that was never on the critical timeline.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You already know that layout, dispatch, and allocation matter. Rust adds stronger defaults: generic code is usually statically dispatched, ownership makes clones visible, and safe slice-based code often gives the optimizer enough structure to remove checks.",
+    body: "The cost model is familiar: layout, dispatch, allocation, and aliasing all still decide the outcome. What changes is who keeps you honest. In C++ you reason about whether a tuned loop is also correct under aliasing; in Rust the borrow checker has already settled aliasing, so the compiler tends to have more freedom to vectorize and elide bounds checks. Spend your attention on the cost model, not on defending correctness by hand.",
   },
   {
     title: "C# background",
-    body: "A major shift is that allocation pressure is no longer amortized behind a moving GC boundary. Rust makes ownership and buffer reuse explicit, which often improves latency discipline as much as raw throughput.",
+    body: "The biggest shift is that there is no moving collector quietly amortizing your allocations. Every heap object you create is a deallocation you will eventually pay for, on a thread you can name. That removes GC pauses from your tail latency, but it moves the work to you: buffer reuse, capacity hints, and borrowing instead of copying are now your job, not the runtime's.",
   },
   {
     title: "Go background",
-    body: "Go makes concurrency and allocation easy to express, but that can hide hot-path copying and heap churn. Rust performance work usually begins by making ownership, borrowing, and batch boundaries more explicit.",
+    body: "Go makes a goroutine and a slice copy feel almost free to write, which is exactly how hidden heap churn and per-request copying accumulate. Rust does not make those cheaper; it makes them visible. A clone is a word you typed, and a task handoff is an ownership move you can see. Performance work usually starts by reading those boundaries back, not by adding more concurrency.",
+  },
+  {
+    title: "Python background",
+    body: "Your instinct that the hot loop should live in C still applies, but in Rust the hot loop is ordinary Rust. There is no interpreter overhead to escape and no NumPy boundary to cross, so a plain iterator over a flat slice is already the fast path. The new discipline is layout: a Vec of structs scanned in order behaves like a contiguous array, while a graph of boxed objects behaves like Python's pointer-chasing object model and pays for it in cache misses.",
   },
 ]
 
 const performanceModelCards = [
   {
     title: "Allocation and deallocation",
-    body: "Heap traffic is often the first measurable cost in parser, logging, queue, and request-shaping code. Reuse buffers, preallocate when bounds are real, and avoid cloning data that only needed to be borrowed.",
+    body: "Heap traffic is the most common first cost in parser, logging, queue, and request-shaping code, because each allocation is two trips to the allocator and a chance to fragment. The levers are direct: reuse buffers across iterations, preallocate when the bound is real, and stop cloning data that only ever needed to be read.",
   },
   {
     title: "Data layout and locality",
-    body: "The CPU likes predictable contiguous access. Flat buffers, row-major scans, and compact structs often matter more than one clever instruction-level tweak.",
+    body: "Modern CPUs are fast at arithmetic and slow at waiting for memory, so the access pattern often matters more than the instruction count. A flat buffer scanned in storage order lets the prefetcher work; a pointer-chasing graph defeats it. Compact, contiguous structs frequently beat one clever instruction-level tweak.",
   },
   {
     title: "Dispatch and control flow",
-    body: "Static dispatch preserves concrete type knowledge for inlining and optimization. Dynamic dispatch can still be correct, but it should be chosen for runtime flexibility, not by habit.",
+    body: "Static dispatch keeps the concrete type visible at the call site, which is what lets the optimizer inline and specialize. Dynamic dispatch through a trait object is still correct and often the right design, but it should be a deliberate choice for runtime flexibility, not a default reached for out of habit in a hot loop.",
   },
   {
     title: "Synchronization and syscalls",
-    body: "A fast loop can still lose badly if it flushes too often, locks too broadly, or crosses too many queue and runtime boundaries.",
+    body: "A loop can be perfectly tuned and still lose at the system boundary. Flushing too often, holding a lock across too much work, or crossing too many queue and runtime boundaries turns CPU efficiency into wall-clock waiting. Batching and narrowing critical sections usually recovers more than micro-tuning the arithmetic.",
   },
 ]
 
@@ -248,17 +253,36 @@ export function PageCh33PerformanceOrientedRust() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A request-processing service regressed after a readability refactor: p99 latency increased, heap traffic rose,
-            and queue wait became visible. The business requirement is to restore the cost model by measuring allocation,
-            data movement, layout, dispatch, synchronization, and live production latency before changing lower-level code.
+            A request-processing service regressed after a refactor that was meant to improve readability. p99 latency
+            climbed, heap traffic rose, and queue wait that had been invisible became a line on the dashboard. Nobody
+            changed an algorithm; the team changed where data was owned and copied, and the cost showed up downstream.
+            The job now is not to guess. It is to rebuild the cost model deliberately, measuring allocation, data
+            movement, layout, dispatch, synchronization, and live production latency before touching any lower-level
+            code.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            That last clause is the whole chapter. The fastest way to waste a week is to start by rewriting the inner
+            loop. The reliable path is to ask the questions in order, let each one rule out a class of explanation, and
+            only descend to instruction-level work once the evidence points there. The diagram below is the order; the
+            sections after it explain each box.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD
+  A[State workload and metric] --> B[Count allocations, copies, layout, sync]
+  B --> C[Benchmark alternatives in release mode]
+  C --> D[Profile the slow variant]
+  D --> E[Confirm with traces and production metrics]
+  E -->|matters in prod| F[Change lower-level code]
+  E -->|does not matter| G[Stop: the hot path was elsewhere]`}
+            caption="The performance review runs top to bottom. Each step can end the investigation before you reach the code."
+          />
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-            <h4 className="font-semibold text-foreground mb-2">A good performance review order</h4>
+            <h4 className="font-semibold text-foreground mb-2">The review order, in words</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-              <li>State the workload and the metric first.</li>
-              <li>Count allocations, copies, cache-unfriendly layout, and synchronization boundaries.</li>
-              <li>Benchmark alternatives in release mode.</li>
-              <li>Profile the slow one, then confirm the live system with traces and production metrics.</li>
+              <li>State the workload and the metric first, so every later number has a question it answers.</li>
+              <li>Count allocations, copies, cache-unfriendly layout, and synchronization boundaries by reading the code.</li>
+              <li>Benchmark the alternatives in release mode, never in debug.</li>
+              <li>Profile the slow one to learn where the time actually goes, then confirm the live system with traces and production metrics.</li>
             </ol>
           </div>
         </section>
@@ -268,6 +292,13 @@ export function PageCh33PerformanceOrientedRust() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Before any technique, fix the frame. Rust does not make programs fast; it removes whole categories of
+            accidental cost and then hands you a clear view of the cost that remains. The phrase &ldquo;zero-cost
+            abstraction&rdquo; is often misread as &ldquo;zero work.&rdquo; It means the opposite of free: it means an
+            abstraction does not add overhead beyond the hand-written equivalent, so the real work is still entirely
+            present and still entirely yours to manage. The three ideas below are the lens for the rest of the chapter.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -285,7 +316,12 @@ export function PageCh33PerformanceOrientedRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">The Rust performance model</h4>
+            <h4 className="font-semibold text-foreground mb-3">The four costs worth tracking</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Almost every Rust performance problem reduces to one of four costs. Keeping the list short is the point:
+              when latency regresses, you walk these four in order and ask which one the change touched. Most regressions
+              announce themselves here long before you need a profiler.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {performanceModelCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -298,6 +334,14 @@ export function PageCh33PerformanceOrientedRust() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Allocation awareness</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Allocation is the cost most engineers underestimate because no single call looks expensive. The damage is
+              cumulative: a per-request <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code>{" "}
+              here, a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">clone()</code> there, a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec</code> that grows by reallocating
+              instead of being sized once, and suddenly the allocator is on your hot path and your tail latency depends on
+              it. The practical moves are unglamorous and they pay reliably.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {allocationNotes.map((note) => (
                 <li key={note}>{note}</li>
@@ -314,6 +358,36 @@ export function PageCh33PerformanceOrientedRust() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Cache locality and branch prediction</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Two data shapes can hold identical values and run at very different speeds. The difference is what the
+              hardware sees while it walks them. A single flat allocation lets the prefetcher pull the next cache line
+              before you ask for it; a structure made of many small allocations forces the CPU to chase a pointer, stall
+              on the load, then chase the next one. The diagram below is the same data in both shapes &mdash; this is the
+              picture to keep in mind whenever you reach for a nested collection.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Flat["flat Vec: one allocation"]
+    direction LR
+    F0[a] --> F1[b] --> F2[c] --> F3[d]
+  end
+  Flat -.prefetcher friendly.-> Fast((fast scan))`}
+              caption="Flat layout: one allocation, values adjacent, the prefetcher pulls the next line ahead of you."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The same values stored as a graph of small allocations look very different to the hardware:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Nested["Vec of boxes: many allocations"]
+    direction LR
+    H[handles] --> P0[ptr] --> B0[a]
+    H --> P1[ptr] --> B1[b]
+    H --> P2[ptr] --> B2[c]
+  end
+  Nested -.pointer chasing.-> Slow((cache misses))`}
+              caption="Boxed layout: each element is a separate allocation, so the CPU stalls chasing one pointer after another."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {localityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -326,6 +400,35 @@ export function PageCh33PerformanceOrientedRust() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Static dispatch and inlining</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Generics and trait objects are the two ways Rust calls behavior you do not know concretely at the call
+              site, and they sit at opposite ends of the cost spectrum. A generic function is monomorphized: the
+              compiler stamps out a separate copy per concrete type, so each copy sees an exact call target it can
+              inline and optimize through. A <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{"dyn Trait"}</code>{" "}
+              value carries a pointer to a vtable, and the call goes through that pointer, which the optimizer usually
+              cannot see past. The diagram shows where the indirection lives.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Static["Generic: monomorphized"]
+    GC[call site] --> GT[concrete fn body]
+    GT --> GI[inline and specialize]
+  end`}
+              caption="Static dispatch: the call site sees the concrete body, so the optimizer can inline and specialize through it."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Dynamic dispatch puts a vtable on the same path, and the indirection is where the optimizer loses sight of
+              the target:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Dynamic["dyn Trait: vtable"]
+    DC[call site] --> DV[vtable pointer]
+    DV --> DF[indirect call]
+    DF --> DB[opaque to optimizer]
+  end`}
+              caption="Dynamic dispatch: the call routes through a vtable pointer the optimizer usually cannot follow past."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {dispatchCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -338,6 +441,17 @@ export function PageCh33PerformanceOrientedRust() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Iterator performance, bounds checks, and unnecessary clones</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              There is a persistent folklore that iterator chains are slow and hand-written index loops are fast. The
+              truth is closer to the reverse, and the reason is bounds checks. When you index a slice manually with a
+              data-dependent index, the compiler must insert a check that the index is in range, because it cannot prove
+              otherwise. When you iterate &mdash; over a slice, over{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">chunks</code>, over{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">windows</code> &mdash; the range is
+              encoded in the iterator itself, so the check is provably unnecessary and the compiler removes it. The
+              honest answer is always to read the generated code, but the default instinct should be: express the loop in
+              terms of slices and let the compiler discharge the proof for you.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {iteratorCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -357,7 +471,28 @@ export function PageCh33PerformanceOrientedRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Benchmarking methodology</h4>
+            <h4 className="font-semibold text-foreground mb-3">Picking the right measuring tool</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The four tools below are not a hierarchy where one replaces the others; they answer four different
+              questions, and a confident answer from the wrong tool is how teams optimize code that was never on the
+              critical path. Match the tool to the question first. The diagram is that mapping; the cards explain each
+              one.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  Q1[Which variant is faster?] --> Bench[Benchmark]
+  Q2[Where does the time go?] --> Prof[Profile]`}
+              caption="Comparing alternatives is a benchmark question; finding where the time goes is a profiling question."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The other two questions are about timeline and real load, and they map to two more tools:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  Q3[What happened, and when?] --> Trace[Trace]
+  Q4[Does it matter in prod?] --> Obs[Observability]`}
+              caption="Reconstructing a timeline is a tracing question; whether it matters under real load is an observability question."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {measurementCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -402,8 +537,16 @@ cargo bench`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers className="h-5 w-5 text-primary" />
+              <h4 className="font-semibold text-foreground">How performance thinking shifts by background</h4>
+            </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Senior engineers do not arrive at Rust as blank slates. The useful question is not which crate replaces
+              which library; it is which of your instincts still hold and which one quietly leads you wrong. Each card
+              names the mental-model shift for one background.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -419,6 +562,11 @@ cargo bench`}</code>
             <Wrench className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            These are the habits that keep a service fast without a heroics phase. None of them is a micro-optimization;
+            each one shapes the data and the API so the expensive cost is paid once, at a boundary you chose, instead of
+            silently on every request.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
@@ -433,6 +581,11 @@ cargo bench`}</code>
             <Bug className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Each of these is a true story that started with a reasonable-sounding sentence. The common thread is
+            declaring victory from one number while a different number quietly got worse, or reaching for a lower-level
+            change before the evidence pointed there.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
@@ -456,6 +609,12 @@ cargo bench`}</code>
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Both examples are small on purpose. Each one is a single design decision from the sections above, made
+            concrete and runnable. Read the flow diagram first, then the code, then press Run and confirm the output
+            before changing anything &mdash; the point is to see the cost decision in the signature, not just to watch it
+            print.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -477,6 +636,26 @@ cargo bench`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the return type is{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;&amp;str&gt;</code>, not{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;String&gt;</code>. The function
+              never copies a route; it borrows each label out of the input and hands back views that live exactly as long
+              as the input slice. The one allocation in the whole function is the result vector, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec::with_capacity</code> sizes it once
+              up front so the push loop never reallocates. The flow is: size the buffer, then for each request keep or
+              skip on a single threshold test.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  In[requests slice] --> Cap[with_capacity once]
+  Cap --> Loop{bytes over threshold}
+  Loop -->|yes| Push[push borrowed route]
+  Loop -->|no| Skip[skip]
+  Push --> Out[vec of borrowed routes]
+  Skip --> Out`}
+              caption="One allocation for the result, borrowed labels throughout, one branch per request."
+            />
             <RustCodeEditor
               code={codes.performance_allocation_borrowed_filter}
               onChange={(newCode) => updateCode("performance_allocation_borrowed_filter", newCode)}
@@ -531,6 +710,27 @@ cargo bench`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the grid is one{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;u32&gt;</code>, not a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;Vec&lt;u32&gt;&gt;</code>. The
+              rows are not separate allocations; they are slices carved out of the same flat buffer by{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">chunks(self.cols)</code>. That single
+              choice is what keeps the scan contiguous and lets the compiler drop bounds checks, because the chunk width
+              proves the row boundary instead of a hand-written index. The flow is: take the flat buffer, split it into
+              row-width chunks, sum each chunk.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  Flat[flat Vec, rows*cols] --> Chunk[chunks of cols]
+  Chunk --> R0[row 0 slice]
+  Chunk --> R1[row 1 slice]
+  R0 --> S0[sum row 0]
+  R1 --> S1[sum row 1]
+  S0 --> Out[Vec of row sums]
+  S1 --> Out`}
+              caption="One contiguous buffer, sliced into rows by width. No nested allocation, no manual index proof."
+            />
             <RustCodeEditor
               code={codes.performance_row_major_scan}
               onChange={(newCode) => updateCode("performance_row_major_scan", newCode)}
@@ -601,584 +801,3 @@ cargo bench`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch33-performance-oriented-rust-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Separate benchmarking, profiling, tracing, and production observability",
-    objective: "Practice choosing the measurement tool that matches the actual performance question.",
-    starterPrompt:
-      "You need to compare two parsing functions, explain a latency regression inside one of them, understand where request time is spent across queueing and IO, and confirm whether the regression matters in the live service.",
-    prompts: [
-      "Which question wants a benchmark?",
-      "Which question wants a profile?",
-      "Which question wants tracing?",
-      "Which question wants production metrics or logs?",
-    ],
-    acceptanceCriteria: [
-      "You map each question to a distinct tool with a reason tied to the information it provides.",
-      "You avoid treating one benchmark result as a full production diagnosis.",
-      "You explain at least one way tracing and profiling answer different questions.",
-    ],
-    hints: [
-      "A benchmark compares alternatives. A profile explains hotspots. A trace shows timeline and causality.",
-      "Production observability answers what the deployed system is actually doing.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Find allocation pressure and hidden clones in a hot path",
-    objective: "Read a request loop and identify where ownership choices add heap traffic.",
-    starterPrompt:
-      "A request filter clones route strings into a temporary vector, formats a label per item, and pushes one record at a time into a dynamically growing output buffer.",
-    prompts: [
-      "Which values only needed borrowed access?",
-      "Which allocation could be preplanned from a real bound?",
-      "Which clone is semantically real and which one only papers over an API shape problem?",
-      "What would you measure after the refactor to confirm the change helped?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one unnecessary clone and one avoidable growth pattern.",
-      "You propose a borrowed read path and one preallocation repair.",
-      "You mention at least one follow-up metric such as allocation count, latency, or bytes allocated per request.",
-    ],
-    hints: [
-      "Look for helpers that take ownership only to read.",
-      "Look for vectors or strings that grow in obviously bounded loops.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Write a benchmark plan for an allocation-heavy function",
-    objective: "Design a benchmark that compares alternatives without confusing it with profiling or production tuning.",
-    starterPrompt:
-      "You are comparing two versions of a log-enrichment function: one clone-heavy and one borrow-first with preallocation.",
-    prompts: [
-      "Specify the fixed input shape and size distribution.",
-      "State that the benchmark runs in release mode.",
-      "Define what you will record: wall-clock time, allocations, output count, or all three.",
-      "Describe how you will keep the compiler from optimizing the whole function away when appropriate.",
-    ],
-    acceptanceCriteria: [
-      "Your benchmark plan compares the same logical workload under two implementations.",
-      "You name at least one release-build requirement and one measurement target.",
-      "You distinguish the later profiling step from the benchmark step.",
-      "You avoid claiming a speedup before the plan has been executed.",
-    ],
-    hints: [
-      "A good benchmark plan makes the input and the stopping condition boring.",
-      "If the function result is unused, dead-code elimination can make the numbers meaningless.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Refactor storage to improve locality",
-    objective: "Replace an indirection-heavy dense layout with a flatter one that better matches the access pattern.",
-    starterPrompt:
-      "You inherit a dense heatmap stored as `Vec<Vec<u64>>`, and the hot loop walks every row in full on every request.",
-    prompts: [
-      "What does one flat `Vec<u64>` plus `rows` and `cols` remove from the memory-access pattern?",
-      "Which helper methods should expose rows as borrowed slices instead of reconstructing vectors?",
-      "How does this change your reasoning about bounds checks in the inner loop?",
-      "What measurement would you take before and after the refactor?",
-    ],
-    acceptanceCriteria: [
-      "You replace nested ownership with one flat owner for the dense case.",
-      "You mention locality or cache behavior explicitly.",
-      "You explain how row views or chunks make inner-loop bounds reasoning simpler.",
-      "You mention at least one before-and-after measurement target.",
-    ],
-    hints: [
-      "The point is not only fewer allocations. It is also more predictable traversal.",
-      "Chunked slice iteration often gives the optimizer a better proof story than ad hoc indexing.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Compare iterator and loop implementations responsibly",
-    objective: "Avoid folklore by designing a fair comparison between two equivalent hot loops.",
-    starterPrompt:
-      "You have one implementation written as an iterator chain and one as an explicit `for` loop over the same slice.",
-    prompts: [
-      "How will you keep the logical work identical between the two versions?",
-      "What would make the comparison unfair, such as extra allocation or a changed branch structure in only one variant?",
-      "Would you inspect generated code or profile data before drawing conclusions from the benchmark alone?",
-      "How would you report the result without claiming one style is globally faster?",
-    ],
-    acceptanceCriteria: [
-      "You keep the workload and output identical between variants.",
-      "You mention at least one unfair comparison trap.",
-      "You include at least one follow-up inspection step such as profiling or generated-code review.",
-      "You report the result as workload-specific rather than as a universal rule.",
-    ],
-    hints: [
-      "The style difference should be the variable, not the data shape or allocation pattern.",
-      "Iterator versus loop is a measurement question, not a religious one.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose release settings and performance review policy for a service",
-    objective: "Make build mode, profile settings, and runtime observability part of the performance design.",
-    starterPrompt:
-      "You are shipping a latency-sensitive binary with one hot parser, one CPU-heavy enrichment step, and an operator requirement that crash behavior remain explicit.",
-    prompts: [
-      "Which release-build command should every performance run use?",
-      "Which profile settings would you consider, and what tradeoff does each one carry?",
-      "When might `panic = \"abort\"` be acceptable, and when would it be the wrong contract?",
-      "Which live signals would you require before trusting the optimized build in production?",
-    ],
-    acceptanceCriteria: [
-      "You name release mode explicitly for measurement.",
-      "You justify at least two profile settings or profile decisions with tradeoffs.",
-      "You explain `panic = \"abort\"` as a binary contract choice rather than a free speed flag.",
-      "You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate.",
-    ],
-    hints: [
-      "Compiler flags are workload tools, not trophies.",
-      "A good performance review says what changed in both build behavior and runtime behavior.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why is performance work usually clearer after ownership boundaries become honest?",
-  "What is the practical difference between reducing allocations and reducing branch misses?",
-  "Why are slice-based and chunk-based loops often easier to optimize than index-heavy loops?",
-  "When is a clone economically justified even in performance-sensitive code?",
-  "What does release mode change, and what questions does it still not answer by itself?",
-]
-
-const workingLoop = [
-  "State the workload and the metric first.",
-  "Separate benchmarking from profiling, tracing, and production observability.",
-  "Refactor allocation and layout before lower-level tricks.",
-  "Validate the change in release mode, then confirm it in the live service with the right signals.",
-]
-
-export function PageCh33PerformanceOrientedRustExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 65
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 33 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice performance work the way it survives review: explicit workload definitions, careful measurement, calmer
-          ownership boundaries, and layout choices that make the CPU&apos;s job easier rather than harder.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a performance review. The strongest answer does not stop at “make it faster.” It
-                says what the workload is, what the metric is, what moved in the cost model, and which measurement tool
-                will confirm the change honestly.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(64)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 33
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Performance drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Allocation-aware hot-route filter"
-          description={
-            <>
-              Repair the starter so the result buffer is preallocated and the threshold comparison includes the boundary
-              value. The checker expects the exact output below.
-            </>
-          }
-          filename="hot_routes_lab.rs"
-          runKey="ch33_ex_hot_routes"
-          expectedOutput={"hot = 2\nfirst = /search\ncapacity ok = true"}
-          helperText={
-            <>
-              Tip: switch to{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec::with_capacity(requests.len())</code>{" "}
-              and change the comparison so a request with exactly{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">512</code> bytes still qualifies.
-            </>
-          }
-          initialCode={`#[derive(Debug)]
-struct Request<'a> {
-    route: &'a str,
-    bytes: usize,
-}
-
-fn hot_routes<'a>(requests: &'a [Request<'a>], min_bytes: usize) -> Vec<&'a str> {
-    let mut out = Vec::new();
-
-    for request in requests {
-        if request.bytes > min_bytes {
-            out.push(request.route);
-        }
-    }
-
-    out
-}
-
-fn main() {
-    let requests = [
-        Request {
-            route: "/health",
-            bytes: 128,
-        },
-        Request {
-            route: "/search",
-            bytes: 900,
-        },
-        Request {
-            route: "/checkout",
-            bytes: 512,
-        },
-        Request {
-            route: "/metrics",
-            bytes: 64,
-        },
-    ];
-
-    let hot = hot_routes(&requests, 512);
-
-    println!("hot = {}", hot.len());
-    println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.capacity() >= requests.len());
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to choose the right measurement tool, spot allocation and locality
-            mistakes in hot paths, compare loops and iterators without folklore, and explain performance changes in the
-            same ownership-and-boundary language another senior engineer can review quickly.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch33_performance_oriented_rust/allocation_borrowed_filter.rs`
-````
-#[derive(Debug)]
-struct Request<'a> {
-    route: &'a str,
-    bytes: usize,
-}
-
-fn hot_routes<'a>(requests: &'a [Request<'a>], min_bytes: usize) -> Vec<&'a str> {
-    let mut out = Vec::with_capacity(requests.len());
-
-    for request in requests {
-        if request.bytes >= min_bytes {
-            out.push(request.route);
-        }
-    }
-
-    out
-}
-
-fn main() {
-    let requests = [
-        Request {
-            route: "/health",
-            bytes: 128,
-        },
-        Request {
-            route: "/search",
-            bytes: 900,
-        },
-        Request {
-            route: "/checkout",
-            bytes: 512,
-        },
-        Request {
-            route: "/metrics",
-            bytes: 64,
-        },
-    ];
-
-    let hot = hot_routes(&requests, 512);
-
-    println!("hot = {}", hot.len());
-    println!("first = {}", hot.first().copied().unwrap_or("none"));
-    println!("capacity ok = {}", hot.capacity() >= requests.len());
-}
-````
-
-### File: `examples/ch33_performance_oriented_rust/row_major_scan.rs`
-````
-#[derive(Debug)]
-struct Grid {
-    rows: usize,
-    cols: usize,
-    data: Vec<u32>,
-}
-
-impl Grid {
-    fn row_sums(&self) -> Vec<u32> {
-        debug_assert_eq!(self.data.len(), self.rows * self.cols);
-        self.data
-            .chunks(self.cols)
-            .map(|row| row.iter().copied().sum())
-            .collect()
-    }
-
-    fn total(&self) -> u32 {
-        self.data.iter().copied().sum()
-    }
-}
-
-fn main() {
-    let grid = Grid {
-        rows: 2,
-        cols: 4,
-        data: vec![1_u32, 2, 3, 4, 5, 6, 7, 8],
-    };
-
-    let sums = grid.row_sums();
-
-    println!("row0 = {}", sums[0]);
-    println!("row1 = {}", sums[1]);
-    println!("total = {}", grid.total());
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -62,3 +62,5 @@ export { PageCh31DistributedTaskExecution } from "./page-ch31-distributed-task-e
- export { PageCh31DistributedTaskExecutionExercises } from "./page-ch31-distributed-task-execution-exercises"
- export { PageCh32MpiAndHighPerformanceComputing } from "./page-ch32-mpi-and-high-performance-computing"
- export { PageCh32MpiAndHighPerformanceComputingExercises } from "./page-ch32-mpi-and-high-performance-computing-exercises"
-+export { PageCh33PerformanceOrientedRust } from "./page-ch33-performance-oriented-rust"
-+export { PageCh33PerformanceOrientedRustExercises } from "./page-ch33-performance-oriented-rust-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -73,6 +73,8 @@ import {
-   PageCh31DistributedTaskExecutionExercises,
-   PageCh32MpiAndHighPerformanceComputing,
-   PageCh32MpiAndHighPerformanceComputingExercises,
-+  PageCh33PerformanceOrientedRust,
-+  PageCh33PerformanceOrientedRustExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -141,6 +143,8 @@ const PAGE_COMPONENTS = [
-   PageCh31DistributedTaskExecutionExercises,
-   PageCh32MpiAndHighPerformanceComputing,
-   PageCh32MpiAndHighPerformanceComputingExercises,
-+  PageCh33PerformanceOrientedRust,
-+  PageCh33PerformanceOrientedRustExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh33Output } from "./rust-simulator-ch33"
- import { simulateCh32Output } from "./rust-simulator-ch32"
- import { simulateCh31Output } from "./rust-simulator-ch31"
- import { simulateCh30Output } from "./rust-simulator-ch30"
-@@ -1010,6 +1011,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch33Output = simulateCh33Output(code, key)
-+  if (ch33Output !== null) return ch33Output
- 
-   const ch32Output = simulateCh32Output(code, key)
-   if (ch32Output !== null) return ch32Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -22,6 +22,7 @@ import { DEFAULT_CODES_CH29 } from "./default-codes-ch29"
- import { DEFAULT_CODES_CH30 } from "./default-codes-ch30"
- import { DEFAULT_CODES_CH31 } from "./default-codes-ch31"
- import { DEFAULT_CODES_CH32 } from "./default-codes-ch32"
-+import { DEFAULT_CODES_CH33 } from "./default-codes-ch33"
- 
- export interface PageConfig {
-   id: string
-@@ -808,6 +809,29 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Partition matrix rows across ranks, choose collective-friendly layouts, and reason about hybrid MPI plus threads and communication profiling",
-         icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch33-performance-oriented-rust",
-+    title: "Chapter 33 · Performance-Oriented Rust",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch33-performance-oriented-rust",
-+        title: "Performance-Oriented Rust",
-+        shortTitle: "Performance",
-+        description:
-+          "Rust's performance model, allocation awareness, cache locality, branch prediction, static dispatch, iterator tradeoffs, benchmarking methodology, and release profile choices",
-+        icon: "book",
-+        codeKeys: ["performance_allocation_borrowed_filter", "performance_row_major_scan"],
-+      },
-+      {
-+        id: "ch33-performance-oriented-rust-exercises",
-+        title: "Chapter 33 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Write a benchmark plan, refactor for locality, compare loops and iterators responsibly, and make measurement discipline explicit",
-+        icon: "trophy",
-       },
-     ],
-   },
-@@ -1258,5 +1282,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH30,
-   ...DEFAULT_CODES_CH31,
-   ...DEFAULT_CODES_CH32,
-+  ...DEFAULT_CODES_CH33,
- }
- 
- export interface BookState {
-````

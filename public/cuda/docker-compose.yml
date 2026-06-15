@@ -1,0 +1,26 @@
+# Real CUDA from Rust — Chapter 37.
+#
+# Requires: an NVIDIA GPU, a recent driver, Docker, and the NVIDIA Container
+# Toolkit (so Docker can expose the GPU). Build once, then run:
+#
+#   docker compose build
+#   docker compose run --rm cuda                       # the solution, N=1024
+#   docker compose run --rm cuda matmul_solution 2048  # bigger matrix
+#   docker compose run --rm cuda matmul_challenge      # the starter (correct=false until you finish it)
+#
+# If `docker compose run` does not pass the GPU through on your version, run the
+# image directly:  docker run --rm --gpus all rust-cuda-matmul
+
+services:
+  cuda:
+    build:
+      context: .
+    image: rust-cuda-matmul
+    working_dir: /work
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

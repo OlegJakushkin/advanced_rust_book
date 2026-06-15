@@ -1,81 +1,86 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "A Tokio task is a scheduled future, not an OS thread",
-    body: "Tokio runs many futures on a smaller set of runtime worker threads. A task only makes progress when the runtime polls it, and it only stops monopolizing a worker when it reaches an await point or otherwise yields.",
+    title: "A task is a scheduled future, not an OS thread",
+    body: "Tokio runs many futures on a much smaller set of worker threads. A task makes progress only when the runtime polls it, and it stops monopolizing a worker only when it reaches an await point and returns control. Nothing preempts a running future, so a task that loops without ever awaiting will sit on its worker and starve everything else scheduled there. The cost of a task is the size of its state machine plus a slot in the scheduler, which is why you can have hundreds of thousands of them, but it is not zero, so spawning is still a decision rather than a reflex.",
   },
   {
-    title: "The runtime is scheduler plus drivers",
-    body: "A Tokio runtime combines task scheduling with IO and timer drivers. The scheduler polls ready tasks, the IO driver wakes tasks when sockets become ready, and the timer driver wakes tasks when deadlines fire.",
+    title: "The runtime is a scheduler plus drivers, not just a macro on main",
+    body: "What the runtime macro actually starts is three cooperating parts: a scheduler that polls ready tasks, an IO driver that registers sockets with the operating system and wakes the right task when one becomes readable or writable, and a timer driver that wakes tasks when a deadline fires. Sleeps and timeouts are driver-backed wakeups, not background threads and not busy loops, and socket readiness wakes one specific task rather than blocking a whole thread per connection. Understanding these three parts is what makes performance and shutdown behavior predictable rather than mysterious.",
   },
   {
-    title: "Blocking work is a boundary decision",
-    body: "Async code is excellent for waiting. CPU-heavy or legacy blocking work belongs on a blocking pool or a separate thread boundary. The design is calmer once that distinction is explicit.",
+    title: "Blocking work is a boundary you place on purpose",
+    body: "Async is excellent at waiting and terrible at hiding CPU. A long parse, a hash, an image transform, or any legacy synchronous API will hold a worker thread for its entire duration and quietly stall every other task on that worker, because there is no await point for the scheduler to interleave. The fix is to move that work across an explicit boundary, onto the blocking pool or a dedicated thread, so the async scheduler keeps making progress. The whole runtime gets calmer once the line between waiting and computing is something you wrote down rather than something you discovered under load.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Tokio is not a thin wrapper over `std::thread`. It is closer to an event loop plus a future scheduler. The key Rust difference is that ownership, `Send`, and lifetime rules still shape task boundaries directly.",
+    body: "If your reflex is to reach for a thread pool plus a hand-rolled event loop on top of epoll or IOCP, Tokio is that loop and that scheduler, already built and integrated with the timer and IO machinery. The shift that bites is that ownership, Send, and lifetimes do not relax just because work is asynchronous: a spawned future that captures a reference into the current stack frame will not compile, because the runtime may outlive that frame. Model a task as an owned unit of work you hand to the scheduler, not as a pointer with a callback attached.",
   },
   {
     title: "C# background",
-    body: "Tokio tasks overlap conceptually with `Task`-based async code, but the runtime model is more explicit. A spawned future on the multithread runtime usually needs `Send + 'static`, and blocking work must be moved off the worker threads deliberately.",
+    body: "Tokio tasks rhyme with Task and async/await, but the runtime is explicit where the CLR is ambient: there is no thread pool quietly underneath every await, and no synchronization context to resume on. A future spawned on the multithread runtime usually needs Send + 'static because the scheduler may move it between worker threads, and there is no equivalent of Task.Run that makes a CPU-bound method safe to drop into async code. Blocking work has to be pushed across a boundary by hand, not assumed to be handled for you.",
   },
   {
     title: "Go background",
-    body: "Tokio tasks may feel superficially goroutine-like, but the execution model is different. They are poll-driven futures that yield at await points. They are cheaper than OS threads, but they are not preemptive goroutines with ambient shared-memory conventions.",
+    body: "A goroutine and a Tokio task look alike from a distance and behave differently up close. Tokio futures are cooperatively scheduled and yield only at await points, so the Go habit of writing a tight CPU loop inside a goroutine and trusting the runtime to preempt it will instead pin a worker and stall its neighbors. There is also no ambient shared-memory convention: crossing a task boundary is an ownership move, and shared mutable state has to be wrapped in something the type system accepts rather than passed around as a goroutine would.",
+  },
+  {
+    title: "Python background",
+    body: "Coming from asyncio, the event loop and await syntax will feel familiar, but Rust removes the loopholes. There is no global event loop you can poke at from anywhere, and there is no run_in_executor that silently absorbs blocking calls without you naming them; spawn_blocking is the explicit, typed version of that move. Most importantly, Tokio's default runtime is genuinely multithreaded, so the GIL intuition that 'only one thing runs at a time anyway' is wrong, and the Send and Sync bounds the compiler enforces are exactly the data-race guards that asyncio never had to think about.",
   },
 ]
 
 const runtimeArchitectureCards = [
   {
     title: "Scheduler",
-    body: "Ready tasks are polled on runtime workers. On the multithread runtime, tasks may move between workers, which is why spawned futures usually need `Send`.",
+    body: "Polls ready tasks on a pool of worker threads and uses work-stealing to keep them busy. Because a task can be picked up by a different worker than the one that spawned it, the future and everything it captures usually have to be Send.",
   },
   {
     title: "IO driver",
-    body: "Sockets are registered with the runtime so readiness wakes the right task instead of blocking a whole thread on each connection.",
+    body: "Registers sockets with the operating system (epoll, kqueue, IOCP) and translates readiness notifications into task wakeups. One driver thread can watch thousands of connections, so you do not pay a thread per socket.",
   },
   {
     title: "Timer driver",
-    body: "Sleep, interval, and timeout APIs are part of the runtime. Timers are not busy loops. They are driver-backed wakeups.",
+    body: "Backs sleep, interval, and timeout. Deadlines are stored in a timer wheel and fire as wakeups, so a thousand idle timers cost almost nothing and never spin a CPU.",
   },
   {
     title: "Blocking pool",
-    body: "`spawn_blocking` runs closures on a separate pool intended for blocking or CPU-heavy work so the async scheduler can keep making progress.",
+    body: "A separate, growable pool for spawn_blocking closures: blocking syscalls, CPU-heavy work, and legacy synchronous APIs. Keeping that work here is what stops it from freezing the async workers.",
   },
 ]
 
 const taskBoundaryCards = [
   {
-    title: "`tokio::spawn`",
-    body: "Use this for async work that should run concurrently on the runtime. On the multithread runtime, the future and its output must satisfy the runtime's thread-transfer requirements, so captured values usually need to be owned and `Send`.",
+    title: "tokio::spawn",
+    body: "For async work that should run concurrently on the runtime. The future and its output must be Send + 'static on the multithread runtime, so captured values usually need to be owned. The returned join handle resolves to the task's output and surfaces a panic as an error.",
     code: `let handle = tokio::spawn(async move {
     // async work
     42_u32
 });`,
   },
   {
-    title: "`tokio::task::spawn_blocking`",
-    body: "Use this for CPU-bound parsing, compression, hashing, image work, or legacy blocking APIs. The closure runs on the blocking pool and returns one owned result back to the async side.",
+    title: "tokio::task::spawn_blocking",
+    body: "For CPU-bound parsing, compression, hashing, image work, or legacy blocking APIs. The closure runs on the blocking pool and hands one owned result back to the async side. Awaiting the handle is how the async task picks the result up without ever blocking a worker itself.",
     code: `let handle = tokio::task::spawn_blocking(move || {
     expensive_parse(bytes)
 });`,
   },
   {
     title: "A task boundary is an ownership boundary",
-    body: "If the spawned work may outlive the current stack frame, borrowed request-local data is usually the wrong shape. Move owned values into the task, or keep the work local and synchronous.",
+    body: "A spawned task can outlive the stack frame that created it, so borrowing request-local data into it is usually the wrong shape and the compiler will say so. Move the owned values in, or keep the work local and inline. The borrow checker enforcing this at compile time is what turns a class of lifetime bugs into type errors.",
     code: `tokio::spawn(async move {
     process(job).await
 });`,
@@ -84,49 +89,49 @@ const taskBoundaryCards = [
 
 const channelCards = [
   {
-    title: "mpsc",
-    body: "Good for owned work queues and result streams. Prefer bounded channels when producer speed should slow down under load instead of growing memory without limit.",
+    title: "mpsc (many to one)",
+    body: "The workhorse for owned work queues and result streams. Many producers, one consumer. Choose the bounded constructor when producer speed should push back under load: a full channel makes send await, which is backpressure expressed directly in the type rather than discovered later from a memory graph.",
   },
   {
-    title: "oneshot",
-    body: "Good for one reply, one stop signal, or one completion handoff between tasks.",
+    title: "oneshot (one value, once)",
+    body: "Exactly one value from one sender to one receiver. The natural shape for a reply to a request, a single completion handoff, or a stop signal. Dropping the sender resolves the receiver with an error, which is often how a task learns its initiator gave up.",
   },
   {
-    title: "watch",
-    body: "Good for latest-state propagation such as config snapshots or shutdown flags where receivers only care about the newest value.",
+    title: "watch (latest value only)",
+    body: "Holds a single current value that receivers can observe; new writes overwrite old ones. Ideal for config snapshots, feature flags, or a shutdown flag, where receivers only care about the newest state and not every intermediate one.",
   },
   {
-    title: "broadcast",
-    body: "Good for fan-out event delivery when several receivers should each observe the same published item stream.",
+    title: "broadcast (one to many)",
+    body: "Fan-out: every active receiver sees every published item. Useful for event delivery to several independent consumers. The buffer is bounded, so a slow receiver that falls too far behind is told it lagged rather than allowed to grow memory without limit.",
   },
 ]
 
 const gracefulShutdownSteps = [
-  "Pick one shutdown signal path early: `ctrl_c`, `oneshot`, `watch`, or a similar explicit stop channel.",
-  "Stop admission first. For servers, that usually means breaking the accept loop before process exit.",
-  "Tell background tasks to drain and finish rather than dropping the runtime under them abruptly.",
-  "Bound shutdown with timeouts and log what did not finish cleanly.",
-  "Close senders when appropriate so receivers wake up and see end-of-stream instead of waiting forever.",
+  "Pick one shutdown signal path early: ctrl_c, a oneshot, a watch flag, or a similar explicit stop channel. Decide this before the service works, not after.",
+  "Stop admission first. For servers, that usually means breaking the accept loop so no new work enters while in-flight work finishes.",
+  "Tell background tasks to drain and finish rather than dropping the runtime under them, which would cancel them mid-operation.",
+  "Bound shutdown with a timeout and log what did not finish, so a stuck task becomes a visible event instead of a hang.",
+  "Close senders when appropriate so receivers wake and see end-of-stream instead of waiting on a channel that will never produce again.",
 ]
 
 const backpressureChecklist = [
-  "Prefer bounded `mpsc` queues for internal pipelines when backlog should push back on producers.",
-  "Limit concurrent request or connection handling with a semaphore or an explicit worker budget.",
-  "Treat `spawn` rate as a resource. An unbounded task flood is a memory policy, not a neutral default.",
-  "Put timeouts around slow dependencies so one stalled hop does not pin unbounded in-flight work.",
-  "Measure queue depth, in-flight task count, accept backlog, and blocking-pool pressure in production.",
+  "Prefer bounded mpsc queues for internal pipelines so a backlog pushes back on producers instead of buffering without limit.",
+  "Cap concurrent request or connection handling with a semaphore or an explicit worker budget rather than spawning per arrival.",
+  "Treat spawn rate as a resource. An unbounded task flood is a memory and scheduling policy, not a neutral default.",
+  "Put timeouts around slow dependencies so one stalled hop cannot pin an unbounded amount of in-flight work.",
+  "Measure queue depth, in-flight task count, accept backlog, and blocking-pool pressure in production, not just request latency.",
 ]
 
 const operationalCards = [
   {
     title: "Async filesystem APIs",
-    body: "Tokio's filesystem APIs are convenient integration points, but they do not make disk latency disappear. On many platforms, file work still routes through blocking machinery under the hood. Keep bulk file processing bounded.",
+    body: "The async file APIs are convenient integration points, but they do not make disk latency disappear. On most platforms file work is dispatched to the blocking pool under the hood, so async fs is really spawn_blocking with a nicer face. Keep bulk file processing bounded for the same reason.",
     code: `let config = tokio::fs::read_to_string("config.json").await?;
 tokio::fs::write("cache.tmp", config.as_bytes()).await?;`,
   },
   {
     title: "Async UDP",
-    body: "UDP is a socket-oriented loop, not a connection-per-peer model. One task can often receive datagrams, inspect sender addresses, and reply directly without inventing a connection abstraction.",
+    body: "UDP is a single-socket loop, not a connection-per-peer model. One task can receive datagrams, read each sender's address, and reply directly, so there is no accept step and no per-connection task to manage.",
     code: `let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
 let mut buf = [0_u8; 1024];
 let (n, peer) = socket.recv_from(&mut buf).await?;
@@ -134,7 +139,7 @@ socket.send_to(&buf[..n], peer).await?;`,
   },
   {
     title: "Timers and intervals",
-    body: "Intervals are scheduler wakeups, not background threads. They are useful for heartbeats, metrics flushes, expiry scans, and load-shedding loops that should yield cleanly between ticks.",
+    body: "An interval is a timer-driver wakeup, not a background thread and not a busy loop. It fits heartbeats, metrics flushes, expiry scans, and load-shedding loops that should yield cleanly between ticks while costing nothing while idle.",
     code: `let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
 tick.tick().await;
 tick.tick().await;`,
@@ -142,21 +147,21 @@ tick.tick().await;`,
 ]
 
 const productionPatterns = [
-  "Keep the async shell thin. Parsing, validation, and domain decisions can stay synchronous until real IO or scheduling boundaries appear.",
-  "Use `tokio::spawn` for concurrent async work, and use `spawn_blocking` or a dedicated thread boundary for CPU-heavy or legacy blocking work.",
-  "Prefer bounded channels and explicit concurrency caps over unbounded task fan-out.",
+  "Keep the async shell thin. Parsing, validation, and domain decisions can stay synchronous until a real IO or scheduling boundary appears.",
+  "Use tokio::spawn for concurrent async work, and spawn_blocking or a dedicated thread for CPU-heavy or legacy blocking work. Name the boundary; do not let CPU work leak onto the IO workers.",
+  "Prefer bounded channels and explicit concurrency caps over unbounded task fan-out, so load shows up as pushback rather than as growing memory.",
   "Treat graceful shutdown as part of the design, not as a signal handler glued on after the service already works.",
   "Own values across task boundaries. Borrow locally, but do not pass request-local references into spawned work that may outlive the stack frame.",
   "Instrument queue depth, shutdown latency, accept errors, and blocking-pool usage before calling the service production-ready.",
 ]
 
 const pitfalls = [
-  "Calling blocking code from an async task on the runtime workers. `std::fs`, CPU-heavy compression, long JSON parsing, or thread sleep in the wrong place can stall unrelated tasks.",
-  "Using `tokio::spawn` as the answer to every concurrency problem. Unbounded spawn rate is a memory and scheduling policy, not free parallelism.",
-  "Choosing unbounded channels by default and only discovering backlog when memory grows under load.",
+  "Calling blocking code from an async task on the runtime workers. std::fs, CPU-heavy compression, long JSON parsing, or std::thread::sleep in the wrong place stalls every other task sharing that worker.",
+  "Using tokio::spawn as the answer to every concurrency problem. Unbounded spawn rate is a memory and scheduling policy, not free parallelism.",
+  "Choosing unbounded channels by default and only discovering the backlog when memory climbs under sustained load.",
   "Ignoring cancellation and shutdown until deployment. Accept loops, background workers, and channel receivers all need a stop story.",
-  "Turning the whole service into `Arc<Mutex<_>>` shared state instead of keeping one owner per mutable subsystem where possible.",
-  "Confusing runtime concurrency with true parallel CPU throughput. Tokio handles waiting extremely well, but CPU work still needs explicit budgeting and placement.",
+  "Wrapping the whole service in Arc<Mutex<_>> shared state instead of keeping one owner per mutable subsystem and passing messages between them.",
+  "Confusing runtime concurrency with parallel CPU throughput. Tokio multiplexes waiting beautifully, but CPU work still needs explicit budgeting and placement.",
 ]
 
 export function PageCh25Tokio() {
@@ -208,8 +213,10 @@ export function PageCh25Tokio() {
               <h3 className="text-lg font-semibold text-foreground mb-2">Builds on Chapters 22, 23, and 24</h3>
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 22 established OS-thread boundaries and message passing. Chapter 23 covered synchronization and
-                visibility. Chapter 24 explained futures, `async fn`, and `Pin`. Tokio turns those concepts into an
-                operational runtime for production services.
+                visibility. Chapter 24 explained futures,{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">async fn</code>, and{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin</code>. Tokio turns those
+                concepts into an operational runtime for production services.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
@@ -265,41 +272,56 @@ export function PageCh25Tokio() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Tokio runtime architecture</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {runtimeArchitectureCards.map((card) => (
-                    <div key={card.title} className="rounded-lg border border-border bg-card p-4">
-                      <div className="font-medium text-foreground mb-2">{card.title}</div>
-                      <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
-                    </div>
-                  ))}
+            <h4 className="font-semibold text-foreground mb-3">What the runtime is made of</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The runtime macro on{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">main</code> hides four moving parts.
+              The thing to notice in the diagram below is that the scheduler never blocks waiting for IO or time: the IO
+              driver and the timer driver turn external events into wakeups and feed ready tasks back to the scheduler,
+              while genuinely blocking work is shunted onto a separate pool so it cannot freeze the workers.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  SOCK[Socket readiness] --> IOD[IO driver]\n  TMR[Timer deadline] --> TD[Timer driver]\n  IOD -->|wake task| RQ[Ready task queue]\n  TD -->|wake task| RQ\n  RQ --> SCHED[Scheduler polls future]\n  SCHED -->|await point| RQ\n  SCHED -.->|spawn_blocking| BP[Blocking pool]\n  BP -.->|owned result| SCHED`}
+              caption="IO and timer events become wakeups, the scheduler polls ready futures on its workers, and blocking closures run off to the side so they never stall the workers."
+            />
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {runtimeArchitectureCards.map((card) => (
+                <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="font-medium text-foreground mb-2">{card.title}</div>
+                  <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
                 </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-4">
-                <pre className="rounded-md bg-muted/30 px-3 py-3 text-xs overflow-x-auto">
-                  <code className="font-mono text-foreground">{`socket readiness  -> IO driver marks task ready
-timer deadline    -> timer driver marks task ready
-ready task queue  -> scheduler polls future
-blocking closure  -> blocking pool thread`}</code>
-                </pre>
-                <p className="mt-3 text-sm text-muted-foreground leading-6">
-                  In service code, the usual default is the multithread runtime because it can schedule `Send` tasks on a
-                  pool of worker threads. A current-thread runtime is still valid when the application is small, embedded,
-                  or intentionally local-task oriented.
-                </p>
-              </div>
+              ))}
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                The usual default for a service is the multithread runtime, because it can schedule{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code> tasks across a pool of
+                worker threads and steal work to keep them busy. A current-thread runtime is still the right choice when
+                the application is small, embedded, or deliberately built around non-<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code>{" "}
+                local tasks.
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Tasks and scheduling</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              A Tokio task is one future scheduled by the runtime. It is cheap enough to use widely, but not free enough to
-              spray without a policy. A task that does not reach await points can monopolize a worker thread. A service that
-              spawns without bounds can create its own backlog and memory pressure even if every individual task is small.
+              A task is one future scheduled by the runtime. It is cheap enough to use widely, but not free enough to spray
+              without a policy. A task that never reaches an await point monopolizes its worker thread, and a service that
+              spawns without bounds builds its own backlog and memory pressure even when every individual task is small.
+              The first design question for any unit of work is therefore not how to spawn it, but where it belongs.
             </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The decision tree is short. Work that mostly waits on IO stays inline or goes to{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">tokio::spawn</code>; work that mostly
+              computes goes to{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">spawn_blocking</code>. Putting CPU work
+              on the IO workers is the single most common way to make a Tokio service mysteriously slow.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  W[Unit of work] --> Q{Mostly waiting or mostly computing}\n  Q -->|waiting on IO| C{Needs to run concurrently}\n  Q -->|CPU heavy or blocking API| SB[spawn_blocking on blocking pool]\n  C -->|no, await it here| INLINE[Run inline on this task]\n  C -->|yes| SP[tokio::spawn on the IO workers]\n  SP --> SEND[Future must be Send and 'static]`}
+              caption="Decide by the nature of the work: inline for local IO, tokio::spawn for concurrent IO that must satisfy Send, spawn_blocking for anything CPU-bound or blocking."
+            />
             <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {taskBoundaryCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -313,8 +335,10 @@ blocking closure  -> blocking pool thread`}</code>
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A common production mistake is to use `tokio::spawn` where the real issue was concurrency control. Spawning
-                faster than downstream work can finish is not throughput. It is queue growth with nicer syntax.
+                A common production mistake is to reach for{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">tokio::spawn</code> when the real
+                problem was concurrency control. Spawning faster than downstream work can finish is not throughput. It is
+                queue growth with nicer syntax.
               </p>
             </div>
           </div>
@@ -343,8 +367,12 @@ blocking closure  -> blocking pool thread`}</code>
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                Bounded `mpsc` is one of the simplest backpressure tools in Tokio. If a producer should slow down when the
-                consumer falls behind, make the capacity explicit instead of discovering the policy later from memory graphs.
+                A bounded{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">mpsc</code> is one of the simplest
+                backpressure tools in Tokio. If a producer should slow down when the consumer falls behind, make the
+                capacity explicit so a full queue makes{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">send</code> await, instead of
+                discovering the policy later from a memory graph.
               </p>
             </div>
           </div>
@@ -357,6 +385,14 @@ blocking closure  -> blocking pool thread`}</code>
                   <li key={step}>{step}</li>
                 ))}
               </ol>
+              <p className="mt-4 text-sm text-muted-foreground leading-6">
+                The shape to keep in mind is a small state machine: the accept loop races a stop signal against the next
+                connection, and once the signal wins, the service moves to draining before it exits.
+              </p>
+              <MermaidDiagram
+                chart={`stateDiagram-v2\n  [*] --> Accepting\n  Accepting --> Accepting: connection, spawn handler\n  Accepting --> Draining: ctrl_c or shutdown signal\n  Draining --> Draining: wait for in-flight tasks\n  Draining --> Exit: drained or timeout\n  Exit --> [*]`}
+                caption="Stop admitting first, drain in-flight work, then exit. The select! below is the Accepting state choosing between a new connection and the stop signal."
+              />
               <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                 <code className="font-mono text-foreground">{`tokio::select! {
     _ = tokio::signal::ctrl_c() => break,
@@ -383,16 +419,26 @@ tokio::spawn(async move {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Almost no one meets Tokio with an empty mental model; they arrive with async habits from another ecosystem.
+            The useful thing to know is which of those habits transfer and which one will quietly mislead you. The shift
+            is rarely about API names. It is about where the runtime stops being ambient and starts being something you
+            configure, and where the compiler now insists on facts your previous language let you assume.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -443,11 +489,11 @@ tokio::spawn(async move {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h4 className="font-semibold text-foreground">
-                  Example 1: bounded channel, interval pacing, and `spawn_blocking`
+                  Example 1: bounded channel, interval pacing, and spawn_blocking
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The queue is bounded, so producer speed has a budget. The async side waits on the channel and timer, and
-                  the CPU step moves to the blocking pool explicitly.
+                  The queue is bounded, so producer speed has a budget. The async side waits on the channel and the timer,
+                  and the CPU step moves to the blocking pool explicitly.
                 </p>
               </div>
               {codes.tokio_tasks_backpressure_spawn_blocking !== DEFAULT_CODES.tokio_tasks_backpressure_spawn_blocking && (
@@ -461,6 +507,15 @@ tokio::spawn(async move {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the pipeline before the code: items flow producer to bounded channel to consumer, the consumer paces
+              itself on a timer, and the only CPU-heavy step is pushed across the blocking boundary so it never holds an
+              async worker. Watch how a channel capacity of one is what couples producer and consumer speed.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  P[Producer task] -->|send, awaits when full| CH[Bounded mpsc cap 1]\n  CH --> C[Consumer task]\n  TICK[interval tick] -.->|pace| C\n  C -->|owned batch| SB[spawn_blocking subtotal]\n  SB -->|owned result| C\n  C --> OUT[total]`}
+              caption="A capacity-1 channel makes the producer wait for the consumer, the interval paces the loop, and the CPU subtotal runs on the blocking pool."
+            />
             <RustCodeEditor
               code={codes.tokio_tasks_backpressure_spawn_blocking}
               onChange={(newCode) => updateCode("tokio_tasks_backpressure_spawn_blocking", newCode)}
@@ -477,13 +532,13 @@ tokio::spawn(async move {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Backpressure</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `mpsc::channel(1)` forces producer and consumer speed to meet instead of buffering without limit.
+                  A capacity of one forces producer and consumer speed to meet, instead of buffering without limit.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Task boundary</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Async waiting stays on runtime workers; the CPU subtotal step moves behind `spawn_blocking`.
+                  Async waiting stays on the workers; the CPU subtotal step moves behind spawn_blocking.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -515,6 +570,15 @@ tokio::spawn(async move {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The key moment is the race inside the accept loop: each turn waits on both the next connection and the stop
+              signal at once, and whichever resolves first decides what happens. Follow the messages below to see how a
+              normal accept and a shutdown signal flow through the same loop.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant Sig as Shutdown signal\n  participant L as Accept loop\n  participant Lis as TcpListener\n  participant H as Connection task\n  L->>Lis: select! accept or signal\n  Lis-->>L: new connection\n  L->>H: spawn handler\n  H-->>L: pong written\n  Sig-->>L: changed() resolves\n  L->>L: break accept loop\n  Note over L,H: stop admitting, let spawned tasks finish`}
+              caption="Every loop turn races accept against the stop signal; a connection spawns a handler, while the signal breaks the loop so no new work is admitted."
+            />
             <RustCodeEditor
               code={codes.tokio_tcp_graceful_shutdown}
               onChange={(newCode) => updateCode("tokio_tcp_graceful_shutdown", newCode)}
@@ -531,15 +595,15 @@ tokio::spawn(async move {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">TCP</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `TcpListener::bind` plus `accept` is the core server loop. Admission is an explicit task, not implicit magic.
+                  Bind plus accept is the core server loop. Admission is an explicit task, not implicit magic.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Shutdown</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  The watch channel carries a stop signal into the accept loop, and `select!` makes that branch visible in code.
-                  `changed()` also resolves with `Err` when every sender is dropped, so the branch treats that as a stop; the
-                  `borrow()` re-check exists because a watch can carry values other than the stop sentinel.
+                  A watch channel carries the stop signal into the loop, and select! makes that branch visible in code.
+                  changed() also resolves with an error when every sender is dropped, so the branch treats that as a stop;
+                  the borrow() re-check exists because a watch can carry values other than the stop sentinel.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -564,7 +628,8 @@ tokio::spawn(async move {
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to build a small Tokio TCP service, add graceful shutdown with explicit
-            cancellation signals, and separate blocking CPU work with `spawn_blocking`.
+            cancellation signals, and separate blocking CPU work with{" "}
+            <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">spawn_blocking</code>.
           </p>
           <Button onClick={() => setCurrentPage(49)} className="gap-2">
             Open Chapter 25 Exercises
@@ -575,8 +640,8 @@ tokio::spawn(async move {
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            <li>Tokio is a runtime made of scheduling plus IO and timer drivers, not only a macro on `main`.</li>
-            <li>`tokio::spawn` runs async work concurrently; `spawn_blocking` is the honest boundary for blocking or CPU-heavy work.</li>
+            <li>Tokio is a runtime made of a scheduler plus IO and timer drivers, not only a macro on the main function.</li>
+            <li>tokio::spawn runs async work concurrently; spawn_blocking is the honest boundary for blocking or CPU-heavy work.</li>
             <li>Timers, TCP, UDP, filesystem APIs, and channels all become calmer once task ownership and shutdown behavior are explicit.</li>
             <li>Bounded queues, semaphores, and admission control are backpressure tools, not optional polish.</li>
             <li>Graceful shutdown is part of the design surface in production Tokio services, not a final cleanup task.</li>
@@ -586,593 +651,3 @@ tokio::spawn(async move {
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch25-tokio-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose `tokio::spawn`, `spawn_blocking`, a scoped thread, or plain sync code",
-    objective: "Practice selecting the execution boundary that matches the real workload instead of turning everything into async tasks.",
-    starterPrompt:
-      "Classify four steps in one service: a pure route parser, a Brotli compression pass, a TCP accept loop, and a request-local slice transform that borrows parent-owned data only for a short CPU burst.",
-    prompts: [
-      "Which step should stay a plain synchronous function?",
-      "Which step wants `spawn_blocking` because it is CPU-heavy or blocking?",
-      "Which step is naturally a Tokio async task or accept loop?",
-      "Which step may want scoped OS threads instead of Tokio tasks because the work only borrows parent-owned data?",
-    ],
-    acceptanceCriteria: [
-      "You keep at least one step synchronous on purpose.",
-      "You choose `spawn_blocking` for blocking or CPU-heavy work rather than leaving it on runtime workers.",
-      "You distinguish a Tokio task boundary from a scoped-thread CPU boundary clearly.",
-    ],
-    hints: [
-      "The runtime is great at waiting. It is not the right place to hide every CPU spike.",
-      "A borrowed local CPU burst is not automatically an async task problem.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Find blocking work on the runtime workers",
-    objective: "Read a Tokio service path and identify where blocking or CPU-heavy work should move out of ordinary async tasks.",
-    starterPrompt:
-      "A request handler uses `std::fs::read_to_string`, does a heavy checksum or compression pass inline, then awaits a database call and sends a result over `mpsc`.",
-    prompts: [
-      "Which operations block or monopolize a runtime worker?",
-      "Which operation should move to `spawn_blocking`?",
-      "Which operation is already async and should stay on the runtime?",
-      "What metric would you watch to confirm the runtime is being starved under load?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one blocking filesystem or CPU-heavy operation correctly.",
-      "You keep naturally async IO work on the async side.",
-      "You propose one observability signal such as runtime latency, queue depth, or blocking-pool pressure.",
-    ],
-    hints: [
-      "The mistake is not 'using Tokio.' The mistake is putting the wrong kind of work on the wrong pool.",
-      "A database client await is different from a blocking filesystem read or CPU-heavy transform.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Build a tiny Tokio TCP service",
-    objective: "Implement a small TCP listener that accepts connections, spawns one handler per connection, and writes a deterministic response.",
-    starterPrompt:
-      "Bind a `TcpListener` on `127.0.0.1:0`, accept connections in a loop, and spawn a small handler that writes a fixed line such as `pong` or `ok` to each client.",
-    prompts: [
-      "Keep admission in the listener task and per-connection work in spawned handler tasks.",
-      "Return or log a small accepted-connection count.",
-      "Use owned task boundaries instead of borrowing stack-local request data into spawned work.",
-    ],
-    acceptanceCriteria: [
-      "The service uses `TcpListener` and an explicit accept loop.",
-      "Each connection handler is a spawned Tokio task or another explicit concurrent boundary.",
-      "The handler writes a deterministic response line to the client.",
-      "You can explain where ownership crosses from listener to handler.",
-    ],
-    hints: [
-      "This is the basic service shape: accept, hand off, respond, repeat.",
-      "The connection task usually owns its stream.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Add graceful shutdown with explicit cancellation signals",
-    objective: "Repair a listener or worker loop so it can stop admitting new work and drain cleanly.",
-    starterPrompt:
-      "A service loops forever on `listener.accept().await` or `rx.recv().await` with no stop branch. Add a shutdown path using `oneshot`, `watch`, or another explicit signal plus `tokio::select!`.",
-    prompts: [
-      "Which signal shape fits best: one stop event or latest-state watch?",
-      "Where does `tokio::select!` belong: accept loop, worker loop, or both?",
-      "What should happen to in-flight tasks after admission stops?",
-      "What timeout or logging would you add to keep shutdown observable?",
-    ],
-    acceptanceCriteria: [
-      "You add an explicit stop signal path rather than relying on abrupt runtime drop.",
-      "You stop admission before process exit.",
-      "You describe at least one drain, join, or timeout step for in-flight work.",
-      "You mention one observability hook such as shutdown duration or unfinished task count.",
-    ],
-    hints: [
-      "Graceful shutdown is about sequencing, not only about a signal handler.",
-      "The service must stop accepting before it can drain responsibly.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Separate blocking CPU work with `spawn_blocking`",
-    objective: "Move CPU-heavy or legacy blocking work off the runtime workers without smearing async across the wrong boundary.",
-    starterPrompt:
-      "A Tokio handler currently parses a large batch and computes a heavy checksum inline before awaiting network IO. Refactor the CPU step into `tokio::task::spawn_blocking`.",
-    prompts: [
-      "What values should the blocking closure own?",
-      "Where should the async side await the blocking result?",
-      "What error or panic handling belongs on the `JoinHandle` result?",
-      "When would a dedicated worker thread or offline CPU pool be better than many small `spawn_blocking` calls?",
-    ],
-    acceptanceCriteria: [
-      "The CPU-heavy step moves behind `spawn_blocking`.",
-      "The closure owns the data it needs rather than borrowing stack-local values with the wrong lifetime.",
-      "You await and handle the blocking join result explicitly.",
-      "You mention one tradeoff involving blocking-pool pressure or batching strategy.",
-    ],
-    hints: [
-      "Move ownership in. Await the owned result back out.",
-      "The blocking pool is helpful, but it is still a finite resource worth measuring.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose backpressure and shutdown policy for a production Tokio service",
-    objective: "Map bounded queues, concurrency caps, drain behavior, and observability to one realistic async service.",
-    starterPrompt:
-      "You are designing `accept -> parse -> enrich -> persist -> publish`, with bursty traffic, one CPU-heavy enrichment stage, and strict shutdown requirements during rolling deploys.",
-    prompts: [
-      "Which internal queues should be bounded, and at what boundary does producer slowdown become healthy?",
-      "Which stage should use `spawn_blocking`, and how will you prevent the blocking pool from becoming the next backlog?",
-      "Where would a semaphore or in-flight task cap belong?",
-      "How will the service stop admitting, drain, and time out slow tails during shutdown?",
-      "What metrics or traces would you require before calling the design production-ready?",
-    ],
-    acceptanceCriteria: [
-      "You define at least one bounded queue or concurrency cap deliberately.",
-      "You place `spawn_blocking` at a real CPU or blocking boundary rather than as decoration.",
-      "You describe a stop-admit-drain-timeout shutdown sequence.",
-      "You mention at least two observability hooks such as queue depth, in-flight task count, shutdown time, or blocking-pool backlog.",
-    ],
-    hints: [
-      "Backpressure is a product decision as much as a runtime decision.",
-      "The cleanest answer gives every mutable or expensive subsystem a budget.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What does `tokio::spawn` require on the multithread runtime, and why?",
-  "When is `spawn_blocking` the honest boundary instead of an optimization trick?",
-  "Why are bounded channels one of the simplest Tokio backpressure tools?",
-  "What should graceful shutdown do before the process exits?",
-  "Why are async filesystem APIs convenient but not magically free of disk latency or blocking cost?",
-]
-
-const workingLoop = [
-  "Classify the work first: waiting, blocking, CPU-heavy, or request-local borrowed CPU work.",
-  "Choose the boundary second: plain sync, Tokio task, blocking pool, or OS thread.",
-  "Add bounded queues and concurrency caps before the service is already under load.",
-  "Write the shutdown path before the service ships, not after the first rolling deploy incident.",
-  "Define queue depth, in-flight task count, and shutdown latency as observability requirements up front.",
-]
-
-export function PageCh25TokioExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 49
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 25 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice Tokio the way it behaves in production: honest task boundaries, bounded queues, graceful shutdown, and
-          blocking work moved off the runtime workers deliberately.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a runtime boundary review. The best answer does not stop at &quot;make it async.&quot;
-                It explains which work is waiting, which work is blocking, where ownership crosses into a task, and how
-                the service will behave when load spikes or shutdown begins.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(48)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 25
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Tokio drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Move CPU work to `spawn_blocking`"
-          description={
-            <>
-              Repair the starter so the CPU step moves behind{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">tokio::task::spawn_blocking</code> and
-              the async side awaits the result explicitly. The checker expects the exact output shown below.
-            </>
-          }
-          filename="spawn_blocking_lab.rs"
-          runKey="ch25_ex_spawn_blocking"
-          expectedOutput={"spawn_blocking = true\ntotal = 20"}
-          helperText={
-            <>
-              Tip: move the owned batch into the blocking closure, await the returned{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">JoinHandle</code>, and print the result on
-              the async side.
-            </>
-          }
-          initialCode={`#[tokio::main]\nasync fn main() {\n    let batch = vec![2_u32, 4, 6, 8];\n    let total = batch.into_iter().sum::<u32>();\n\n    println!(\"spawn_blocking = false\");\n    println!(\"total = {}\", total);\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to build a small Tokio TCP service, explain where graceful shutdown
-            belongs in the control flow, move CPU-heavy work to `spawn_blocking` without hand-waving, and describe bounded
-            queues, concurrency caps, and shutdown metrics as first-class parts of the runtime design.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch25_tokio/task_boundaries_and_backpressure.rs`
-````
-use tokio::sync::mpsc;
-use tokio::time::{self, Duration};
-
-#[tokio::main]
-async fn main() {
-    let (tx, mut rx) = mpsc::channel::<Vec<u32>>(1);
-
-    let producer = tokio::spawn(async move {
-        tx.send(vec![1_u32, 2, 3]).await.unwrap();
-        tx.send(vec![4_u32, 5]).await.unwrap();
-    });
-
-    let consumer = tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_millis(10));
-        let mut batches = 0_u32;
-        let mut total = 0_u32;
-
-        while let Some(batch) = rx.recv().await {
-            interval.tick().await;
-
-            let subtotal = tokio::task::spawn_blocking(move || batch.into_iter().sum::<u32>())
-                .await
-                .unwrap();
-
-            total += subtotal;
-            batches += 1;
-        }
-
-        (batches, total)
-    });
-
-    producer.await.unwrap();
-    let (batches, total) = consumer.await.unwrap();
-
-    println!("buffer = 1");
-    println!("batches = {}", batches);
-    println!("total = {}", total);
-}
-````
-
-### File: `examples/ch25_tokio/tcp_graceful_shutdown.rs`
-````
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::watch;
-
-async fn handle(mut stream: tokio::net::TcpStream) -> std::io::Result<()> {
-    stream.write_all(b"pong\n").await?;
-    Ok(())
-}
-
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
-
-    let server = tokio::spawn(async move {
-        let mut accepted = 0_usize;
-
-        loop {
-            tokio::select! {
-                changed = shutdown_rx.changed() => {
-                    if changed.is_err() || *shutdown_rx.borrow() {
-                        break accepted;
-                    }
-                }
-                result = listener.accept() => {
-                    match result {
-                        Ok((stream, _peer)) => {
-                            accepted += 1;
-                            tokio::spawn(handle(stream));
-                        }
-                        Err(_e) => {
-                            break accepted;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    let client_a = tokio::spawn(async move {
-        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-        let mut buf = [0_u8; 5];
-        stream.read_exact(&mut buf).await.unwrap();
-        String::from_utf8_lossy(&buf).trim().to_string()
-    });
-
-    let client_b = tokio::spawn(async move {
-        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-        let mut buf = [0_u8; 5];
-        stream.read_exact(&mut buf).await.unwrap();
-        String::from_utf8_lossy(&buf).trim().to_string()
-    });
-
-    let a = client_a.await.unwrap();
-    let b = client_b.await.unwrap();
-
-    shutdown_tx.send(true).unwrap();
-    let accepted = server.await.unwrap();
-
-    println!("accepted = {}", accepted);
-    println!("client_a = {}", a);
-    println!("client_b = {}", b);
-    Ok(())
-}
-````
-
-### File: `examples/ch25_tokio/udp_and_async_fs.rs`
-````
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-    let addr = socket.local_addr()?;
-    let sender = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-
-    sender.send_to(b"ping", addr).await?;
-
-    let mut buf = [0_u8; 16];
-    let (n, peer) = socket.recv_from(&mut buf).await?;
-    socket.send_to(&buf[..n], peer).await?;
-
-    tokio::fs::write("tokio-example.tmp", &buf[..n]).await?;
-    let saved = tokio::fs::read_to_string("tokio-example.tmp").await?;
-    tokio::fs::remove_file("tokio-example.tmp").await?;
-
-    println!("udp = {}", std::str::from_utf8(&buf[..n]).unwrap());
-    println!("saved = {}", saved);
-    Ok(())
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -46,3 +46,5 @@ export { PageCh23SynchronizationPrimitives } from "./page-ch23-synchronization-p
- export { PageCh23SynchronizationPrimitivesExercises } from "./page-ch23-synchronization-primitives-exercises"
- export { PageCh24CoroutinesFuturesAndAsyncRust } from "./page-ch24-coroutines-futures-and-async-rust"
- export { PageCh24CoroutinesFuturesAndAsyncRustExercises } from "./page-ch24-coroutines-futures-and-async-rust-exercises"
-+export { PageCh25Tokio } from "./page-ch25-tokio"
-+export { PageCh25TokioExercises } from "./page-ch25-tokio-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -57,6 +57,8 @@ import {
-   PageCh23SynchronizationPrimitivesExercises,
-   PageCh24CoroutinesFuturesAndAsyncRust,
-   PageCh24CoroutinesFuturesAndAsyncRustExercises,
-+  PageCh25Tokio,
-+  PageCh25TokioExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -109,6 +111,8 @@ const PAGE_COMPONENTS = [
-   PageCh23SynchronizationPrimitivesExercises,
-   PageCh24CoroutinesFuturesAndAsyncRust,
-   PageCh24CoroutinesFuturesAndAsyncRustExercises,
-+  PageCh25Tokio,
-+  PageCh25TokioExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh25Output } from "./rust-simulator-ch25"
- import { simulateCh24Output } from "./rust-simulator-ch24"
- import { simulateCh23Output } from "./rust-simulator-ch23"
- import { simulateCh22Output } from "./rust-simulator-ch22"
-@@ -1003,6 +1004,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch25Output = simulateCh25Output(code, key)
-+  if (ch25Output !== null) return ch25Output
- 
-   const ch24Output = simulateCh24Output(code, key)
-   if (ch24Output !== null) return ch24Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -14,6 +14,7 @@ import { DEFAULT_CODES_CH21 } from "./default-codes-ch21"
- import { DEFAULT_CODES_CH22 } from "./default-codes-ch22"
- import { DEFAULT_CODES_CH23 } from "./default-codes-ch23"
- import { DEFAULT_CODES_CH24 } from "./default-codes-ch24"
-+import { DEFAULT_CODES_CH25 } from "./default-codes-ch25"
- 
- export interface PageConfig {
-   id: string
-@@ -610,6 +611,30 @@ export const CHAPTERS: ChapterConfig[] = [
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch25-tokio",
-+    title: "Chapter 25 · Tokio",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch25-tokio",
-+        title: "Tokio",
-+        shortTitle: "Tokio",
-+        description:
-+          "Runtime architecture, tasks and scheduling, spawn vs spawn_blocking, timers, async TCP and UDP, async fs, channels, graceful shutdown, backpressure, and production Tokio patterns",
-+        icon: "book",
-+        codeKeys: [
-+          "tokio_tasks_backpressure_spawn_blocking",
-+          "tokio_tcp_graceful_shutdown",
-+        ],
-+      },
-+      {
-+        id: "ch25-tokio-exercises",
-+        title: "Chapter 25 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Build a small Tokio TCP service, add graceful shutdown, and move blocking CPU work behind spawn_blocking",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
- 
-@@ -1052,5 +1077,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH22,
-   ...DEFAULT_CODES_CH23,
-   ...DEFAULT_CODES_CH24,
-+  ...DEFAULT_CODES_CH25,
- }
- 
- export interface BookState {
-````

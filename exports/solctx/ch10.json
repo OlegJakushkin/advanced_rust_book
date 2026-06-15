@@ -1,0 +1,213 @@
+{
+ "chapterKey": "ch10",
+ "num": 10,
+ "title": "Arrays, Slices, and Vectors",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose array, slice, vector, or inline-first storage from the workload",
+   "objective": "Practice selecting the right contiguous-storage tool from semantics rather than habit.",
+   "starterPrompt": "Choose a representation for each case: a 16-byte protocol header, a read-only checksum helper, a dynamically accumulated retry batch, and a tiny hot list of usually three tags.",
+   "prompts": [
+    "Which case has compile-time fixed length as part of the invariant?",
+    "Which case only needs a borrowed view?",
+    "Which case truly needs owned growth?",
+    "Which case might justify an inline-first representation only after profiling?"
+   ],
+   "acceptanceCriteria": [
+    "You choose `[T; N]` for the semantically fixed-size case.",
+    "You choose `&[T]` or `&mut [T]` for the borrowed-algorithm case.",
+    "You choose `Vec<T>` for the owned growable batch.",
+    "You treat inline-first storage as conditional on measurement rather than as a default style choice."
+   ],
+   "hints": [
+    "Start with ownership and size invariants before talking about performance.",
+    "A good answer separates API shape from storage shape."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read `len` and `capacity` operationally",
+   "objective": "Explain what a vector knows now versus what it can hold before another allocation may be needed.",
+   "starterPrompt": "Review a small helper that builds a `Vec<u64>` with `with_capacity(1024)`, pushes 600 items, and logs both `len()` and `capacity()`.",
+   "prompts": [
+    "What does `len()` tell you exactly?",
+    "What does `capacity()` tell you exactly?",
+    "Why is `capacity() == 1024` not a portable design assumption for every vector in the system?"
+   ],
+   "acceptanceCriteria": [
+    "You explain `len()` as the count of logically present initialized elements.",
+    "You explain `capacity()` as allocation budget before the next growth step may be needed.",
+    "You explicitly reject using an exact growth factor or exact capacity folklore as a correctness assumption."
+   ],
+   "hints": [
+    "One number is occupancy. The other is allocation slack.",
+    "The language contract is not 'trust whatever a blog post said about growth factors.'"
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Write the function over slices, not vectors",
+   "objective": "Design an algorithm around a borrowed contiguous view so callers keep control over storage.",
+   "starterPrompt": "Implement `fn window_sum(values: &[u32]) -> u32` so it sums the provided window and works for both an array subslice and a vector subslice.",
+   "prompts": [
+    "Keep the parameter type exactly as `&[u32]`.",
+    "Do not allocate a new vector just to sum.",
+    "Use either iterator-style code or a small explicit loop."
+   ],
+   "acceptanceCriteria": [
+    "The function signature stays `fn window_sum(values: &[u32]) -> u32`.",
+    "The function returns `54` for `&fixed[2..5]` and `18` for `&dynamic[..3]` in the lab.",
+    "The implementation does not require ownership of a `Vec<u32>`."
+   ],
+   "hints": [
+    "The whole point is that callers may have arrays, vectors, or subslices and the function should not care.",
+    "A reduction over a slice is usually one line in Rust."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Benchmark preallocation versus push-only growth honestly",
+   "objective": "Measure whether capacity planning changes your workload enough to matter.",
+   "starterPrompt": "Build a small benchmark harness that pushes the same number of elements into two vectors: one created with `Vec::new()` and one created with `Vec::with_capacity(n)`.",
+   "prompts": [
+    "Run the same workload many times in release mode.",
+    "Keep the pushed element type and loop shape identical between the two variants.",
+    "Record at least wall-clock timing and final capacity for both runs."
+   ],
+   "acceptanceCriteria": [
+    "Your harness compares the same workload under two allocation strategies.",
+    "You run it under conditions that reduce obvious noise, such as repeated iterations and release settings.",
+    "You report observations rather than assuming preallocation always matters equally.",
+    "You call out one tradeoff: simpler code, allocation count, or realistic workload fidelity."
+   ],
+   "hints": [
+    "A benchmark is only useful if the workload is actually comparable.",
+    "Do not confuse a toy microbenchmark with a production decision, but do use it to validate intuition."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Repair a structural-mutation bug without changing the API lie",
+   "objective": "Fix code that keeps a borrowed slice alive while reshaping the underlying vector.",
+   "starterPrompt": "A helper takes `let hot = &buffer[..4];`, then `buffer.push(99);`, then still reads from `hot`. Refactor the flow without pretending the original borrow should survive structural mutation.",
+   "prompts": [
+    "Can the borrowed work happen earlier?",
+    "Should the code copy a tiny fixed header into an array before the push if it truly needs that data later?",
+    "Would two phases make the buffer and borrow lifetime easier to review?"
+   ],
+   "acceptanceCriteria": [
+    "Your repair ends the active borrow before structural mutation, or copies the tiny truly-needed subset into independent storage deliberately.",
+    "You explain the failure in terms of borrowing a view into storage that may change, not in terms of compiler stubbornness.",
+    "You do not keep the old slice alive across the vector growth path."
+   ],
+   "hints": [
+    "A slice is a view into existing storage, not a durable reservation of future layout.",
+    "If later code really needs a tiny fixed piece, a small copied array may be the honest repair."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose the right contiguous-storage design for three real workloads",
+   "objective": "Make explicit tradeoffs among fixed shape, borrowed view, owned growth, inline-first storage, and locality.",
+   "starterPrompt": "You are designing three subsystems: a packet parser with fixed headers, a metrics engine that scans rolling numeric windows, and a request pipeline that accumulates retryable jobs.",
+   "prompts": [
+    "Which subsystem wants arrays because the bound is semantically fixed?",
+    "Which subsystem wants slice-first APIs because the caller already owns the data?",
+    "Which subsystem wants owned vectors and where does preallocation make sense?",
+    "Would any subsystem justify an inline-first representation, and what measurement would have to prove it first?"
+   ],
+   "acceptanceCriteria": [
+    "You name one concrete representation for each subsystem and justify it with workload shape.",
+    "You discuss locality or contiguous scans for at least one subsystem.",
+    "You justify at least one preallocation decision with a real upper bound rather than a guess.",
+    "You keep inline-first storage as a measured optimization rather than a stylistic preference."
+   ],
+   "hints": [
+    "Do not answer only with type names. Explain the operational reason each choice fits.",
+    "A strong answer mentions shape, ownership, mutation, and locality together."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "When is `[T; N]` the right type rather than `Vec<T>`?",
+  "Why is `&[T]` usually a better function parameter than `&Vec<T>`?",
+  "What is the practical difference between `len()` and `capacity()`?",
+  "Why should production code avoid depending on a specific vector growth factor?",
+  "What workload characteristics make contiguous storage especially attractive?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Slice-first implementation",
+  "filename": "window_sum_lab.rs",
+  "runKey": "ch10_ex_window_sum",
+  "expectedOutput": "fixed = 54\ndynamic = 18",
+  "initialCode": "fn window_sum(values: &[u32]) -> u32 {\n    values[0]\n}\n\nfn main() {\n    let fixed = [4_u32, 8, 15, 16, 23, 42];\n    let dynamic = vec![3_u32, 6, 9, 12];\n\n    println!(\"fixed = {}\", window_sum(&fixed[2..5]));\n    println!(\"dynamic = {}\", window_sum(&dynamic[..3]));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 04, 06, and 07",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "Which tool when?",
+  "Fixed-size arrays",
+  "Slices as views",
+  "How a Vec<T> is laid out in memory",
+  "Capacity, allocation, and growth",
+  "Iterators over arrays, slices, and vectors",
+  "Mutation patterns",
+  "Small-vector optimizations",
+  "Cache locality and contiguous storage",
+  "What changes coming from another language",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: one slice-first function works for arrays and vectors",
+  "Example 2: preallocate when a trustworthy upper bound exists",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Contiguous storage choices affect allocation, cache locality, and API flexibility. This chapter defines arrays for fixed shape, slices for borrowed access, and vectors for owned growth.",
+  "Borrowing rules from Chapter 04, vector ownership hazards from Chapter 06, and allocation-aware API design from Chapter 07 all meet here. Arrays, slices, and vectors are not beginner-only material. They are where many production Rust performance and API decisions become concrete.",
+  "An ingestion service parses fixed headers, scans metric windows, and builds dynamic retry batches. The business requirement is to choose the narrowest storage shape for each path: fixed arrays for protocol invariants, slices for borrowed contiguous access, and vectors for owned r",
+  "Read the diagram top to bottom: each question narrows the choice to one storage shape before you write a single line. The same four questions drive every example in this chapter.",
+  "An array such as [u8; 32] is one value whose size is known at compile time. That makes arrays useful for bounded protocol fields, cryptographic material, coordinates, and other cases where the exact count is semantically real.",
+  "The length is in the type. `[u8; 4]` and `[u8; 8]` are different types, not the same type with a stored runtime length.",
+  "A slice is a borrowed view into contiguous elements. It is not an owner, and it does not decide allocation strategy. That is why slice parameters are usually the right API shape for parsing, scanning, hashing, serialization, and most read-only transforms.",
+  "The same function can accept an array, a vector borrow, or a sub-slice. That keeps callers flexible and keeps the algorithm honest about what it actually needs.",
+  "The thing to notice is that the vector value itself is tiny and lives wherever you put it (stack, struct, another vector). It is three words: a pointer, a length, and a capacity. The elements live somewhere else, in one contiguous heap allocation that the vector owns.",
+  "Because the owner is so small, moving the vector value moves only those three words. Ownership of the buffer transfers, but the elements are not copied or re-touched at the move. This is why returning a vector from a function is cheap even when it holds millions of elements.",
+  "Preallocation is one of the simplest meaningful vector optimizations. If you know an upper bound, use Vec::with_capacity or reserve space before the hot push loop. That reduces allocation churn and often makes profiles cleaner.",
+  "Do not depend on an exact growth factor. Rust does not promise one in the language contract. Treat growth behavior as an implementation detail and validate the workload with measurements, capacity logs, or allocation tracing.",
+  "Capacity planning is an optimization, not a license to hard-code folklore. Use it when a bound is real. Skip it when the bound is fake or when the complexity costs more than the saved allocations.",
+  "The recurring rule is familiar by now: if the algorithm only mutates existing elements, slices and iter_mut() are excellent. If the algorithm also changes vector shape, end any active borrows first or split the work into phases.",
+  "Some workloads create many tiny vectors whose most common size is just a few elements: tags, short path segments, tiny batch keys, or parser-side scratch buffers. In those cases, an inline-first representation can avoid heap allocation for the common path and spill to the heap on",
+  "This is an ecosystem pattern, not the default answer. Inline-first containers usually make the parent struct larger, increase move cost, and can inflate stack pressure. Use them only after profiling shows that ordinary vectors are a real problem.",
+  "The three shapes have close analogues in most languages, so the syntax is rarely the hard part. The mental shift is that ownership and resize rules are now part of the type system, which changes how you read an API signature and which mistakes the compiler catches for you.",
+  "The cheapest-looking signature is not always the cheapest design. A slice-first API often removes needless ownership constraints. A vector-only API often leaks an allocation assumption that the algorithm never needed in the first place.",
+  "The algorithm wants a contiguous read-only view, so the function accepts a slice and callers keep their own storage choices.",
+  "What to look at: three different owners all reach the same function through one &[u64] parameter. The array, the vector borrow, and a sub-slice converge to the same borrowed view, so no caller is forced to allocate or give up ownership.",
+  "Quick check: run the baseline, then change the array contents or the take counts. The useful lesson is not the arithmetic. It is that the API shape stays calm because the function borrows a slice rather than forcing a vector.",
+  "A slice says “contiguous borrowed data.” That is exactly the contract this function needs.",
+  "Arrays, vectors, and sub-slices all call the same function without extra allocation or a narrower public signature.",
+  "The batch size is bounded by the input slice length, so capacity planning is simple and justified.",
+  "What to look at: the capacity is reserved once from a real bound (the result can never be longer than the input), and then the loop only filters and pushes. The diagram is the pipeline; the listing fills in the arithmetic.",
+  "Quick check: keep the upper bound tied to the input length, then change the IDs or appended values and rerun. The point is that preallocation follows a real bound, not a guessed folklore capacity.",
+  "The function returns an owned vector because the batch must survive after the helper returns.",
+  "Capacity is chosen from a real bound: the result cannot exceed the number of input elements.",
+  "You pay a small planning step up front to reduce later allocation churn in the push loop.",
+  "The repository also includes standalone Rust source under examples/ch10_arrays_slices_and_vectors/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor."
+ ],
+ "codeSamples": {
+  "arrays_slices_vectors_slice_api": "fn tail_sum(values: &[u64], take: usize) -> u64 {\n    let start = values.len().saturating_sub(take);\n    values[start..].iter().copied().sum()\n}\n\nfn main() {\n    let fixed = [3_u64, 5, 8, 13];\n    let dynamic = vec![1_u64, 2, 3, 4, 5, 6];\n\n    println!(\"fixed tail = {}\", tail_sum(&fixed, 2));\n    println!(\"dynamic tail = {}\", tail_sum(&dynamic, 3));\n}",
+  "arrays_slices_vectors_capacity": "fn collect_even_scaled(ids: &[u32]) -> Vec<u32> {\n    let mut out = Vec::with_capacity(ids.len());\n\n    for &id in ids {\n        if id % 2 == 0 {\n            out.push(id * 10);\n        }\n    }\n\n    out\n}\n\nfn main() {\n    let ids = [10_u32, 11, 12, 13, 14];\n    let mut out = collect_even_scaled(&ids);\n\n    println!(\"len = {}\", out.len());\n    println!(\"can fit two more = {}\", out.len() + 2 <= out.capacity());\n\n    out.extend([200, 220]);\n    println!(\"last = {}\", out.last().copied().unwrap());\n}"
+ },
+ "labReferenceSolution": null
+}

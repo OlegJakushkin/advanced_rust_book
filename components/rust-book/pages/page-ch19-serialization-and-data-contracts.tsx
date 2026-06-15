@@ -1,41 +1,46 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Serialization is a boundary contract, not a dump of your in-memory structs",
-    body: "A wire format answers a boundary question: what must another process, language, file, or browser observe? That is often narrower and more stable than the full Rust domain model.",
+    title: "A wire format is a contract, not a snapshot of your structs",
+    body: "Serialization answers a boundary question: what must another process, language, file, or browser actually observe about this value? That answer is usually narrower and far more stable than your full Rust domain model. The moment data leaves your binary it becomes something a separate team, an older deployment, or a different language depends on, and you no longer get to change it just because a refactor is convenient. Designing the contract first, and deriving the types from it, keeps that dependency honest.",
   },
   {
-    title: "Serde derives remove boilerplate, but they do not remove design choices",
-    body: "The traits are easy to derive. The hard part is choosing field names, optionality, defaults, version markers, and which parts of the model may evolve without breaking old readers.",
+    title: "Derives remove boilerplate, not design choices",
+    body: "Adding `#[derive(Serialize, Deserialize)]` is trivial, which is precisely the risk: it makes the hard decisions invisible. Field names, optionality, default values, enum tagging strategy, borrowing, and version markers are all still choices you are making, whether or not you think about them. The derive writes the mechanical code; you still own the schema, and the schema is the part that has to survive contact with production.",
   },
   {
-    title: "Version tolerance is mostly about restraint",
-    body: "Additive changes, explicit defaults, stable field names, and clear envelopes age better than clever schema tricks. The safest contract is usually the most boring one.",
+    title: "Version tolerance is mostly restraint",
+    body: "The contracts that age well are the boring ones: add fields instead of repurposing them, give new fields defaults, keep old names alive as aliases, and put a visible version marker on the envelope. Clever schema tricks tend to win the first review and lose the first mixed-version rollout. When in doubt, choose the change that an old reader can ignore safely over the one that forces every producer and consumer to deploy in lockstep.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Think less about raw layout dumping and more about stable contracts. Rust can serialize rich types ergonomically, but a network or storage boundary still wants an explicit schema story rather than ambient struct layout.",
+    body: "Your instinct may be to dump struct memory or hand-roll a binary reader, where the hard part is byte layout and endianness. Rust pushes you the other way: the wire format is a declared contract derived from types, not a reinterpretation of in-memory bytes. The shift is to stop treating serialization as a memory operation and start treating it as an API whose field names and optionality you version deliberately.",
   },
   {
     title: "C# background",
-    body: "If you are used to attribute-driven data contracts, Serde will feel familiar. The important Rust correction is that ownership and borrowing still matter at the boundary, especially for zero-copy reads and long-lived stored values.",
+    body: "Attribute-driven contracts from System.Text.Json or DataContract carry over almost directly to Serde's derive plus field attributes, so the mechanics feel familiar. The correction is that there is no garbage collector to absorb the lifetime of a parsed value: ownership and borrowing still apply at the boundary, which is exactly what makes zero-copy reads possible and what forces you to decide who owns a deserialized value before it crosses a thread or a queue.",
   },
   {
     title: "Go background",
-    body: "Go makes JSON structs easy to ship quickly. Rust asks one more question: which data is wire-facing, which data is domain-facing, and where should the owned handoff happen after parsing finishes?",
+    body: "Go makes 'put json tags on a struct and ship it' the default, and that one struct usually serves both the domain and the wire. Rust lets you do the same with one derive, but its real question is whether you should: when transport pressure and domain pressure differ, a separate wire DTO with an explicit conversion is the calmer design. The trap is letting the wire struct quietly become your domain model.",
+  },
+  {
+    title: "Python background",
+    body: "Coming from Pydantic, dataclasses, or pickle, validation and parsing feel like runtime concerns that happen when data arrives. Serde moves most of that into the type and the derive, so a successful parse already means the shape is correct. The shift is that there is no implicit duck typing at the boundary and no ambient runtime to keep a borrowed view alive; you state the contract in types and you decide explicitly when a borrowed parse becomes an owned value.",
   },
 ]
 
@@ -229,10 +234,36 @@ export function PageCh19SerializationAndDataContracts() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            An order system publishes events to a public API, an internal event stream, a browser-facing module, and a
-            native integration boundary. The business requirement is a separate data contract for each consumer, with
-            explicit format choice, schema versioning, owned handoff rules, and compatibility tests for mixed deployments.
+            Serialization is where a Rust program stops being a self-contained world of owned values and starts being one
+            participant in a larger system. Inside the process you have rich types, lifetimes, and a compiler that proves
+            things hold together. The instant a value is written to a socket, a file, or a queue, all of that disappears,
+            and what remains is bytes plus an implicit agreement about how to read them. That agreement is the data
+            contract, and most serialization pain in production is really a contract that drifted without anyone deciding
+            it should.
           </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            The running example for this chapter is an order system that emits the same domain events to four very
+            different consumers. A public HTTP API needs human-readable, debuggable JSON. An internal event stream wants
+            something compact and fast. A browser module across a WASM boundary needs a shape JavaScript can consume
+            cheaply. A native integration across an FFI boundary needs an explicit byte contract rather than accidental
+            Rust memory layout. One domain model, four boundaries, four trade-offs.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            Look at where each contract lives in the diagram below: the domain model stays in the center, and each edge
+            translates it into a format chosen for that consumer. The point is that no single edge dictates the shape of
+            the core.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  D[Order domain model] --> P[Public API DTO]\n  D --> E[Internal event DTO]\n  P -->|JSON| Api[External clients]\n  E -->|compact binary| Stream[Event consumers]`}
+            caption="The first two boundaries: a human-readable JSON API and a compact internal event stream, both derived from the same core."
+          />
+          <p className="text-sm text-muted-foreground leading-6">
+            The same domain model also feeds two foreign-runtime boundaries:
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  D[Order domain model] --> W[WASM view]\n  D --> F[FFI byte buffer]\n  W -->|JsValue or JSON| Browser[Browser module]\n  F -->|repr C or bytes| Native[Native integration]`}
+            caption="The WASM and FFI boundaries, again derived from the same core. Four edges, four contracts, and none of them dictates the shape of the center."
+          />
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">Repository note</h4>
             <p className="text-sm text-muted-foreground leading-6">
@@ -258,6 +289,28 @@ export function PageCh19SerializationAndDataContracts() {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this maps from other languages</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Every senior engineer arrives with serialization instincts that are mostly correct and quietly misleading in
+            one specific spot. The list below names the mental-model shift, not a crate-to-library translation table. The
+            recurring theme is the same one that runs through the rest of Rust: ownership and lifetime do not stop
+            mattering at the boundary, and the wire shape is a contract you design rather than a side effect of your
+            in-memory layout.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
@@ -265,14 +318,31 @@ export function PageCh19SerializationAndDataContracts() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Serde fundamentals</h4>
+            <h4 className="font-semibold text-foreground mb-3">Serde: two traits and a format layer</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Serde is built on two traits, <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Serialize</code>{" "}
+              and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Deserialize</code>, plus a clean split
+              between your data model and the concrete format. Your type knows how to describe itself as a sequence of
+              fields and values; a format crate such as <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">serde_json</code> or a binary
+              adapter knows how to turn that description into bytes and back. This is why one derive can target JSON, YAML,
+              MessagePack, or CBOR without rewriting the type: the type talks to an abstract data model, and the format sits
+              underneath it.
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground leading-6">
+              The trace from a Rust value to bytes runs through this abstract model. Notice that the format is a swappable
+              layer at the bottom, not something baked into your struct.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  V[Your Rust value] -->|Serialize| M[Serde data model]\n  M --> J[serde_json bytes]\n  M --> C[CBOR bytes]\n  M --> Mp[MessagePack bytes]\n  J -->|Deserialize| V2[Your Rust value]\n  C -->|Deserialize| V2\n  Mp -->|Deserialize| V2`}
+              caption="One Serialize/Deserialize implementation talks to an abstract data model; the concrete format is a layer you swap underneath it."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  Serde gives Rust a pair of core traits: <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">Serialize</code>{" "}
-                  and <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">Deserialize</code>. Derive macros
-                  remove boilerplate, but the design still lives in field names, tagging strategy, defaults, borrowing, and
-                  which model is even allowed to cross the boundary.
+                  Derive macros generate the trait implementations, but the design still lives in the attributes: field
+                  names, enum tagging strategy, defaults, borrowing, and which model is even allowed to cross the boundary.
+                  A generic envelope is a common starting shape because it lets a stable wrapper carry many payload types
+                  without re-deriving the wrapper for each one.
                 </p>
                 <pre className="mt-3 rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
                   <code className="font-mono text-foreground">{`#[derive(Serialize, Deserialize)]
@@ -282,11 +352,13 @@ struct Envelope<T> {
 }`}</code>
                 </pre>
               </div>
-              <div className="rounded-lg border border-border bg-card p-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
                   A strong default is to separate internal domain types from wire-facing DTOs when evolution pressure differs.
                   Your aggregate may want one shape. Your public event or API contract may want another. Serde makes the
-                  conversion pleasant, which means you do not need to force one type to do both jobs badly.
+                  conversion pleasant, which means you do not have to force one type to do both jobs badly. The cost of a
+                  second type and a <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">From</code> impl is
+                  usually far lower than the cost of a domain refactor that silently changes a public payload.
                 </p>
               </div>
             </div>
@@ -294,6 +366,29 @@ struct Envelope<T> {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">JSON, YAML, TOML, MessagePack, and CBOR</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              These five formats all map cleanly onto Serde's data model, so the choice between them is rarely about what
+              Rust can express. It is about who reads the bytes and under what pressure. JSON, YAML, and TOML are text:
+              easy to diff, log, and hand-edit, which matters enormously during an incident. MessagePack and CBOR are
+              binary cousins of the same document model: smaller and faster to parse, at the cost of needing a tool to
+              inspect. The decision usually collapses to two axes, human readability and payload size, with compatibility
+              and tooling as tie-breakers.
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground leading-6">
+              Before the cards, look at the decision as a fork rather than a ranking. There is no single best format; there
+              is a best format for a given boundary.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Pick a format for this boundary] --> Q1{Must a human read it?}\n  Q1 -->|Yes| Q2{Config or data stream?}\n  Q2 -->|Config| Toml[TOML or YAML]\n  Q2 -->|Data or API| Json[JSON]\n  Q1 -->|No| Bin[Binary, see next fork]`}
+              caption="First fork: if a human must read the bytes, the answer is a text format keyed on config versus data."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              When the boundary does not need to be human-readable, the binary branch forks again:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Bin[Binary boundary] --> Q3{Same document model, smaller?}\n  Q3 -->|Yes| Cbor[MessagePack or CBOR]\n  Q3 -->|Need cross-language schema| Schema[Schema-first binary]`}
+              caption="Second fork: a binary boundary chooses between a compact document format and a schema-first contract. The format question is keyed on who reads the bytes and how much size matters, not a single winner."
+            />
             <div className="grid gap-4 lg:grid-cols-5">
               {formatCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -302,17 +397,26 @@ struct Envelope<T> {
                 </div>
               ))}
             </div>
-            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 The useful decision is not “which format is best?” It is “which format fits this boundary’s human-readability,
                 payload size, compatibility, and debugging needs?” A public API and an internal control-plane message do not
-                have to make the same trade.
+                have to make the same trade, and there is no rule that one service must speak only one format.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Binary serialization formats</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Once a boundary no longer needs to be human-readable, a different set of formats opens up, and they sort
+              roughly by how much they commit to in exchange for speed and size. Rust-centric compact encodings are the
+              fastest to adopt and the least portable. Schema-first formats cost you an interface-definition step but buy
+              you a contract that other languages can compile against. Archived, zero-copy representations go furthest:
+              they let you read a value straight out of a mapped buffer without parsing, in return for the strictest layout
+              and evolution discipline. The cards move left to right along that same axis of convenience versus
+              cross-language and durability guarantees.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {binaryFormatCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -325,6 +429,25 @@ struct Envelope<T> {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Schema evolution</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Contracts change, and the only question is whether old and new code can coexist during the change. The safe
+              moves are the ones an old reader can survive without being redeployed first. Adding an optional field with a
+              default is invisible to existing readers. Renaming a field is safe only if you keep the old name as an alias
+              until every producer has moved. Changing the meaning of an existing field is the dangerous one, because it
+              compiles, deploys, and corrupts data silently. The diagram below traces what a tolerant reader does when it
+              meets each kind of change.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  R[Reader parses a message] --> A{New optional field present?}\n  A -->|Missing| Def[Use serde default]\n  A -->|Present| Keep[Read it]\n  R --> B{Field was renamed?}\n  B -->|Old name| Alias[serde alias maps it]\n  B -->|New name| Keep\n  Def --> Ok[Parse succeeds]\n  Keep --> Ok\n  Alias --> Ok`}
+              caption="Added and renamed fields are survivable: a missing optional field falls back to a default, and a renamed field is mapped by an alias."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The same tolerant reader also handles fields it does not recognize at all:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  R[Reader parses a message] --> C{Unknown extra field?}\n  C -->|Yes| Ignore[Ignore unless deny_unknown_fields]\n  Ignore --> Ok[Parse succeeds]`}
+              caption="An unknown extra field is ignored unless deny_unknown_fields is set. The change that breaks a tolerant reader is repurposing an existing field, which has no safe edge in either half."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {evolutionCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -395,6 +518,19 @@ amount_cents: u64,`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Zero-copy deserialization</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Some formats let a deserialized value borrow directly from the input buffer instead of copying each string
+              out. A field typed as <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&amp;str</code> or{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cow&lt;&apos;de, str&gt;</code> can point
+              into the bytes you parsed, which avoids allocation and copying on a hot path. The catch is pure Rust: the
+              borrowed view cannot outlive the buffer it points into. That is fine for parse-time validation, and wrong the
+              moment the value needs to live on a queue, in a cache, or across an await point. The decision is therefore
+              about lifetime, and the diagram makes the fork explicit.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Buf[Input buffer] -->|borrow| View[Parsed view with lifetime]\n  View --> Q1{Crosses thread, queue, or await?}\n  Q1 -->|No, stays local| Use[Validate and use in place]\n  Q1 -->|Yes| Own[Convert to owned value]\n  Own --> Send[Safe to send, store, or queue]\n  Use --> Drop[Drop before buffer is freed]`}
+              caption="Borrow while the buffer is alive and the work stays local; convert to owned the moment the value must outlive the buffer or cross a boundary."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {zeroCopyCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -412,7 +548,17 @@ amount_cents: u64,`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Serialization for distributed systems</h4>
+            <div className="flex items-center gap-2 mb-3">
+              <Network className="h-4 w-4 text-primary" />
+              <h4 className="font-semibold text-foreground">Serialization for distributed systems</h4>
+            </div>
+            <p className="text-sm text-muted-foreground leading-6">
+              Across a network, the contract is no longer a convenience; it is the interface. Producers and consumers
+              deploy on different schedules, so at any instant an old producer may be sending messages to a new consumer or
+              the reverse. The patterns below all serve one goal: make the contract and its version explicit in the data,
+              in the tests, and in the logs, so that a version skew is something you detect rather than something that
+              detects you in production.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {distributedPatterns.map((pattern) => (
                 <div key={pattern} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -424,23 +570,20 @@ amount_cents: u64,`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Serialization for WASM and FFI boundaries</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Not every boundary is a network, but every boundary still has a contract. At the WASM edge you are handing
+              data to JavaScript, and the choice is whether to translate into a structured JS value or pass a text or
+              binary payload that JavaScript parses. At the FFI edge you are handing data to C, and the cardinal rule is to
+              never let Rust&apos;s in-memory layout become the contract by accident: a struct&apos;s field order and padding are
+              implementation details until you pin them with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">repr(C)</code> or
+              replace them with an explicit byte buffer and length. The honest move at either edge is to decide what the
+              foreign side actually wants and give it exactly that.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {wasmFfiCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
                   <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">prior instincts that help and mislead</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
                 </div>
               ))}
             </div>
@@ -510,6 +653,16 @@ amount_cents: u64,`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the envelope wraps the payload and carries the version, while the inner enum is internally
+              tagged with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">#[serde(tag = &quot;kind&quot;)]</code>{" "}
+              so the kind travels inside the JSON object rather than being inferred from which fields happen to be present.
+              Trace the round trip below before reading the code: serialize to JSON, parse back, then match on the tag.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Env[EventEnvelope schema 2] --> Ser[serde_json to_string]\n  Ser --> Json[JSON with kind inside payload]\n  Json --> De[serde_json from_str]\n  De --> Env2[EventEnvelope]\n  Env2 --> Match{match payload kind}\n  Match -->|created| Out[read total_cents]\n  Match -->|cancelled| Zero[total 0]`}
+              caption="The version rides on the envelope and the kind rides inside the tagged payload, so a reader recovers both from the bytes without guessing."
+            />
             <RustCodeEditor
               code={codes.serialization_contracts_versioned_event}
               onChange={(newCode) => updateCode("serialization_contracts_versioned_event", newCode)}
@@ -565,6 +718,17 @@ amount_cents: u64,`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: two boundary concerns sit side by side on one struct. The{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">amount_cents</code> field routes through a
+              custom serializer pair so the wire sees decimal text while the domain keeps an exact integer, and the string
+              fields are typed to borrow from the input buffer. Follow how the raw JSON splits into a borrowed view plus a
+              converted integer below.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Raw["raw JSON bytes"] --> Parse[serde_json from_str]\n  Parse -->|borrow| Id["request_id: &str"]\n  Parse -->|borrow| Route["route: Cow str"]\n  Parse -->|deserialize_with| Conv[decimal_as_cents]\n  Conv --> Amt["amount_cents: u64 = 1250"]\n  Id --> View[BorrowedAudit tied to raw]\n  Route --> View\n  Amt --> View`}
+              caption="The custom deserializer converts '12.50' into 1250 cents, while the string fields stay borrowed from the raw buffer the BorrowedAudit is tied to."
+            />
             <RustCodeEditor
               code={codes.serialization_contracts_custom_zero_copy}
               onChange={(newCode) => updateCode("serialization_contracts_custom_zero_copy", newCode)}
@@ -626,6 +790,7 @@ amount_cents: u64,`}</code>
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>Serde removes boilerplate, but the real work is still contract design.</li>
+            <li>Whatever language you came from, the shift is the same: the wire shape is a contract you design, and ownership and lifetime still matter at the boundary.</li>
             <li>JSON, YAML, TOML, MessagePack, CBOR, and binary formats make different tradeoffs across readability, size, and interoperability.</li>
             <li>Schema evolution is easiest when you prefer additive changes, defaults, aliases, and explicit envelopes.</li>
             <li>Custom serializers protect the internal model from transport-specific compromises.</li>
@@ -637,603 +802,3 @@ amount_cents: u64,`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch19-serialization-and-data-contracts-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Separate the domain model from the wire contract",
-    objective: "Practice deciding which fields belong in a stable transport DTO and which belong only in the internal Rust model.",
-    starterPrompt:
-      "An order service has an internal aggregate with inventory state, pricing rules, and retry metadata, but it publishes only an order-created event to other services.",
-    prompts: [
-      "Which fields belong in the event contract and which should stay internal?",
-      "Which fields need stable names and explicit units at the wire boundary?",
-      "What would you version in the envelope rather than only in code comments?",
-    ],
-    acceptanceCriteria: [
-      "You keep transport-facing fields narrower than the full aggregate.",
-      "You name at least one field that should stay internal to the service.",
-      "You explain why a schema version or explicit event kind belongs in the contract.",
-    ],
-    hints: [
-      "The wire contract is for consumers, not for reproducing your full aggregate internals.",
-      "A good answer treats the DTO as a public promise.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Read a schema evolution change like a rollout reviewer",
-    objective: "Explain whether a contract change is additive, risky, or breaking and how to stage it safely.",
-    starterPrompt:
-      "Review three changes: adding `trace_id: Option<String>`, renaming `customer` to `customer_id`, and changing `total_cents: u64` into a decimal string field.",
-    prompts: [
-      "Which change is additive and easiest to tolerate with defaults?",
-      "Which rename wants aliases or a staged migration path?",
-      "Which representation change is the riskiest because it redefines field meaning?",
-    ],
-    acceptanceCriteria: [
-      "You classify additive versus breaking changes clearly.",
-      "You propose at least one compatibility tactic such as defaults, aliases, or a new field name.",
-      "You explain one rollout or mixed-version risk concretely.",
-    ],
-    hints: [
-      "Changing a field's meaning is usually more dangerous than adding a new optional field.",
-      "Think about mixed producers and consumers, not only one codebase at one revision.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Round-trip a versioned domain event",
-    objective: "Implement a small tagged event envelope that serializes and deserializes cleanly.",
-    starterPrompt:
-      "Define an envelope with `schema_version` and a tagged payload enum, then serialize and deserialize an `OrderEvent::Created` value.",
-    prompts: [
-      "Use a tagged enum for the payload kind.",
-      "Keep the schema version explicit on the envelope.",
-      "Print the decoded version, kind, and total.",
-    ],
-    acceptanceCriteria: [
-      "The event is serializable and deserializable through Serde.",
-      "The contract contains an explicit version field.",
-      "The runnable lab prints the expected version, kind, and total.",
-    ],
-    hints: [
-      "This exercise is about contract shape first, not clever parsing.",
-      "A tagged enum is often the calmest event model for a closed event set.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Add a custom Serde serializer without warping the domain",
-    objective: "Represent a boundary-specific wire shape while keeping the internal Rust type honest.",
-    starterPrompt:
-      "A partner API wants money as decimal text such as `\"12.50\"`, but your domain model stores cents as `u64`. Add a custom serializer and deserializer.",
-    prompts: [
-      "Where should the conversion logic live?",
-      "Why is a custom Serde hook better than storing decimal strings in the aggregate?",
-      "How would you test the round-trip and malformed-input paths?",
-    ],
-    acceptanceCriteria: [
-      "You keep the internal field as cents or another precise domain-safe type.",
-      "You describe a custom serializer or deserializer boundary clearly.",
-      "You mention both round-trip tests and invalid-input tests.",
-    ],
-    hints: [
-      "Transport representation and domain representation are allowed to differ.",
-      "The serializer is where that difference becomes explicit.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "design or production scenario",
-    title: "Design a zero-copy deserialization boundary",
-    objective: "Choose where borrowed fields are useful and where ownership must take over.",
-    starterPrompt:
-      "A request parser reads JSON from a network buffer, validates fields, and then sends work to an async queue.",
-    prompts: [
-      "Which parse-time struct could borrow from the buffer with `&str` or `Cow<'a, str>`?",
-      "At which point should the validated message become fully owned?",
-      "Why is returning the borrowed parse view across the async queue usually the wrong model?",
-    ],
-    acceptanceCriteria: [
-      "You use borrowing for a local parse or validation view only where the owner is clear and nearby.",
-      "You choose an owned handoff before the queue or async boundary.",
-      "You explain the tradeoff in ownership and lifetime terms, not only performance folklore.",
-    ],
-    hints: [
-      "Zero-copy is strongest when the input buffer obviously outlives the parser view.",
-      "Queues, retries, and tasks are ownership boundaries.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose a contract strategy for distributed systems, WASM, and FFI",
-    objective: "Practice selecting a format and boundary model from the consumer's needs rather than from one default habit.",
-    starterPrompt:
-      "You must expose one event stream to other services, one config file to operators, one browser-facing boundary to WASM, and one C ABI boundary to a native library.",
-    prompts: [
-      "Which boundary wants a text format and which wants a compact binary or structured JS-value bridge?",
-      "Which boundary should avoid Serde-driven bytes entirely and instead use an explicit ABI layout or byte buffer contract?",
-      "What compatibility or observability tests would you require before rollout?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least two different contract strategies for different boundaries.",
-      "You treat the FFI boundary as an ABI design problem, not merely as another JSON endpoint.",
-      "You name at least one compatibility test and one observability hook such as sample payload replay, decode error metrics, or version-tag logging.",
-    ],
-    hints: [
-      "Different consumers justify different contract shapes.",
-      "A browser, another service, and a C library rarely want the same thing for the same reasons.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What is the difference between deriving Serde traits and designing a stable data contract?",
-  "Why are additive fields plus defaults often safer than in-place semantic changes?",
-  "When should a wire DTO diverge from the internal domain model?",
-  "What is the real ownership question behind zero-copy deserialization?",
-  "Why is FFI usually an ABI problem before it is a serialization problem?",
-]
-
-const workingLoop = [
-  "State the boundary first: file, API, event stream, browser bridge, or native ABI.",
-  "Choose the wire shape second: field names, explicit versions, optionality, and units.",
-  "Only then choose the format: JSON-like, config-like, compact binary, or explicit ABI bytes.",
-  "If borrowing appears, name the owner that keeps the parsed view valid and the point where ownership must take over.",
-]
-
-export function PageCh19SerializationAndDataContractsExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 37
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 19 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice serialization the way it appears in production: versioned contracts, custom wire representations,
-          zero-copy parse boundaries, and explicit decisions about which contract belongs on which edge.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a contract review. The best answer does not only say “Serde can do that.” It says
-                which shape the boundary needs, how the contract evolves, and where ownership should change from borrowed
-                parse views into stable owned values.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(36)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 19
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Contract drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Versioned event round-trip"
-          description={
-            <>
-              Repair the starter so the event envelope is explicitly versioned, the payload is tagged with{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">kind</code>, and the created event
-              round-trips with the expected total.
-            </>
-          }
-          filename="versioned_event_lab.rs"
-          runKey="ch19_ex_versioned_event"
-          expectedOutput={"version = 2\nkind = created\ntotal cents = 4200"}
-          helperText={
-            <>
-              Tip: the checker looks for an explicit schema version of{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">2</code>, a tagged payload enum, a JSON
-              round-trip through <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">serde_json</code>, and
-              the created event total of <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">4200</code>.
-            </>
-          }
-          initialCode={`use serde::{Deserialize, Serialize};\n\n#[derive(Debug, Serialize, Deserialize)]\nenum OrderEvent {\n    Created {\n        order_id: String,\n        total_cents: u64,\n    },\n    Cancelled {\n        order_id: String,\n    },\n}\n\n#[derive(Debug, Serialize, Deserialize)]\nstruct EventEnvelope {\n    schema_version: u16,\n    payload: OrderEvent,\n}\n\nfn main() {\n    let envelope = EventEnvelope {\n        schema_version: 0,\n        payload: OrderEvent::Created {\n            order_id: String::from(\"ord-7\"),\n            total_cents: 0,\n        },\n    };\n\n    let json = serde_json::to_string(&envelope).unwrap();\n    let decoded: EventEnvelope = serde_json::from_str(&json).unwrap();\n\n    let (kind, total_cents) = match decoded.payload {\n        OrderEvent::Created { total_cents, .. } => (\"unknown\", total_cents),\n        OrderEvent::Cancelled { .. } => (\"cancelled\", 0),\n    };\n\n    println!(\"version = {}\", decoded.schema_version);\n    println!(\"kind = {}\", kind);\n    println!(\"total cents = {}\", total_cents);\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to defend a wire contract separately from the domain model, stage
-            a schema change without hand-waving, apply a custom serializer at the edge, and decide clearly when borrowed
-            parse views stop being helpful and owned data should take over.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch19_serialization_and_data_contracts/versioned_domain_event.rs`
-````
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum OrderEvent {
-    Created {
-        order_id: String,
-        customer_id: String,
-        total_cents: u64,
-    },
-    Cancelled {
-        order_id: String,
-        reason: Option<String>,
-    },
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct EventEnvelope {
-    schema_version: u16,
-    #[serde(default)]
-    trace_id: Option<String>,
-    event_id: String,
-    payload: OrderEvent,
-}
-
-fn main() {
-    let envelope = EventEnvelope {
-        schema_version: 2,
-        trace_id: None,
-        event_id: String::from("evt-100"),
-        payload: OrderEvent::Created {
-            order_id: String::from("ord-7"),
-            customer_id: String::from("cust-9"),
-            total_cents: 4200,
-        },
-    };
-
-    let json = serde_json::to_string(&envelope).unwrap();
-    let decoded: EventEnvelope = serde_json::from_str(&json).unwrap();
-
-    let kind = match &decoded.payload {
-        OrderEvent::Created { .. } => "created",
-        OrderEvent::Cancelled { .. } => "cancelled",
-    };
-
-    let total_cents = match decoded.payload {
-        OrderEvent::Created { total_cents, .. } => total_cents,
-        OrderEvent::Cancelled { .. } => 0,
-    };
-
-    println!("schema = {}", decoded.schema_version);
-    println!("kind = {}", kind);
-    println!("total cents = {}", total_cents);
-}
-````
-
-### File: `examples/ch19_serialization_and_data_contracts/custom_serializer_and_zero_copy.rs`
-````
-use std::borrow::Cow;
-
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-fn cents_as_decimal<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let text = format!("{}.{:02}", value / 100, value % 100);
-    serializer.serialize_str(&text)
-}
-
-fn decimal_as_cents<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let text = Cow::<str>::deserialize(deserializer)?;
-    let (units, cents) = text
-        .split_once('.')
-        .ok_or_else(|| serde::de::Error::custom("expected decimal amount"))?;
-
-    if cents.len() != 2 {
-        return Err(serde::de::Error::custom(
-            "expected exactly two fractional digits",
-        ));
-    }
-
-    let whole = units.parse::<u64>().map_err(serde::de::Error::custom)?;
-    let frac = cents.parse::<u64>().map_err(serde::de::Error::custom)?;
-
-    Ok(whole * 100 + frac)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BorrowedAudit<'a> {
-    #[serde(borrow)]
-    request_id: &'a str,
-    #[serde(borrow)]
-    route: Cow<'a, str>,
-    #[serde(
-        serialize_with = "cents_as_decimal",
-        deserialize_with = "decimal_as_cents"
-    )]
-    amount_cents: u64,
-}
-
-fn main() {
-    let raw = "{\"request_id\":\"req-7\",\"route\":\"/checkout\",\"amount_cents\":\"12.50\"}";
-    let audit: BorrowedAudit<'_> = serde_json::from_str(raw).unwrap();
-
-    println!("request = {}", audit.request_id);
-    println!("route = {}", audit.route);
-    println!("amount cents = {}", audit.amount_cents);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -31,4 +31,8 @@ export { PageCh15OopModelsInRust } from "./page-ch15-oop-models-in-rust"
- export { PageCh15OopModelsInRustExercises } from "./page-ch15-oop-models-in-rust-exercises"
- export { PageCh16DomainDrivenDesignInRust } from "./page-ch16-domain-driven-design-in-rust"
- export { PageCh16DomainDrivenDesignInRustExercises } from "./page-ch16-domain-driven-design-in-rust-exercises"
- export { PageCh17RefactoringTowardIdiomaticRust } from "./page-ch17-refactoring-toward-idiomatic-rust"
- export { PageCh17RefactoringTowardIdiomaticRustExercises } from "./page-ch17-refactoring-toward-idiomatic-rust-exercises"
-+export { PageCh18GenericsInsteadOfTemplates } from "./page-ch18-generics-instead-of-templates"
-+export { PageCh18GenericsInsteadOfTemplatesExercises } from "./page-ch18-generics-instead-of-templates-exercises"
-+export { PageCh19SerializationAndDataContracts } from "./page-ch19-serialization-and-data-contracts"
-+export { PageCh19SerializationAndDataContractsExercises } from "./page-ch19-serialization-and-data-contracts-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -43,6 +43,10 @@ import {
-   PageCh16DomainDrivenDesignInRust,
-   PageCh16DomainDrivenDesignInRustExercises,
-   PageCh17RefactoringTowardIdiomaticRust,
-   PageCh17RefactoringTowardIdiomaticRustExercises,
-+  PageCh18GenericsInsteadOfTemplates,
-+  PageCh18GenericsInsteadOfTemplatesExercises,
-+  PageCh19SerializationAndDataContracts,
-+  PageCh19SerializationAndDataContractsExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -78,6 +82,10 @@ const PAGE_COMPONENTS = [
-   PageCh16DomainDrivenDesignInRust,
-   PageCh16DomainDrivenDesignInRustExercises,
-   PageCh17RefactoringTowardIdiomaticRust,
-   PageCh17RefactoringTowardIdiomaticRustExercises,
-+  PageCh18GenericsInsteadOfTemplates,
-+  PageCh18GenericsInsteadOfTemplatesExercises,
-+  PageCh19SerializationAndDataContracts,
-+  PageCh19SerializationAndDataContractsExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,5 @@
-+import { simulateCh19Output } from "./rust-simulator-ch19"
-+import { simulateCh18Output } from "./rust-simulator-ch18"
- import { simulateCh17Output } from "./rust-simulator-ch17"
- import { simulateCh16Output } from "./rust-simulator-ch16"
- import { simulateCh15Output } from "./rust-simulator-ch15"
-@@ -995,6 +997,12 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch19Output = simulateCh19Output(code, key)
-+  if (ch19Output !== null) return ch19Output
-+
-+  const ch18Output = simulateCh18Output(code, key)
-+  if (ch18Output !== null) return ch18Output
- 
-   const ch17Output = simulateCh17Output(code, key)
-   if (ch17Output !== null) return ch17Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -7,6 +7,8 @@ import { DEFAULT_CODES_CH14 } from "./default-codes-ch14"
- import { DEFAULT_CODES_CH15 } from "./default-codes-ch15"
- import { DEFAULT_CODES_CH16 } from "./default-codes-ch16"
- import { DEFAULT_CODES_CH17 } from "./default-codes-ch17"
-+import { DEFAULT_CODES_CH18 } from "./default-codes-ch18"
-+import { DEFAULT_CODES_CH19 } from "./default-codes-ch19"
- 
- export interface PageConfig {
-   id: string
-@@ -424,6 +426,34 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Refactor panic-based code into Result-based code, reduce lifetime noise, remove unnecessary clones, and improve test seams",
-         icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch18-generics-instead-of-templates",
-+    title: "Chapter 18 · Generics Instead of Templates",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch18-generics-instead-of-templates",
-+        title: "Generics Instead of Templates",
-+        shortTitle: "Generics",
-+        description:
-+          "Rust generics vs templates, monomorphization, trait bounds, where clauses, associated types, const generics, and performance tradeoffs",
-+        icon: "book",
-+        codeKeys: ["generics_batch_bounds", "generics_associated_types_const"],
-+      },
-+      {
-+        id: "ch18-generics-instead-of-templates-exercises",
-+        title: "Chapter 18 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Translate template-style helpers into Rust generics, simplify traits with associated types, and implement const-generic fixed-size types",
-+        icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch19-serialization-and-data-contracts",
-+    title: "Chapter 19 · Serialization and Data Contracts",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch19-serialization-and-data-contracts",
-+        title: "Serialization and Data Contracts",
-+        shortTitle: "Serialization",
-+        description:
-+          "Serde fundamentals, wire formats, schema evolution, custom serializers, zero-copy deserialization, and boundary contracts for distributed systems, WASM, and FFI",
-+        icon: "book",
-+        codeKeys: ["serialization_contracts_versioned_event", "serialization_contracts_custom_zero_copy"],
-+      },
-+      {
-+        id: "ch19-serialization-and-data-contracts-exercises",
-+        title: "Chapter 19 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Round-trip versioned events, add custom serializers, design zero-copy boundaries, and choose format strategies deliberately",
-+        icon: "trophy",
-       },
-     ],
-   },
-@@ -860,5 +890,7 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH14,
-   ...DEFAULT_CODES_CH15,
-   ...DEFAULT_CODES_CH16,
-   ...DEFAULT_CODES_CH17,
-+  ...DEFAULT_CODES_CH18,
-+  ...DEFAULT_CODES_CH19,
- }
- 
- export interface BookState {
-````

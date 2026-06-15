@@ -1,0 +1,215 @@
+{
+ "chapterKey": "ch38",
+ "num": 38,
+ "title": "Merkle Tree Games and Challenges",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "State the commitment policy before you state the code",
+   "objective": "Practice turning Merkle tree folklore into one explicit contract another team can reproduce.",
+   "starterPrompt": "Write down the policy for one Merkle system over chunked file data: leaf encoding, node encoding, odd-leaf handling, and what the proof envelope must carry.",
+   "prompts": [
+    "Which bytes are hashed at the leaf boundary?",
+    "How are internal nodes domain-separated from leaves?",
+    "What happens when a level has an odd number of hashes?",
+    "Which proof fields must be explicit for another process to verify the path correctly?"
+   ],
+   "acceptanceCriteria": [
+    "You define leaf and internal-node encoding separately.",
+    "You pick and justify one odd-leaf policy explicitly.",
+    "You include at least leaf index, leaf count, and sibling orientation in the proof contract."
+   ],
+   "hints": [
+    "A Merkle proof is reproducible only if the policy is reproducible.",
+    "Two locally correct implementations can still disagree if the policy is underspecified."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read a pointer tree and explain why flat levels are calmer",
+   "objective": "Compare a pointer-rich node tree with a flat level representation from an ownership and operations perspective.",
+   "starterPrompt": "You inherit one design with `Rc<Node>` parent and child pointers and another design with `Vec<Vec<Hash>>` plus proof steps as value types.",
+   "prompts": [
+    "Which design is easier to serialize or send across a queue?",
+    "Which design is easier to parallelize level by level?",
+    "Which design is easier to make persistent through copy-on-write snapshots?",
+    "Which design carries less incidental ownership machinery for the same proof workload?"
+   ],
+   "acceptanceCriteria": [
+    "You explain why Merkle operations usually do not need a pointer graph at all.",
+    "You identify at least one win for flat levels in serialization or parallelism.",
+    "You mention one tradeoff if a system later needs richer navigation than proof generation and verification alone."
+   ],
+   "hints": [
+    "The question is not whether pointers can work. It is whether they help this workload.",
+    "Merkle trees are often commitment layers first and navigation trees second."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a basic Merkle tree API",
+   "objective": "Build a small owner that constructs levels from leaves and exposes a root plus proof generation.",
+   "starterPrompt": "Implement a `MerkleTree` over `&str` leaves with `from_leaves`, `root`, and `proof(index)` using flat per-level storage.",
+   "prompts": [
+    "Keep the owner as flat vectors of hashes.",
+    "Make odd-leaf handling explicit in the build loop.",
+    "Keep proof steps as small value types rather than borrowed references into the tree.",
+    "Do not use `Rc`, `RefCell`, or raw pointers."
+   ],
+   "acceptanceCriteria": [
+    "The tree owns its hashed levels directly.",
+    "Proof generation returns a deterministic sibling path.",
+    "The design stays easy to serialize and easy to move.",
+    "The chapter lab or your local run demonstrates a valid proof for one leaf."
+   ],
+   "hints": [
+    "A level builder over `chunks(2)` is enough for the core logic.",
+    "Proof generation is just sibling selection plus parent index movement."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a proof verifier that forgot orientation",
+   "objective": "Fix one of the most common practical proof bugs: sibling value without sibling position.",
+   "starterPrompt": "You inherit `verify_proof` that hashes sibling values in one fixed order and ignores whether the sibling was left or right of the current hash.",
+   "prompts": [
+    "Why is sibling order part of the proof contract?",
+    "Which branch should hash `sibling || acc` and which should hash `acc || sibling`?",
+    "What test vector would catch this bug immediately?",
+    "How would canonical serialization mistakes create the same kind of disagreement?"
+   ],
+   "acceptanceCriteria": [
+    "You explain the orientation bug concretely.",
+    "You repair the verifier with an explicit left-or-right branch.",
+    "You mention one small deterministic test case that proves the repair."
+   ],
+   "hints": [
+    "A sibling value alone is not enough information.",
+    "The smallest four-leaf tree is usually the best proof bug trap."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Parallelize the wide levels, not the whole idea blindly",
+   "objective": "Choose where parallelism helps and where it only adds scheduler cost.",
+   "starterPrompt": "You want faster tree construction for large batches. Sketch a level-wise parallel build with Rayon or another worker strategy, then decide when the build should fall back to serial work near the root.",
+   "prompts": [
+    "What is the independent unit of work within one level?",
+    "What threshold would stop parallelism on tiny upper levels?",
+    "Would the parallel path still own the same flat data structure?",
+    "What metric would confirm the parallel build actually helps the target workload?"
+   ],
+   "acceptanceCriteria": [
+    "You parallelize sibling-pair hashing within a level, not arbitrary cross-level dependencies.",
+    "You define one threshold or condition for switching back to serial work.",
+    "You keep the ownership model compatible with the serial version.",
+    "You mention one measurement such as build latency, CPU utilization, or batch throughput."
+   ],
+   "hints": [
+    "Level-by-level parallelism is the calm default because the dependency graph is already staged for you.",
+    "Parallel work that becomes smaller every round usually wants a cutoff."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose challenge tracks for content-addressed storage, game integrity, and distributed verification",
+   "objective": "Turn the chapter topics into three production-shaped challenge designs with explicit budgets and replay policy.",
+   "starterPrompt": "Design three systems: a chunk store keyed by hash, a tamper-evident game checkpoint feed, and a verifier service that checks remote proofs before downloading full payloads.",
+   "prompts": [
+    "Which system needs proof envelopes versioned across services?",
+    "Which system needs snapshot roots durable enough for replay or dispute resolution?",
+    "Which system wants batch verification or bounded worker pools?",
+    "Which failure and observability signals would you require before rollout?"
+   ],
+   "acceptanceCriteria": [
+    "You describe all three challenge systems with distinct goals and boundaries.",
+    "You define one ownership or durability boundary for each system.",
+    "You mention at least one batching, retry, or queue budget where the workload justifies it.",
+    "You include at least one observability hook such as proof-failure rate, oldest queue age, or checkpoint publication lag."
+   ],
+   "hints": [
+    "The three challenge tracks are deliberately different so you do not solve them all with one slogan.",
+    "A strong answer keeps commitment policy, storage policy, and execution policy separate."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is odd-leaf handling a protocol decision rather than a local helper detail?",
+  "Why are flat levels usually calmer than pointer trees for Merkle workloads?",
+  "What makes sibling orientation part of the proof itself?",
+  "When is level-wise parallelism worth the overhead, and when should it stop?",
+  "Why should a proof envelope carry more than only the sibling hashes?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Verify one inclusion proof",
+  "filename": "merkle_proof_verify_lab.rs",
+  "runKey": "ch38_ex_merkle_proof_verify",
+  "expectedOutput": "verified good = true\nverified bad = false",
+  "initialCode": "type Hash = u32;\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofStep {\n    sibling: Hash,\n    sibling_is_left: bool,\n}\n\nfn hash_bytes(tag: u8, bytes: &[u8]) -> Hash {\n    let mut hash = 2_166_136_261_u32 ^ tag as u32;\n\n    for &byte in bytes {\n        hash ^= byte as u32;\n        hash = hash.wrapping_mul(16_777_619);\n    }\n\n    hash\n}\n\nfn hash_leaf(text: &str) -> Hash {\n    hash_bytes(0, text.as_bytes())\n}\n\nfn hash_node(left: Hash, right: Hash) -> Hash {\n    let mut bytes = [0_u8; 8];\n    bytes[..4].copy_from_slice(&left.to_le_bytes());\n    bytes[4..].copy_from_slice(&right.to_le_bytes());\n    hash_bytes(1, &bytes)\n}\n\nfn verify_proof(_leaf: &str, _proof: &[ProofStep], _expected_root: Hash) -> bool {\n    false\n}\n\nfn main() {\n    let alpha = hash_leaf(\"alpha\");\n    let beta = hash_leaf(\"beta\");\n    let gamma = hash_leaf(\"gamma\");\n    let delta = hash_leaf(\"delta\");\n\n    let left = hash_node(alpha, beta);\n    let right = hash_node(gamma, delta);\n    let root = hash_node(left, right);\n\n    let proof = vec![\n        ProofStep {\n            sibling: delta,\n            sibling_is_left: false,\n        },\n        ProofStep {\n            sibling: left,\n            sibling_is_left: true,\n        },\n    ];\n\n    println!(\"verified good = {}\", verify_proof(\"gamma\", &proof, root));\n    println!(\"verified bad = {}\", verify_proof(\"gxmxa\", &proof, root));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 26, 31, and 37",
+  "Opening scenario",
+  "At a glance",
+  "Questions to ask in review",
+  "Mental model",
+  "Core concepts",
+  "Hash trees and integrity proofs",
+  "Proof generation and verification",
+  "Persistent tree variants",
+  "Parallel Merkle tree construction",
+  "Serialization formats",
+  "Games and challenge patterns",
+  "How this maps to what you already know",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: build a tree, emit a proof, verify one leaf",
+  "Example 2: parallelize one level at a time",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Merkle-based systems support integrity checks, replay resistance, and distributed verification. This chapter applies hash trees to production audit, challenge, and synchronization workflows.",
+  "Chapter 19 covered versioned serialization. Chapter 26 covered bounded parallel execution. Chapter 31 covered distributed task replay and trace lineage. Chapter 37 covered expensive specialist workers and explicit boundary budgeting. Merkle systems touch all four.",
+  "Three teams arrive at the same primitive from different directions. A patch service wants to prove that the 120 MB update a client just downloaded is bit-for-bit the file the build server published, without re-sending the whole thing. A game backend wants tamper-evident match his",
+  "A Merkle tree gives you exactly that. You hash each piece of data into a leaf, hash leaves together in pairs to form a level above, and keep climbing until a single hash remains. That top hash — the root — is the commitment. Change any byte of any leaf and the root changes. The b",
+  "Read the tree below from the bottom up. The four leaves are hashes of the raw data; each pair is hashed into the node above it; the two nodes meet at the root. To prove that leaf2 belongs to this root, you do not ship the whole tree. You ship just the siblings a verifier needs to",
+  "Three ideas carry most of the weight in this chapter. The first is what a Merkle tree actually buys you — a small commitment plus cheap inclusion proofs. The second is a Rust-specific representation choice that surprises people coming from object-oriented backgrounds. The third i",
+  "The whole value of a Merkle tree comes from one property: the root is a deterministic function of every leaf. Because each internal node hashes its children, and the root hashes the level below it, a single flipped bit anywhere at the bottom propagates all the way up. That is wha",
+  "A Merkle proof is not a re-serialization of the whole tree. It is the minimum sibling path needed to rebuild the same root from one leaf and one policy set.",
+  "An inclusion proof answers a narrow question: &ldquo;does this leaf belong under this root?&rdquo; The prover, who holds the whole tree, walks from the leaf up to the root and collects the sibling hash at each level — and, crucially, whether that sibling sat on the left or the ri",
+  "The trace below is the part people get wrong. At each step the verifier must combine its running hash with the sibling in the correct order. If the sibling was on the right, the order is H(running || sibling); if it was on the left, it is H(sibling || running). Drop the orientati",
+  "Rebuilding a million-leaf tree because one leaf changed is wasteful, and most real systems never do it. When a single leaf changes, only the hashes on the path from that leaf to the root are affected — roughly log&#8322;(n) nodes. A persistent tree exploits this: it shares the un",
+  "Building a Merkle tree is a textbook fan-in. Within a single level every parent depends only on its own pair of children and on nothing else at that level, so all the pair-hashes in one level can run at the same time. The dependency is purely vertical: level k+1 cannot start unti",
+  "In the snippet below, look at the boundary, not the scheduler. par_chunks(2) splits one level into independent pairs, the map hashes each pair in parallel, and collect gathers the next level in order before the outer loop advances. The odd-pair fallback ( if pair.len() == 2) is t",
+  "A root by itself is just 32 bytes with no self-description, and that is the trap. The moment a proof leaves the process that built the tree, the receiver has to reproduce the producer&rsquo;s exact rules, and those rules are not visible in the hash. So the unit you actually ship ",
+  "In the struct below, the body of the proof is siblings, but the fields that make it portable are the metadata: hash_alg and tree_version tell the verifier which policy produced the root, and leaf_index with leaf_count let it reconstruct the orientation at each level. Drop any of ",
+  "These three patterns are the reason the chapter pairs &ldquo;games&rdquo; with &ldquo;challenges.&rdquo; Each one uses the same commitment-plus-proof core, but applies it to a different trust problem. Content-addressed storage turns the root into a deduplication key and a fetch v",
+  "The Merkle algorithm is language-neutral; what changes is the instinct you bring to representing it. The cards below are about the mental-model shift, not about which crate replaces which library. The recurring theme: the commitment is an owned, immutable byte structure, the proo",
+  "The most common Merkle bug is not a bad hash function call. It is two systems quietly disagreeing on leaf encoding, node domain separation, or odd-leaf policy while both sides still look locally “correct.”",
+  "The browser examples use a tiny deterministic 32-bit demo hash so the tree logic stays runnable without external crates. In production, swap the hash function for a real cryptographic primitive and keep the envelope policy explicit.",
+  "One owner keeps all levels. The proof is just a sibling path plus orientation bits. No pointer graph is needed.",
+  "Before reading the code, follow the three stages it moves through. First it builds the tree by hashing leaves and folding each level into the next until one root remains. Then it emits a proof for one chosen leaf by collecting the sibling at each level along the way to the root. ",
+  "Each level is a flat vector. The root is just the last level’s first element.",
+  "Verification needs sibling order as well as sibling value. That direction bit is part of the contract.",
+  "The tree owns its levels. Proof steps are copyable values that move easily across process boundaries.",
+  "The example uses scoped threads to keep the model crate-free in the browser. The important point is the level boundary, not one specific scheduler choice.",
+  "This is the level-by-level shape from the parallel-construction diagram above, made runnable. The key lines build each level in parallel and then synchronize before moving up, and the program proves it got the same answer by computing the root a second time sequentially and asser",
+  "Pair hashing inside one level is independent work. The next level boundary is the synchronization point.",
+  "Near the root, parallel overhead can dominate. Production code should stop parallelizing once the level gets small.",
+  "This same level-wise shape is easy to batch inside a GPU lane or a distributed verification worker later.",
+  "The repository also includes standalone Rust source under examples/ch38_merkle_tree_games_and_challenges/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor."
+ ],
+ "codeSamples": {
+  "merkle_tree_basic_proof": "type Hash = u32;\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofStep {\n    sibling: Hash,\n    sibling_is_left: bool,\n}\n\nfn hash_bytes(tag: u8, bytes: &[u8]) -> Hash {\n    let mut hash = 2_166_136_261_u32 ^ tag as u32;\n\n    for &byte in bytes {\n        hash ^= byte as u32;\n        hash = hash.wrapping_mul(16_777_619);\n    }\n\n    hash\n}\n\nfn hash_leaf(text: &str) -> Hash {\n    hash_bytes(0, text.as_bytes())\n}\n\nfn hash_node(left: Hash, right: Hash) -> Hash {\n    let mut bytes = [0_u8; 8];\n    bytes[..4].copy_from_slice(&left.to_le_bytes());\n    bytes[4..].copy_from_slice(&right.to_le_bytes());\n    hash_bytes(1, &bytes)\n}\n\n#[derive(Debug)]\nstruct MerkleTree {\n    levels: Vec<Vec<Hash>>,\n}\n\nimpl MerkleTree {\n    fn from_leaves(leaves: &[&str]) -> Self {\n        assert!(!leaves.is_empty(), \"a Merkle tree needs at least one leaf\");\n\n        let mut levels = vec![leaves.iter().map(|leaf| hash_leaf(leaf)).collect::<Vec<_>>()];\n\n        while levels.last().unwrap().len() > 1 {\n            let current = levels.last().unwrap();\n            let mut next = Vec::with_capacity((current.len() + 1) / 2);\n\n            for pair in current.chunks(2) {\n                let left = pair[0];\n                let right = if pair.len() == 2 { pair[1] } else { pair[0] };\n                next.push(hash_node(left, right));\n            }\n\n            levels.push(next);\n        }\n\n        Self { levels }\n    }\n\n    fn root(&self) -> Hash {\n        self.levels.last().unwrap()[0]\n    }\n\n    fn proof(&self, mut index: usize) -> Vec<ProofStep> {\n        let mut proof = Vec::new();\n\n        for level in &self.levels[..self.levels.len() - 1] {\n            let sibling_index = if index % 2 == 0 {\n                (index + 1).min(level.len() - 1)\n            } else {\n                index - 1\n            };\n\n            proof.push(ProofStep {\n                sibling: level[sibling_index],\n                sibling_is_left: sibling_index < index,\n            });\n\n            index /= 2;\n        }\n\n        proof\n    }\n}\n\nfn verify_proof(leaf: &str, proof: &[ProofStep], expected_root: Hash) -> bool {\n    let mut acc = hash_leaf(leaf);\n\n    for step in proof {\n        acc = if step.sibling_is_left {\n            hash_node(step.sibling, acc)\n        } else {\n            hash_node(acc, step.sibling)\n        };\n    }\n\n    acc == expected_root\n}\n\nfn main() {\n    let leaves = [\"alpha\", \"beta\", \"gamma\", \"delta\"];\n    let tree = MerkleTree::from_leaves(&leaves);\n    let proof = tree.proof(2);\n\n    println!(\"leaf count = {}\", tree.levels[0].len());\n    println!(\"proof len = {}\", proof.len());\n    println!(\"verified = {}\", verify_proof(\"gamma\", &proof, tree.root()));\n}",
+  "merkle_parallel_levels": "type Hash = u32;\n\nfn hash_bytes(tag: u8, bytes: &[u8]) -> Hash {\n    let mut hash = 2_166_136_261_u32 ^ tag as u32;\n\n    for &byte in bytes {\n        hash ^= byte as u32;\n        hash = hash.wrapping_mul(16_777_619);\n    }\n\n    hash\n}\n\nfn hash_leaf(text: &str) -> Hash {\n    hash_bytes(0, text.as_bytes())\n}\n\nfn hash_node(left: Hash, right: Hash) -> Hash {\n    let mut bytes = [0_u8; 8];\n    bytes[..4].copy_from_slice(&left.to_le_bytes());\n    bytes[4..].copy_from_slice(&right.to_le_bytes());\n    hash_bytes(1, &bytes)\n}\n\nfn next_level(level: &[Hash]) -> Vec<Hash> {\n    let mut next = Vec::with_capacity((level.len() + 1) / 2);\n\n    for pair in level.chunks(2) {\n        let left = pair[0];\n        let right = if pair.len() == 2 { pair[1] } else { pair[0] };\n        next.push(hash_node(left, right));\n    }\n\n    next\n}\n\nfn next_level_parallel(level: &[Hash]) -> Vec<Hash> {\n    if level.len() <= 2 {\n        return next_level(level);\n    }\n\n    let pair_count = (level.len() + 1) / 2;\n    let left_pairs = pair_count / 2;\n    let split = (left_pairs * 2).max(2).min(level.len());\n\n    std::thread::scope(|scope| {\n        let left = &level[..split];\n        let right = &level[split..];\n\n        let left_handle = scope.spawn(move || next_level(left));\n        let right_handle = scope.spawn(move || next_level(right));\n\n        let mut out = left_handle.join().unwrap();\n        out.extend(right_handle.join().unwrap());\n        out\n    })\n}\n\nfn build_root(leaves: &[&str], reducer: fn(&[Hash]) -> Vec<Hash>) -> (Hash, usize) {\n    let mut level: Vec<Hash> = leaves.iter().map(|leaf| hash_leaf(leaf)).collect();\n    let mut levels = 1;\n\n    while level.len() > 1 {\n        level = reducer(&level);\n        levels += 1;\n    }\n\n    (level[0], levels)\n}\n\nfn main() {\n    let leaves = [\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\", \"h\"];\n\n    let (serial_root, levels) = build_root(&leaves, next_level);\n    let (parallel_root, _) = build_root(&leaves, next_level_parallel);\n\n    println!(\"leaves = {}\", leaves.len());\n    println!(\"levels = {}\", levels);\n    println!(\"roots match = {}\", serial_root == parallel_root);\n}"
+ },
+ "labReferenceSolution": null
+}

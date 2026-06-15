@@ -44,6 +44,8 @@ import { DEFAULT_CODES_CH51 } from "./default-codes-ch51"
 import { DEFAULT_CODES_CH52 } from "./default-codes-ch52"
 import { DEFAULT_CODES_CH53 } from "./default-codes-ch53"
 import { DEFAULT_CODES_CH54 } from "./default-codes-ch54"
+import { DEFAULT_CODES_CH55 } from "./default-codes-ch55"
+import { DEFAULT_CODES_CH56 } from "./default-codes-ch56"
 import type { RustRuntimeProfile } from "./runtime-profiles"
 import { runtimeProfileForChapterId } from "./runtime-profiles"
 
@@ -70,6 +72,20 @@ export function chapterRuntimeProfile(chapter: ChapterConfig): RustRuntimeProfil
 }
 
 export const CHAPTERS: ChapterConfig[] = [
+  {
+    id: "part-1-getting-your-bearings",
+    title: "Part I · Getting Your Bearings in Rust",
+    icon: "book",
+    pages: [
+      {
+        id: "part-1-getting-your-bearings",
+        title: "Part I · Getting Your Bearings in Rust",
+        shortTitle: "Part I",
+        description: "Recalibrate your mental model and stand up a working toolchain before you fight the borrow checker.",
+        icon: "book",
+      },
+    ],
+  },
   {
     id: "ch01-why-rust-feels-different",
     title: "Chapter 01 · Why Rust Feels Different",
@@ -133,6 +149,20 @@ export const CHAPTERS: ChapterConfig[] = [
         shortTitle: "Exercises",
         description: "Design workspace layout, feature matrices, dependency policy, and the command pack for CI",
         icon: "trophy",
+      },
+    ],
+  },
+  {
+    id: "part-2-memory-ownership-data-layout",
+    title: "Part II · Memory, Ownership, and Data Layout",
+    icon: "book",
+    pages: [
+      {
+        id: "part-2-memory-ownership-data-layout",
+        title: "Part II · Memory, Ownership, and Data Layout",
+        shortTitle: "Part II",
+        description: "Ownership, borrowing, lifetimes, smart pointers, and the containers you reach for daily — the part that makes every later API make sense.",
+        icon: "book",
       },
     ],
   },
@@ -373,6 +403,20 @@ export const CHAPTERS: ChapterConfig[] = [
     ],
   },
   {
+    id: "part-3-designing-types-abstractions",
+    title: "Part III · Designing Types and Abstractions",
+    icon: "book",
+    pages: [
+      {
+        id: "part-3-designing-types-abstractions",
+        title: "Part III · Designing Types and Abstractions",
+        shortTitle: "Part III",
+        description: "Express interfaces, domain models, generics, and serialization the way Rust’s type system wants.",
+        icon: "book",
+      },
+    ],
+  },
+  {
     id: "ch14-interfaces-in-rust-traits",
     title: "Chapter 14 · Interfaces in Rust: Traits",
     icon: "book",
@@ -565,6 +609,20 @@ export const CHAPTERS: ChapterConfig[] = [
     ],
   },
   {
+    id: "part-4-concurrency-async-systems-io",
+    title: "Part IV · Concurrency, Async, and Systems IO",
+    icon: "book",
+    pages: [
+      {
+        id: "part-4-concurrency-async-systems-io",
+        title: "Part IV · Concurrency, Async, and Systems IO",
+        shortTitle: "Part IV",
+        description: "Threads, synchronization, futures, Tokio, and low-level IO — what makes Rust a systems language, not just a safe one.",
+        icon: "book",
+      },
+    ],
+  },
+  {
     id: "ch22-multithreading-in-rust",
     title: "Chapter 22 · Multithreading in Rust",
     icon: "book",
@@ -715,6 +773,20 @@ export const CHAPTERS: ChapterConfig[] = [
         description:
           "Compare buffered and unbuffered reads, design a backpressure-aware IO pipeline, and reason clearly about descriptor ownership",
         icon: "trophy",
+      },
+    ],
+  },
+  {
+    id: "part-5-integration-distributed-hpc",
+    title: "Part V · Integration, Distributed Systems, and HPC",
+    icon: "book",
+    pages: [
+      {
+        id: "part-5-integration-distributed-hpc",
+        title: "Part V · Integration, Distributed Systems, and HPC",
+        shortTitle: "Part V",
+        description: "When your problem leaves a single process: FFI, WASM, brokers, distributed and MPI workloads, GPUs, and the profiling they demand.",
+        icon: "book",
       },
     ],
   },
@@ -1034,6 +1106,20 @@ export const CHAPTERS: ChapterConfig[] = [
     ],
   },
   {
+    id: "part-6-engineering-for-production",
+    title: "Part VI · Engineering Systems for Production",
+    icon: "book",
+    pages: [
+      {
+        id: "part-6-engineering-for-production",
+        title: "Part VI · Engineering Systems for Production",
+        shortTitle: "Part VI",
+        description: "Error strategy at scale, testing, observability, packaging, and a capstone that ties it together.",
+        icon: "book",
+      },
+    ],
+  },
+  {
     id: "ch41-error-handling-in-large-systems",
     title: "Chapter 41 · Error Handling in Large Systems",
     icon: "book",
@@ -1149,6 +1235,20 @@ export const CHAPTERS: ChapterConfig[] = [
         shortTitle: "Exercises",
         description: "Review the capstone like a staff engineer: architecture, milestones, queue budgets, replay safety, profiling evidence, and rollout gates",
         icon: "trophy",
+      },
+    ],
+  },
+  {
+    id: "part-7-networked-services-secure-boundaries",
+    title: "Part VII · Networked Services and Secure Boundaries",
+    icon: "book",
+    pages: [
+      {
+        id: "part-7-networked-services-secure-boundaries",
+        title: "Part VII · Networked Services and Secure Boundaries",
+        shortTitle: "Part VII",
+        description: "Build the service layer — REST/OpenAPI, gRPC, WebSockets, TLS, and peer-to-peer — that exposes your system to the world.",
+        icon: "book",
       },
     ],
   },
@@ -1273,6 +1373,20 @@ export const CHAPTERS: ChapterConfig[] = [
     ],
   },
   {
+    id: "part-8-frontier-specializations",
+    title: "Part VIII · Frontier Specializations",
+    icon: "book",
+    pages: [
+      {
+        id: "part-8-frontier-specializations",
+        title: "Part VIII · Frontier Specializations",
+        shortTitle: "Part VIII",
+        description: "Dip in on demand: zero-knowledge proofs, verifiable and portable ML inference, on-chain smart contracts, and no-std for constrained targets.",
+        icon: "book",
+      },
+    ],
+  },
+  {
     id: "ch51-zero-knowledge-proofs-rust-engineers",
     title: "Chapter 51 · Zero-Knowledge Proofs for Rust Engineers",
     icon: "book",
@@ -1345,12 +1459,60 @@ export const CHAPTERS: ChapterConfig[] = [
     ],
   },
   {
-    id: "ch54-no-std-rust-constrained-runtime-derivatives",
-    title: "Chapter 54 · no-std Rust and Constrained Runtime Derivatives",
+    id: "ch54-onnx-runtime-model-inference",
+    title: "Chapter 54 · ONNX Model Inference in Rust",
     icon: "book",
     pages: [
       {
-        id: "ch54-no-std-rust-constrained-runtime-derivatives",
+        id: "ch54-onnx-runtime-model-inference",
+        title: "ONNX Model Inference in Rust",
+        shortTitle: "ONNX Inference",
+        description:
+          "Run portable ONNX models from Rust: the ort runtime versus pure-Rust tract, tensors and shapes, execution providers, batching, and dependency-light deployment",
+        icon: "book",
+        codeKeys: ["onnx_session_load_run", "onnx_tensor_batch_argmax"],
+      },
+      {
+        id: "ch54-onnx-runtime-model-inference-exercises",
+        title: "Chapter 54 Exercises",
+        shortTitle: "Exercises",
+        description:
+          "Load and run a session, shape and batch tensors, choose execution providers, and own pre- and post-processing at the model boundary",
+        icon: "trophy",
+      },
+    ],
+  },
+  {
+    id: "ch55-smart-contracts-solana-sei",
+    title: "Chapter 55 · Smart Contracts in Rust: Solana, Sei, and Beyond",
+    icon: "book",
+    pages: [
+      {
+        id: "ch55-smart-contracts-solana-sei",
+        title: "Smart Contracts in Rust: Solana, Sei, and Beyond",
+        shortTitle: "Smart Contracts",
+        description:
+          "Write on-chain Rust across execution models: Solana's account and program split, Sei and CosmWasm wasm actors, and how both compare with EVM, NEAR, and ink!",
+        icon: "book",
+        codeKeys: ["smart_contract_solana_counter", "smart_contract_platform_compare"],
+      },
+      {
+        id: "ch55-smart-contracts-solana-sei-exercises",
+        title: "Chapter 55 Exercises",
+        shortTitle: "Exercises",
+        description:
+          "Model an account-based program, contrast wasm-actor and account execution, and reason about serialization, gas, and deterministic execution boundaries",
+        icon: "trophy",
+      },
+    ],
+  },
+  {
+    id: "ch56-no-std-rust-constrained-runtime-derivatives",
+    title: "Chapter 56 · no-std Rust and Constrained Runtime Derivatives",
+    icon: "book",
+    pages: [
+      {
+        id: "ch56-no-std-rust-constrained-runtime-derivatives",
         title: "no-std Rust and Constrained Runtime Derivatives",
         shortTitle: "no_std Rust",
         description:
@@ -1359,8 +1521,8 @@ export const CHAPTERS: ChapterConfig[] = [
         codeKeys: ["no_std_portable_surface", "no_std_fixed_capacity_dma"],
       },
       {
-        id: "ch54-no-std-rust-constrained-runtime-derivatives-exercises",
-        title: "Chapter 54 Exercises",
+        id: "ch56-no-std-rust-constrained-runtime-derivatives-exercises",
+        title: "Chapter 56 Exercises",
         shortTitle: "Exercises",
         description:
           "Choose the right runtime surface, design fixed-capacity paths, audit constrained unsafe code, and keep portable logic testable from the host",
@@ -1888,6 +2050,8 @@ fn main() {
   ...DEFAULT_CODES_CH52,
   ...DEFAULT_CODES_CH54,
   ...DEFAULT_CODES_CH53,
+  ...DEFAULT_CODES_CH55,
+  ...DEFAULT_CODES_CH56,
 }
 export interface BookState {
   currentPage: number

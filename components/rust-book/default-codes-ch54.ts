@@ -1,98 +1,131 @@
 export const DEFAULT_CODES_CH54: Record<string, string> = {
-  no_std_portable_surface: `#[cfg(feature = "alloc")]
-extern crate alloc;
+  onnx_session_load_run: `// A real service would load an .onnx graph and run it through a session:
+//
+//   use ort::{Session, inputs};
+//   let session = Session::builder()?
+//       .with_optimization_level(GraphOptimizationLevel::Level3)?
+//       .commit_from_file("classifier.onnx")?;
+//   let outputs = session.run(inputs!["input" => input_tensor]?)?;
+//
+// The in-browser runner cannot call into ONNX Runtime, so this listing is a
+// deterministic pure-Rust forward pass that mirrors what one dense layer of
+// that graph does: a matmul against a weight matrix, a bias add, then argmax.
+// The numbers, shapes, and the "predicted class" are exactly what a one-layer
+// ONNX model with the same weights would produce.
 
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
+const IN: usize = 4;
+const OUT: usize = 3;
 
-fn checksum(bytes: &[u8]) -> u32 {
-    bytes.iter().map(|&byte| byte as u32).sum()
+// Weights stored row-major: one row of IN values per output class.
+const WEIGHTS: [[f32; IN]; OUT] = [
+    [0.2, 0.8, -0.5, 0.1],
+    [-0.3, 0.5, 0.9, 0.4],
+    [0.6, -0.2, 0.3, -0.7],
+];
+const BIAS: [f32; OUT] = [0.1, -0.2, 0.05];
+
+// One fixed input "tensor" of shape [IN]. In ort/tract this would be an
+// ndarray Array passed in as the named input of the session.
+fn input_tensor() -> [f32; IN] {
+    [0.5, -1.0, 2.0, 0.25]
 }
 
-#[cfg(feature = "alloc")]
-fn encode_frame(tag: u8, payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(payload.len() + 1);
-    out.push(tag);
-    out.extend_from_slice(payload);
-    out
+// Dense layer: logits[o] = bias[o] + sum_c weights[o][c] * input[c].
+fn forward(input: &[f32; IN]) -> [f32; OUT] {
+    let mut logits = [0.0f32; OUT];
+    for o in 0..OUT {
+        let mut sum = BIAS[o];
+        for c in 0..IN {
+            sum += WEIGHTS[o][c] * input[c];
+        }
+        logits[o] = sum;
+    }
+    logits
 }
 
-#[cfg(feature = "std")]
-fn write_diagnostic(service: &str, checksum: u32) -> String {
-    format!("{}:{}", service, checksum)
+// Post-processing the caller owns: turn raw logits into a class index.
+fn argmax(logits: &[f32; OUT]) -> usize {
+    let mut best = 0;
+    for i in 1..OUT {
+        if logits[i] > logits[best] {
+            best = i;
+        }
+    }
+    best
 }
 
 fn main() {
-    let payload = [1_u8, 2, 3];
-    let sum = checksum(&payload);
+    let input = input_tensor();
+    let logits = forward(&input);
+    let class = argmax(&logits);
 
-    println!("portable modes = core|alloc|std");
-    println!("checksum = {}", sum);
-    println!("alloc-gated api = encode_frame");
+    println!("input dims = {}", IN);
+    println!("classes = {}", OUT);
+    println!(
+        "logits = [{:.4}, {:.4}, {:.4}]",
+        logits[0], logits[1], logits[2]
+    );
+    println!("predicted class = {}", class);
+    println!("score = {:.4}", logits[class]);
 }`,
-  no_std_fixed_capacity_dma: `#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct SlotId(usize);
+  onnx_tensor_batch_argmax: `// Batched inference: the same one-layer model run over more than one row at
+// once. A real session takes an input tensor of shape [rows, features] and
+// returns logits of shape [rows, classes]; here we keep the batch as a single
+// row-major flat Vec and slice one row at a time, with no external crates.
 
-struct Pool<const SLOTS: usize, const BYTES: usize> {
-    used: [bool; SLOTS],
-    lens: [usize; SLOTS],
-    data: [[u8; BYTES]; SLOTS],
+const IN: usize = 4;
+const OUT: usize = 3;
+
+const WEIGHTS: [[f32; IN]; OUT] = [
+    [0.2, 0.8, -0.5, 0.1],
+    [-0.3, 0.5, 0.9, 0.4],
+    [0.6, -0.2, 0.3, -0.7],
+];
+const BIAS: [f32; OUT] = [0.1, -0.2, 0.05];
+
+// Two input rows packed row-major into one flat buffer: [row0.. , row1..].
+fn build_batch() -> Vec<f32> {
+    vec![
+        0.5, -1.0, 2.0, 0.25, // row 0
+        1.5, 0.5, -0.5, 1.0, // row 1
+    ]
 }
 
-impl<const SLOTS: usize, const BYTES: usize> Pool<SLOTS, BYTES> {
-    const fn new() -> Self {
-        Self {
-            used: [false; SLOTS],
-            lens: [0; SLOTS],
-            data: [[0; BYTES]; SLOTS],
+// Run the dense layer over one feature row and return its logits.
+fn forward_row(row: &[f32]) -> [f32; OUT] {
+    let mut logits = [0.0f32; OUT];
+    for o in 0..OUT {
+        let mut sum = BIAS[o];
+        for c in 0..IN {
+            sum += WEIGHTS[o][c] * row[c];
+        }
+        logits[o] = sum;
+    }
+    logits
+}
+
+fn argmax(logits: &[f32; OUT]) -> usize {
+    let mut best = 0;
+    for i in 1..OUT {
+        if logits[i] > logits[best] {
+            best = i;
         }
     }
-
-    fn alloc_copy(&mut self, bytes: &[u8]) -> Option<SlotId> {
-        if bytes.len() > BYTES {
-            return None;
-        }
-
-        let mut index = 0;
-        while index < SLOTS {
-            if !self.used[index] {
-                self.used[index] = true;
-                self.lens[index] = bytes.len();
-                self.data[index][..bytes.len()].copy_from_slice(bytes);
-                return Some(SlotId(index));
-            }
-            index += 1;
-        }
-
-        None
-    }
-
-    fn as_slice(&self, id: SlotId) -> &[u8] {
-        &self.data[id.0][..self.lens[id.0]]
-    }
-
-    fn release(&mut self, id: SlotId) {
-        self.used[id.0] = false;
-        self.lens[id.0] = 0;
-    }
-
-    fn in_use(&self) -> usize {
-        self.used.iter().filter(|&&used| used).count()
-    }
+    best
 }
 
 fn main() {
-    let mut pool = Pool::<2, 8>::new();
+    let batch = build_batch();
+    let rows = batch.len() / IN;
 
-    let first = pool.alloc_copy(b"abc").unwrap();
-    let _second = pool.alloc_copy(b"rust").unwrap();
-    let overflow = pool.alloc_copy(b"more").is_none();
-    let sent_bytes = pool.as_slice(first).len();
+    println!("batch rows = {}", rows);
+    println!("features per row = {}", IN);
 
-    pool.release(first);
-
-    println!("in_use = {}", pool.in_use());
-    println!("overflow = {}", overflow);
-    println!("sent bytes = {}", sent_bytes);
+    for r in 0..rows {
+        let row = &batch[r * IN..(r + 1) * IN];
+        let logits = forward_row(row);
+        let class = argmax(&logits);
+        println!("row {} argmax = {} score = {:.4}", r, class, logits[class]);
+    }
 }`,
 }

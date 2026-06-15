@@ -1,0 +1,208 @@
+{
+ "chapterKey": "ch06",
+ "num": 6,
+ "title": "Pointers, References, and Ownership Inside Vectors",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Narrate the invalidation event before proposing a fix",
+   "objective": "Practice explaining why a reference into a vector stops being the right handle once the vector may grow.",
+   "starterPrompt": "A function borrows `let first = &workers[0];`, then later appends more workers with `push`, and finally reads `first.name`. Explain the failure in operational terms.",
+   "prompts": [
+    "What does the vector own?",
+    "What does the borrowed reference point into?",
+    "Why is the problem not merely 'the borrow checker being strict'?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that the reference points into the vector's current buffer.",
+    "You state that growth may relocate the buffer and therefore invalidate the old address story.",
+    "You propose at least one valid repair such as using an index, ending the borrow sooner, or changing representation."
+   ],
+   "hints": [
+    "Start with the owner: the vector owns the buffer.",
+    "Then ask what `push` is allowed to do to that buffer."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the hidden shape change",
+   "objective": "Read a small loop and identify which operation changes vector shape or element positions.",
+   "starterPrompt": "Review a loop that stores `&sessions[i]` in a temporary, then calls either `reserve`, `insert`, `remove`, or `sort_by_key` later in the same flow. Identify which operations threaten reference validity and why.",
+   "prompts": [
+    "Which operations may relocate storage?",
+    "Which operations may keep the same buffer but still shift positions?",
+    "Which handle type would stay meaningful after each operation?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish relocation hazards from position-shift hazards.",
+    "You explain that both categories are dangerous for borrowed element references held too long.",
+    "You choose a more durable handle such as an index or ID where appropriate."
+   ],
+   "hints": [
+    "Address stability and logical identity are related, but they are not the same thing.",
+    "Sorting may preserve allocation yet still break position-based assumptions."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Return an index handle instead of assuming reference stability",
+   "objective": "Refactor a helper so callers keep a durable index rather than an element reference or a mistaken post-push length.",
+   "starterPrompt": "Implement `enqueue(tasks: &mut Vec<Task>, name: &str) -> usize` so the returned handle identifies the newly pushed task correctly even if the vector later grows.",
+   "prompts": [
+    "Keep the return type as `usize`.",
+    "Do not return a borrowed reference.",
+    "Make the handle point at the inserted task, not at the next free slot."
+   ],
+   "acceptanceCriteria": [
+    "The function returns the inserted task's index.",
+    "The sample output shows the first inserted task after additional pushes.",
+    "The design remains valid even if the vector grows later."
+   ],
+   "hints": [
+    "The correct index exists either just before the push or as `len() - 1` immediately after it.",
+    "A durable handle should survive future vector growth as long as reordering policy is understood."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Convert a reference-heavy graph edge into IDs",
+   "objective": "Replace stored references into a vector-backed node list with an ID or index design Rust can move and maintain safely.",
+   "starterPrompt": "You inherit a parser graph that stores nodes in a `Vec<Node>` and also stores `&Node` edges inside other nodes. Refactor the relationship into indices or typed IDs.",
+   "prompts": [
+    "Where do you store the nodes?",
+    "What do edges store instead of references?",
+    "How does lookup recover a borrowed view when needed?"
+   ],
+   "acceptanceCriteria": [
+    "Your redesign removes long-lived references into the vector.",
+    "Edges store indices, IDs, or another stable logical handle.",
+    "You explain how the owner vector reborrows the node by handle at use time."
+   ],
+   "hints": [
+    "The owner of the collection should usually also be the place where reborrowing happens.",
+    "Typed IDs are often easier to review than naked `usize` values in larger systems."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Implement safe mutation while iterating",
+   "objective": "Repair a loop that inspects a vector and also changes its shape in the same pass.",
+   "starterPrompt": "A retry scheduler scans jobs, appends follow-up work for failed jobs, and removes expired jobs in one loop. Rewrite the flow safely.",
+   "prompts": [
+    "Which edits can happen in place with `iter_mut`?",
+    "Which edits should move into a second pass?",
+    "Would `retain`, `drain`, or rebuilding be clearer than manual index juggling?"
+   ],
+   "acceptanceCriteria": [
+    "You separate inspection from shape-changing edits, or choose a standard library pattern that does so safely.",
+    "You explain why one pass with live element borrows plus shape changes is the real problem.",
+    "Your final design does not depend on cloning the whole vector just to escape the issue."
+   ],
+   "hints": [
+    "Collect indices, IDs, or commands first.",
+    "Then apply the structural edits once no element borrow remains active."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose Vec<T>, Vec<Box<T>>, or arena-style storage for a registry",
+   "objective": "Select the right collection representation for a production registry with concrete stability and performance requirements.",
+   "starterPrompt": "You are designing a long-lived connection registry for `accept -> authenticate -> route -> retry -> drop`. Some components need fast scans, some need durable handles, and a plugin boundary may require stable addresses.",
+   "prompts": [
+    "Which parts of the system only need contiguous scanning?",
+    "Which parts need stable logical handles rather than direct references?",
+    "Does any subsystem truly need stable element addresses?",
+    "What cost are you willing to pay in allocation or indirection?"
+   ],
+   "acceptanceCriteria": [
+    "You justify one representation as the default and explain where another becomes necessary.",
+    "You distinguish stable logical handles from stable memory addresses.",
+    "You name at least one tradeoff involving cache locality, allocation count, or API complexity.",
+    "You avoid choosing a heavier representation without an actual requirement for it."
+   ],
+   "hints": [
+    "Start with the simplest owner that meets the semantics.",
+    "Plain vectors are often right until stable addressability or deletion semantics make them insufficient."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What exactly does a borrowed element reference from a vector point into?",
+  "Why are index handles often the default durable handle for `Vec<T>`?",
+  "What is the difference between stable logical identity and stable memory address?",
+  "When is `Vec<Box<T>>` a better fit than plain `Vec<T>`?",
+  "Why do two-phase loops often produce the clearest vector mutation code?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Exercise 3",
+  "filename": "task_handle_lab.rs",
+  "runKey": "ch06_ex_task_index",
+  "expectedOutput": "first = billing\ntotal = 3",
+  "initialCode": "#[derive(Debug)]\nstruct Task {\n    name: String,\n}\n\nfn enqueue(tasks: &mut Vec<Task>, name: &str) -> usize {\n    tasks.push(Task {\n        name: name.to_string(),\n    });\n    tasks.len()\n}\n\nfn main() {\n    let mut tasks = Vec::with_capacity(1);\n    let first = enqueue(&mut tasks, \"billing\");\n    enqueue(&mut tasks, \"search\");\n    enqueue(&mut tasks, \"indexer\");\n\n    println!(\"first = {}\", tasks[first].name);\n    println!(\"total = {}\", tasks.len());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 04 and 05",
+  "Opening scenario",
+  "A practical review order",
+  "Mental model",
+  "Core concepts",
+  "What a vector actually is",
+  "References into vectors and invalidation",
+  "Index-based designs",
+  "Choosing a handle",
+  "Stable-address allocation patterns",
+  "Vec<Box<T>>, arenas, and slab allocation",
+  "Borrowing slices from vectors",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: index handles instead of borrowed elements",
+  "Example 2: stable pointees plus two-phase mutation",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A vector owns one resizable buffer, and growth can move every element it holds. This chapter is about choosing the right handle into that buffer: when a borrowed reference is safe, when an index or ID is the durable choice, and when the model genuinely needs stable addresses from",
+  "Chapter 04 explained borrowing and lifetime relationships. Chapter 05 moved those rules into struct field design. This chapter applies the same discipline to collections, where growth, reordering, and temporary views make ownership mistakes especially easy to import from C++, C#,",
+  "A worker registry tracks live connections, appends new workers during scaling, scans readiness, and removes unhealthy entries. The business requirement is a stable handle policy: use short borrows only while the vector shape is fixed, and use indices, IDs, boxed storage, or arena",
+  "A vector is one owner of one resizable buffer. The value stored in a local binding is only the control block: pointer, length, and capacity. The elements live in heap-backed contiguous storage managed by that owner.",
+  "Moving the Vec<T> moves ownership of the buffer. Growing beyond capacity may move the elements themselves into a new buffer. That second fact is the one that makes element references delicate.",
+  "The thing to picture is the split between the small fixed-size handle on the stack and the heap buffer it points at. The handle stays put; the buffer underneath it can be replaced.",
+  "A borrowed element such as &jobs[i] is tied to the current buffer and the current aliasing rules. It says, in effect, \"while this borrow lives, nobody may perform conflicting access that would make it invalid or ambiguous.\"",
+  "Rust therefore rejects many patterns that would be merely dangerous in other languages: take a borrow, then append, reserve, insert, or otherwise reshape the same vector while still using the borrowed element later.",
+  "The hazard is easiest to see as a sequence. A borrow names a slot in the current buffer; a growth past capacity allocates a new buffer and moves the elements; the old borrow would now point into freed memory. Rust rejects the code at the second step rather than letting the third ",
+  "Indices are the default durable handle for a plain vector. You store the position, mutate the vector as needed, and then reborrow from the vector when you are ready to use the element again.",
+  "This works well when you control reordering policy. If the code uses swap_remove, sorting, or compaction, the index is a location, not an identity. Production code often wraps indices in typed IDs or adds generation checks when stale handles matter.",
+  "Before reaching for any representation, the decision worth making explicit is what kind of handle the code needs. The first question is whether the vector’s shape is fixed for the lifetime of the handle. If it is, borrows and slices are ideal. If it is not, the choice is between ",
+  "When the shape can change, the choice is between a location handle and genuinely stable addresses:",
+  "Sometimes the correct requirement really is stable addressability. A parser cache, intrusive structure, or FFI boundary may need each element to stay put even if the collection grows. That is when you change the representation, not when you try to stretch a plain borrowed element",
+  "A precise note on Pin: pinning can matter for address-sensitive pointees such as certain async or self-referential low-level machinery, but it does not make references into a plain Vec<T> stable on its own. For ordinary collection design, indices, boxes, or arena-style handles ar",
+  "Vec<Box<T>> is a tactical choice: indexing stays simple, and each element lives in its own heap allocation. Growing the vector moves boxes, not pointees.",
+  "Arena and slab-style stores solve a different problem. They usually give you stable logical handles, efficient reuse, and explicit deletion policy. The ecosystem offers several variants, but the shared idea is more important than any one crate: store by owner-managed pool, access",
+  "Every language with a growable array has the same underlying reallocation behavior. What differs is whether you normally hold a reference into a slot, and whether anything stops you from using it after the array moves. The mental shift below is the trap most likely to surprise an",
+  "The cheapest-looking handle is often the most expensive long-term design. A borrowed element reference is wonderful when the vector shape is fixed. It is a trap when growth and reshaping are part of the normal lifecycle.",
+  "The vector may grow, so the durable handle is the index. The code reborrows from the vector only when it actually needs the element.",
+  "What to look at: push_task returns the index it just wrote, not a reference. Later pushes are free to reallocate the buffer, and the code only reborrows through tasks[billing] after all growth is done. The index is the handle that survives the mutation.",
+  "Quick check: keep the handle as an index, then change task names or add more pushes. The design stays correct because the vector is allowed to grow without carrying old element borrows through the mutation.",
+  "If the collection may reallocate, keep a location handle such as an index and borrow later.",
+  "Worker tables, scheduler queues, and parser token streams often become easier once durable handles stop being raw references into resizable storage.",
+  "Each job lives in its own box, and shape-changing logic is split from inspection logic.",
+  "What to look at: first_ptr records the heap address of the first job before two more pushes. Because each job is its own Box, growing the vector relocates the boxes but not the jobs, so the address still matches afterward. The retry update then runs in two phases: collect indices",
+  "Quick check: keep the boxed representation, then add more jobs or change the retry flag. The point is not boxing by habit. The point is that stable pointees and two-phase updates are explicit, reviewable choices.",
+  "The vector may move boxes around, but the boxed job itself stays at one heap address.",
+  "The first pass records retry targets. The second pass performs mutation. Inspection and reshaping stay separate.",
+  "Extra allocation buys stronger address stability. Use it when the model needs it, not by reflex."
+ ],
+ "codeSamples": {
+  "ownership_vectors_indices": "#[derive(Debug)]\nstruct Task {\n    name: String,\n    ready: bool,\n}\n\nfn push_task(tasks: &mut Vec<Task>, name: &str) -> usize {\n    let index = tasks.len();\n    tasks.push(Task {\n        name: name.to_string(),\n        ready: true,\n    });\n    index\n}\n\nfn mark_not_ready(tasks: &mut [Task], index: usize) {\n    tasks[index].ready = false;\n}\n\nfn main() {\n    let mut tasks = Vec::with_capacity(1);\n\n    let billing = push_task(&mut tasks, \"billing\");\n    push_task(&mut tasks, \"search\");\n    push_task(&mut tasks, \"indexer\");\n    mark_not_ready(&mut tasks, billing);\n\n    println!(\"task = {}\", tasks[billing].name);\n    println!(\"ready = {}\", tasks[billing].ready);\n    println!(\"total = {}\", tasks.len());\n}",
+  "ownership_vectors_boxed_stable": "use std::ptr;\n\n#[derive(Debug)]\nstruct Job {\n    name: String,\n    attempts: usize,\n    needs_retry: bool,\n}\n\nfn main() {\n    let mut jobs: Vec<Box<Job>> = Vec::new();\n\n    jobs.push(Box::new(Job {\n        name: String::from(\"billing\"),\n        attempts: 1,\n        needs_retry: true,\n    }));\n\n    let first_ptr: *const Job = &*jobs[0];\n\n    jobs.push(Box::new(Job {\n        name: String::from(\"search\"),\n        attempts: 1,\n        needs_retry: false,\n    }));\n    jobs.push(Box::new(Job {\n        name: String::from(\"indexer\"),\n        attempts: 1,\n        needs_retry: false,\n    }));\n\n    let same_address = ptr::eq(first_ptr, &*jobs[0]);\n\n    let retry_indices: Vec<usize> = jobs\n        .iter()\n        .enumerate()\n        .filter_map(|(index, job)| job.needs_retry.then_some(index))\n        .collect();\n\n    for index in retry_indices {\n        jobs[index].attempts += 1;\n        jobs[index].needs_retry = false;\n    }\n\n    println!(\"same address = {}\", same_address);\n    println!(\"attempts = {}\", jobs[0].attempts);\n    println!(\"retry pending = {}\", jobs.iter().filter(|job| job.needs_retry).count());\n}"
+ },
+ "labReferenceSolution": null
+}

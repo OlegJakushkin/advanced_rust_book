@@ -1,0 +1,434 @@
+{
+ "ch03": [
+  {
+   "id": "32271633ef0c",
+   "width": 951,
+   "chart": "flowchart TD\n  F[Cargo feature on or off] --> R[Cargo resolves graph once]\n  R --> G1[cfg metrics on: code compiled in]\n  R --> G2[cfg metrics off: code absent from binary]\n  subgraph Runtime[Single built binary]\n    CFG[config or env var] --> Mode1[mode A this request]\n    CFG --> Mode2[mode B next request]\n  end"
+  }
+ ],
+ "ch04": [
+  {
+   "id": "f9d4df5daf2b",
+   "width": 835,
+   "chart": "flowchart TD\n  FS[first_segment path: &str] -->|one input, elided| Slice1[returns &str into path]\n  PL[pick_longer left, right: &'a str] -->|two inputs, explicit 'a| Slice2[returns &str into one of them]\n  ML[make_audit_label service, key: &str] -->|builds new value| Owned[returns owned String]\n  Slice1 --> Borrowed[Output borrows: valid only while input lives]\n  Slice2 --> Borrowed\n  Owned --> Free[Output is independent: outlives the inputs]"
+  }
+ ],
+ "ch05": [
+  {
+   "id": "c761a61998fc",
+   "width": 2095,
+   "chart": "flowchart TD\n  subgraph Owned\n    O1[Input buffer] -->|copied in| O2[StoredAlert owns String]\n    O2 -->|stands alone| O3[Vec, cache, queue, thread]\n  end\n  subgraph Borrowed\n    B1[Input buffer must stay alive] -->|reference| B2[HeaderView holds and a str]\n    B2 -.->|dies when owner drops| B3[no independent storage]\n  end"
+  },
+  {
+   "id": "3b72ba075c61",
+   "width": 859,
+   "chart": "flowchart TD\n  Field[name: and a str field] --> Struct[MessageView of a]\n  Struct --> Builder[fn parse of a takes and a str]\n  Struct --> Holder[Session of a embeds the view]\n  Struct --> Return[fn view returns MessageView of a]\n  Builder --> Caller[every caller must supply an owner that lives long enough]"
+  },
+  {
+   "id": "91d69ec3583a",
+   "width": 784,
+   "chart": "flowchart TD\n  Cfg[Box config] -->|single owner| Main[Main thread uses config]\n  Tmpl[Rc template] -->|clone, refcount up| Main\n  Tmpl -.->|cannot send, not Sync| Worker[Spawned worker thread]\n  Schema[Arc schema] -->|clone, atomic refcount| Main\n  Schema -->|safe to move across| Worker"
+  }
+ ],
+ "ch06": [
+  {
+   "id": "5498d95a49d6",
+   "width": 831,
+   "chart": "flowchart TD\n  Q1{\"Shape fixed while handle is alive?\"}\n  Q1 -->|yes| R[\"use &T, &mut T, or a slice\"]\n  Q1 -->|no| Q2{\"Need a stable address, not just a position?\"}\n  Q2 -->|no| I[\"use an index or typed ID, reborrow later\"]\n  Q2 -->|yes| Q3{\"Few elements or graph-like with churn?\"}\n  Q3 -->|few| Bx[\"Vec of Box T: stable pointees\"]\n  Q3 -->|churn| Ar[\"arena or slab: access by ID\"]"
+  }
+ ],
+ "ch07": [
+  {
+   "id": "9f50d8183ef3",
+   "width": 728,
+   "chart": "flowchart TD\n  Start[Need this value again?] --> Borrow{Can the next step borrow?}\n  Borrow -->|yes| UseRef[Pass &T or &mut T]\n  Borrow -->|no, needs to own| Move{Single owner moving on?}\n  Move -->|yes| DoMove[Move it]\n  Move -->|no, need a duplicate| Dup{Type is Copy?}\n  Dup -->|yes| DoCopy[Implicit copy]\n  Dup -->|no| Independent{Independent owner needed?}\n  Independent -->|yes| DoClone[clone explicitly]\n  Independent -->|no, just shared reads| DoShare[Rc or Arc clone]"
+  },
+  {
+   "id": "49d7f75bfa89",
+   "width": 1807,
+   "chart": "flowchart TD\n  subgraph Move\n    A1[src owns value] -->|let b = src| B1[b owns value]\n    A1 -.->|src unusable| X1[compile error if used]\n  end\n  subgraph Copy\n    A2[src small value] -->|let b = src| B2[b is a duplicate]\n    A2 -->|src still usable| C2[src stays valid]\n  end\n  subgraph Clone\n    A3[src owns data] -->|let b = src.clone| B3[b owns a deep copy]\n    A3 -->|src still usable| C3[src stays valid]\n  end"
+  },
+  {
+   "id": "ec4dc5412dca",
+   "width": 840,
+   "chart": "flowchart TD\n  Clone[Clone trait: explicit duplication] --> Copy[Copy marker: implicit bitwise duplicate]\n  Copy --> Small[u64, bool, char, Span]\n  Clone --> Heap[String, Vec, HashMap]\n  Clone --> Shared[Rc and Arc handles]\n  Heap -.->|cannot be Copy| NoCopy[owns heap, needs explicit clone]\n  Shared -.->|cheap clone, not Copy| Counted[increments a reference count]"
+  },
+  {
+   "id": "ede59ac6ebd0",
+   "width": 847,
+   "chart": "flowchart TD\n  In[input label] --> Check{already normalized?}\n  Check -->|yes| Borrowed[Cow::Borrowed: no allocation]\n  Check -->|no| Owned[Cow::Owned: allocate once]\n  Schema[Arc schema] -->|Arc::clone| Worker[second handle]\n  Worker --> Count[strong count = 2, data not copied]"
+  }
+ ],
+ "ch08": [
+  {
+   "id": "776e212ee18f",
+   "width": 723,
+   "chart": "flowchart TD\n  C[\"C library: raw ptr, status code, buffer\"] --> W{unsafe FFI wrapper}\n  W -->|null check| O[\"Option for nullability\"]\n  W -->|status to result| Res[\"Result for errors\"]\n  W -->|validated lifetime| Ref[\"owned type or scoped reference\"]\n  O --> Safe[\"Safe Rust core\"]\n  Res --> Safe\n  Ref --> Safe"
+  }
+ ],
+ "ch09": [
+  {
+   "id": "bea24f08ef81",
+   "width": 811,
+   "chart": "flowchart LR\n  subgraph Stack\n    H[Box handle]\n  end\n  subgraph Heap\n    N[Node data]\n  end\n  H -->|owns, one owner| N\n  N -->|next: Option Box| N2[Node data]"
+  },
+  {
+   "id": "9722734d2bac",
+   "width": 791,
+   "chart": "flowchart TD\n  Start[Need indirection or sharing] --> Owners{How many owners}\n  Owners -->|one| Box[Box T]\n  Owners -->|many| Threads{One thread or many}\n  Threads -->|one thread| Rc[Rc T]\n  Threads -->|many threads| Arc[Arc T]\n  Rc --> Mut1{Need shared mutation}\n  Mut1 -->|small copy or swap| Cell[wrap in Cell]\n  Mut1 -->|dynamic borrows| RefCell[wrap in RefCell]\n  Arc --> Mut2{Need shared mutation}\n  Mut2 -->|yes| Mutex[wrap in Mutex]\n  Box --> Move{Must it stop moving}\n  Move -->|yes| Pin[Pin Box T]"
+  }
+ ],
+ "ch11": [
+  {
+   "id": "38a38e52bc1d",
+   "width": 1018,
+   "chart": "flowchart TD\n  Caller[Caller owns key and value] -->|insert moves in| Map[(HashMap owns entries)]\n  Map -->|get and contains borrow| Read[Read path keeps borrow]\n  Map -->|remove moves out| Out[Caller owns value again]\n  Map -->|iter borrows| Loop[Borrowed iteration]\n  Map -->|into_iter consumes| Drain[Table consumed, items moved out]"
+  }
+ ],
+ "ch12": [
+  {
+   "id": "d97e12bb8d30",
+   "width": 764,
+   "chart": "flowchart LR\n  Owner[\"Owner: Vec<T> (one buffer)\"] -->|\"&'a [T] borrow\"| View[\"MatrixView { rows, cols, stride, offset }\"]\n  View -->|\"offset + row*stride + col\"| Cell[\"element inside the buffer\"]\n  Owner -. \"checked: view cannot outlive owner\" .-> View"
+  }
+ ],
+ "ch13": [
+  {
+   "id": "88015fd46908",
+   "width": 895,
+   "chart": "flowchart TD\n  subgraph Heap[General heap]\n    A1[alloc node] --> F1[free node]\n    A2[alloc node] --> F2[free node]\n    A3[alloc node] --> F3[free node]\n  end\n  subgraph Arena[Arena region]\n    B1[alloc node] --> R[reset / drop once]\n    B2[alloc node] --> R\n    B3[alloc node] --> R\n  end"
+  },
+  {
+   "id": "cb175aa1f3ae",
+   "width": 1225,
+   "chart": "flowchart TD\n  subgraph RC[Rc edges own]\n    A[Node A] -->|owns| B[Node B]\n    B -->|owns| D[Node D]\n    D -->|owns, back-edge| A\n  end\n  subgraph IDX[Arena + index edges]\n    Ar[(Arena owns all)] --> N0[id 0]\n    Ar --> N1[id 1]\n    Ar --> N3[id 3]\n    N0 -->|edge id 1| N1\n    N1 -->|edge id 3| N3\n    N3 -->|edge id 0, back-edge| N0\n  end"
+  }
+ ],
+ "ch14": [
+  {
+   "id": "6e55302a0c62",
+   "width": 722,
+   "chart": "flowchart TD\n  G[Generic call: T bound] -->|monomorphized| GA[Direct call into A]\n  G -->|monomorphized| GB[Direct call into B]\n  D[dyn Trait call] --> V[vtable lookup]\n  V --> DA[Indirect call into A]\n  V --> DB[Indirect call into B]"
+  }
+ ],
+ "ch15": [
+  {
+   "id": "bbaff771f0e0",
+   "width": 821,
+   "chart": "flowchart TD\n  Start[Modeling need] --> Q1{Set of cases closed?}\n  Q1 -->|Yes, a fixed lifecycle| Enum[Enum plus match]\n  Q1 -->|No, plugins added later| Dyn[Trait object dyn Trait]\n  Start --> Q2{Sharing data or behavior?}\n  Q2 -->|Shared data| Comp[Compose a field]\n  Q2 -->|Shared behavior| Trait[Implement a trait]\n  Start --> Q3{Hiding representation?}\n  Q3 -->|Yes| Mod[Module plus private fields]"
+  },
+  {
+   "id": "7c8ebec36a1c",
+   "width": 987,
+   "chart": "flowchart TD\n  subgraph Inheritance\n    direction TB\n    Base[Service base: retry, metrics] --> Mid[Billing base]\n    Mid --> Leaf[ConcreteBilling]\n  end\n  subgraph Composition\n    direction TB\n    Svc[BillingService] --> R[retry: RetryPolicy]\n    Svc --> N[notifier: N]\n    Svc --> M[metrics: Metrics]\n  end"
+  },
+  {
+   "id": "63029d98969d",
+   "width": 840,
+   "chart": "flowchart TD\n  Call[Call site] --> G[\"Generic fn P: Trait\"]\n  Call --> D[\"dyn Trait via Box\"]\n  Call --> E[Enum value]\n  G -->|monomorphized| GT[One copy per concrete type]\n  D -->|vtable lookup| DT[Any type, chosen at run time]\n  E -->|exhaustive match| ET[Fixed set, compiler checks all cases]"
+  }
+ ],
+ "ch16": [
+  {
+   "id": "d841a245498f",
+   "width": 1047,
+   "chart": "flowchart TD\n  Repo[OrderRepository trait] -->|load / save| Root\n  subgraph boundary [Aggregate boundary]\n    Root[Order aggregate root] -->|owns| Lines[Vec of OrderLine]\n    Lines --> VO1[Sku value object]\n    Lines --> VO2[Quantity value object]\n    Lines --> VO3[MoneyCents value object]\n  end\n  Root -->|enforces| Inv[Invariants: non-empty, valid status]"
+  }
+ ],
+ "ch18": [
+  {
+   "id": "b57e0b14c8d0",
+   "width": 958,
+   "chart": "flowchart TD\n  subgraph ByType[Associated type]\n    Enc[\"Encoder trait: type Output\"] --> Hex[\"HexPair: Output = u8 array of 2\"]\n  end\n  subgraph ByValue[Const generic]\n    FW[\"FixedWindow of T and const N\"] --> Sum[\"sum over N items\"]\n    FW --> Last[\"last = items at N minus 1\"]\n  end"
+  }
+ ],
+ "ch19": [
+  {
+   "id": "afb0aa4325ee",
+   "width": 832,
+   "chart": "flowchart TD\n  D[Order domain model] --> P[Public API DTO]\n  D --> E[Internal event DTO]\n  D --> W[WASM view]\n  D --> F[FFI byte buffer]\n  P -->|JSON| Api[External clients]\n  E -->|compact binary| Stream[Event consumers]\n  W -->|JsValue or JSON| Browser[Browser module]\n  F -->|repr C or bytes| Native[Native integration]"
+  },
+  {
+   "id": "535947d85a4c",
+   "width": 806,
+   "chart": "flowchart TD\n  Start[Pick a format for this boundary] --> Q1{Must a human read it?}\n  Q1 -->|Yes| Q2{Config or data stream?}\n  Q2 -->|Config| Toml[TOML or YAML]\n  Q2 -->|Data or API| Json[JSON]\n  Q1 -->|No| Q3{Same document model, smaller?}\n  Q3 -->|Yes| Cbor[MessagePack or CBOR]\n  Q3 -->|Need cross-language schema| Schema[Schema-first binary]"
+  },
+  {
+   "id": "5842f4b30aca",
+   "width": 871,
+   "chart": "flowchart TD\n  R[Reader parses a message] --> A{New optional field present?}\n  A -->|Missing| Def[Use serde default]\n  A -->|Present| Keep[Read it]\n  R --> B{Field was renamed?}\n  B -->|Old name| Alias[serde alias maps it]\n  B -->|New name| Keep\n  R --> C{Unknown extra field?}\n  C -->|Yes| Ignore[Ignore unless deny_unknown_fields]\n  Def --> Ok[Parse succeeds]\n  Keep --> Ok\n  Alias --> Ok\n  Ignore --> Ok"
+  }
+ ],
+ "ch20": [
+  {
+   "id": "487f18cd806b",
+   "width": 807,
+   "chart": "flowchart TD\n  Start[Repetition spotted] --> Q1{Variation is values, types, or behavior?}\n  Q1 -->|yes| Fn[Function, generic, trait, or enum]\n  Q1 -->|no, it is syntax| Q2{Source of truth external or surface large?}\n  Q2 -->|yes| Gen[Build script or offline generator]\n  Q2 -->|no| Q3{Needs item structure or attributes?}\n  Q3 -->|no, local pattern| Decl[macro_rules!]\n  Q3 -->|yes| Proc[Procedural macro]"
+  },
+  {
+   "id": "eda454cf3ce0",
+   "width": 1385,
+   "chart": "flowchart TD\n  subgraph Derive[\"proc_macro_derive\"]\n    D1[Type definition] --> D2[Generated impls added next to it]\n  end\n  subgraph Attr[\"proc_macro_attribute\"]\n    A1[Annotated item] --> A2[Rewritten or wrapped item replaces it]\n  end\n  subgraph Func[\"proc_macro function-like\"]\n    F1[Tokens inside the call] --> F2[New items or expressions]\n  end"
+  }
+ ],
+ "ch21": [
+  {
+   "id": "8f60b4970e72",
+   "width": 1007,
+   "chart": "flowchart TD\n  N[I want to introspect a type] --> Q{When do I know the type?}\n  Q -->|At runtime, erased| R[Runtime tools]\n  Q -->|At build time, in source| C[Compile-time tools]\n  R --> T1[TypeId: identity key]\n  R --> T2[Any: checked downcast]\n  C --> T3[derive macros: emit code]\n  C --> T4[type_name / stringify: labels]\n  T1 -.weak as.-> X[Not a schema or protocol key]\n  T4 -.weak as.-> X"
+  },
+  {
+   "id": "f8c15b255378",
+   "width": 741,
+   "chart": "flowchart TD\n  V[Vec of Box dyn Plugin] --> M[metadata: name and kind]\n  M --> Names[plugins = json,redact]\n  M --> Kind[first kind = formatter]\n  V --> F[find_map as_any downcast JsonFormatter]\n  F -->|matched once| P[json pretty = true]"
+  }
+ ],
+ "ch22": [
+  {
+   "id": "e1e76c6f413e",
+   "width": 823,
+   "chart": "flowchart TD\n  W[Concurrent work] --> OS[OS thread]\n  W --> AT[Async task]\n  W --> DP[Data parallel job]\n  W --> DW[Distributed worker]\n  OS -->|scheduled by| Kernel[OS scheduler]\n  AT -->|polled by| Exec[Executor in-process]\n  DP -->|balanced by| Pool[Work-stealing pool]\n  DW -->|carried by| Net[Network and serialization]\n  AT -.drives.-> Fut[Future state machine]"
+  },
+  {
+   "id": "b0e85088c66d",
+   "width": 1012,
+   "chart": "flowchart TD\n  V[A value of type T] --> Q1{Move to another thread}\n  Q1 -->|needs T is Send| Spawn[thread::spawn closure]\n  V --> Q2{Share a reference across threads}\n  Q2 -->|needs T is Sync| Share[Arc read by many]\n  RC[Rc] -->|not Send, not Sync| Reject[rejected at compile time]\n  ARC[Arc] -->|Send and Sync if T is| Accept[crosses the boundary]"
+  }
+ ],
+ "ch23": [
+  {
+   "id": "036b513c1a50",
+   "width": 1310,
+   "chart": "flowchart TD\n  subgraph Mutex\n    M[Mutex of T] -->|lock returns guard| G[MutexGuard: deref to T]\n    G -->|guard dropped| M\n  end\n  subgraph RwLock\n    R[RwLock of T] -->|read: shared| RG[many read guards at once]\n    R -->|write: exclusive| WG[one write guard, blocks readers]\n  end"
+  },
+  {
+   "id": "1eeace6092ed",
+   "width": 1215,
+   "chart": "flowchart TD\n  subgraph Deadlock\n    A[Thread A holds L1] -->|wants L2| B[Thread B holds L2]\n    B -->|wants L1| A\n  end\n  subgraph Safe\n    T1[Thread A: lock L1 then L2] --> Order[Global order: L1 before L2]\n    T2[Thread B: lock L1 then L2] --> Order\n  end"
+  }
+ ],
+ "ch26": [
+  {
+   "id": "cd3d24002ea1",
+   "width": 895,
+   "chart": "flowchart TD\n  Start[New unit of work] --> Q1{Mostly waiting or mostly CPU?}\n  Q1 -->|waiting on IO| Q2{Own a task or drive locally?}\n  Q1 -->|burning CPU| Rayon[Rayon parallel pool]\n  Q2 -->|own a task| Tokio[tokio spawn or JoinSet]\n  Q2 -->|drive in place| Futures[FuturesUnordered or join_all]\n  Q1 -->|coordinate threads only| Crossbeam[Crossbeam channels and scope]"
+  },
+  {
+   "id": "6f606cad26cd",
+   "width": 1560,
+   "chart": "flowchart TD\n  subgraph JoinSet path\n    J[JoinSet] -->|spawn| T1[runtime task 1]\n    J -->|spawn| T2[runtime task 2]\n    T1 --> RW[runtime worker threads]\n    T2 --> RW\n  end\n  subgraph FuturesUnordered path\n    F[FuturesUnordered] -->|polled in place| FA[future a]\n    F -->|polled in place| FB[future b]\n    FA --> ME[your single task]\n    FB --> ME\n  end"
+  },
+  {
+   "id": "4c042898b41e",
+   "width": 708,
+   "chart": "flowchart TD\n  Req[Incoming work] --> Async[Async task]\n  Req --> Block[Blocking or legacy call]\n  Req --> CPU[CPU-heavy batch]\n  Async --> TW[Tokio worker pool]\n  Block -->|spawn_blocking| TB[Tokio blocking pool]\n  CPU -->|par_iter or send to pool| RP[Rayon work-stealing pool]\n  CPU -.->|wrong, stalls futures| TW"
+  }
+ ],
+ "ch28": [
+  {
+   "id": "0f661d6443cc",
+   "width": 1019,
+   "chart": "flowchart TD\n  Q{Who owns the memory?} -->|Caller, read only| In[const ptr plus len]\n  Q -->|Caller, Rust writes| Out[mut ptr plus capacity]\n  Q -->|Rust owns across calls| Handle[opaque handle plus new and free]\n  Q -->|Rust allocates a string| Str[returned ptr plus one free fn]"
+  }
+ ],
+ "ch29": [
+  {
+   "id": "7ff698155825",
+   "width": 711,
+   "chart": "flowchart TD\n  V[Value to cross] --> Q1{Is it a number?}\n  Q1 -->|yes| N[Pass directly, no copy]\n  Q1 -->|no| Q2{Crosses often with big payload?}\n  Q2 -->|yes| H[Keep resident, pass a handle]\n  Q2 -->|no| Q3{Flat bytes or string?}\n  Q3 -->|yes| C[Copy slice or string]\n  Q3 -->|rich struct| S[Serialize then copy]"
+  }
+ ],
+ "ch30": [
+  {
+   "id": "e3d74bc6606c",
+   "width": 735,
+   "chart": "flowchart TD\n  Pub[publish orders.created] --> Ex{direct exchange}\n  Ex -->|orders.created| Bill[(billing)]\n  Ex -->|orders.created| Search[(search)]\n  Pub2[publish orders.cancelled] --> Ex\n  Ex -->|orders.cancelled| Bill\n  Pub3[publish orders.refunded] --> Ex\n  Ex -->|no binding| Drop[unrouted count]"
+  }
+ ],
+ "ch31": [
+  {
+   "id": "441649e5a2dc",
+   "width": 743,
+   "chart": "flowchart TD\n  In[incoming task] --> C{classify failure}\n  C -->|transient| R[retry with backoff]\n  R -->|budget left| In\n  R -->|budget spent| DLQ[(dead-letter queue)]\n  C -->|permanent| DLQ\n  In -.runs on.-> PoolA[domain A pool]\n  Other[noisy task class] -.isolated to.-> PoolB[domain B pool]"
+  }
+ ],
+ "ch32": [
+  {
+   "id": "8b465fb86434",
+   "width": 1802,
+   "chart": "flowchart TD\n  subgraph Broadcast\n    B0[\"root\"] --> B1[\"rank 1\"]\n    B0 --> B2[\"rank 2\"]\n    B0 --> B3[\"rank 3\"]\n  end\n  subgraph Scatter\n    S0[\"root buffer\"] --> S1[\"chunk 1\"]\n    S0 --> S2[\"chunk 2\"]\n    S0 --> S3[\"chunk 3\"]\n  end\n  subgraph Gather\n    G1[\"local 1\"] --> G0[\"root buffer\"]\n    G2[\"local 2\"] --> G0\n    G3[\"local 3\"] --> G0\n  end\n  subgraph Allreduce\n    A1[\"partial\"] --> AS[\"sum\"]\n    A2[\"partial\"] --> AS\n    A3[\"partial\"] --> AS\n    AS --> AB[\"every rank\"]\n  end"
+  }
+ ],
+ "ch33": [
+  {
+   "id": "69aeb9423907",
+   "width": 1115,
+   "chart": "flowchart TD\n  subgraph Flat[\"flat Vec: one allocation\"]\n    direction LR\n    F0[a] --> F1[b] --> F2[c] --> F3[d]\n  end\n  subgraph Nested[\"Vec of boxes: many allocations\"]\n    direction LR\n    H[handles] --> P0[ptr] --> B0[a]\n    H --> P1[ptr] --> B1[b]\n    H --> P2[ptr] --> B2[c]\n  end\n  Flat -.prefetcher friendly.-> Fast((fast scan))\n  Nested -.pointer chasing.-> Slow((cache misses))"
+  },
+  {
+   "id": "853286c95e33",
+   "width": 1615,
+   "chart": "flowchart TD\n  subgraph Static[\"Generic: monomorphized\"]\n    GC[call site] --> GT[concrete fn body]\n    GT --> GI[inline and specialize]\n  end\n  subgraph Dynamic[\"dyn Trait: vtable\"]\n    DC[call site] --> DV[vtable pointer]\n    DV --> DF[indirect call]\n    DF --> DB[opaque to optimizer]\n  end"
+  },
+  {
+   "id": "e58fc9591f20",
+   "width": 1020,
+   "chart": "flowchart TD\n  Q1[Which variant is faster?] --> Bench[Benchmark]\n  Q2[Where does the time go?] --> Prof[Profile]\n  Q3[What happened, and when?] --> Trace[Trace]\n  Q4[Does it matter in prod?] --> Obs[Observability]"
+  }
+ ],
+ "ch34": [
+  {
+   "id": "093f2a3e8420",
+   "width": 821,
+   "chart": "flowchart TD\n  Start[RSS climbing after release] --> Symptom{Name the symptom}\n  Symptom -->|allocs high, live flat| Churn[Clone pressure / churn]\n  Symptom -->|live heap rising| Retained{Reachable on purpose?}\n  Symptom -->|live flat, RSS high| Frag[Fragmentation / allocator cache]\n  Retained -->|owner cycle| Cycle[Rc / Arc cycle]\n  Retained -->|queue or task holds it| Backlog[Async backlog]\n  Retained -->|region never resets| Arena[Arena retention]\n  Churn --> Fix[Pick the matching repair]\n  Frag --> Fix\n  Cycle --> Fix\n  Backlog --> Fix\n  Arena --> Fix"
+  },
+  {
+   "id": "0fe33e2578f0",
+   "width": 968,
+   "chart": "flowchart TD\n  subgraph Leaks[Strong cycle - never freed]\n    P1[Parent] -->|strong| C1[Child]\n    C1 -->|strong back-edge| P1\n  end\n  subgraph Frees[Weak back-edge - collectible]\n    P2[Parent] -->|strong| C2[Child]\n    C2 -.->|weak back-edge| P2\n  end"
+  },
+  {
+   "id": "1107044c6d88",
+   "width": 819,
+   "chart": "flowchart TD\n  Producer -->|messages| Channel{Channel bounded?}\n  Channel -->|no| Grow[Queue grows -> RSS climbs]\n  Channel -->|yes, full| Backpressure[Producer blocks -> visible budget]\n  Channel --> Consumer[Consumer drains]\n  Consumer --> Drop[Payload dropped, memory freed]"
+  }
+ ],
+ "ch35": [
+  {
+   "id": "3d6b850393a0",
+   "width": 871,
+   "chart": "flowchart TD\n  Ask{What do you need?}\n  Ask -->|Compare two versions| Bench[Criterion benchmark]\n  Ask -->|Find hot CPU path| Sample[Sampling profiler + flame graph]\n  Ask -->|Explain a timeline| Instr[Tracing / instrumentation]\n  Ask -->|Prove it in prod| Tele[Live telemetry: p95/p99]\n  Bench --> Fix[Targeted change]\n  Sample --> Fix\n  Instr --> Fix\n  Fix --> Tele"
+  }
+ ],
+ "ch36": [
+  {
+   "id": "2aca95e6fc91",
+   "width": 770,
+   "chart": "flowchart TD\n  Samples[(task samples)] --> E2E[p95 end-to-end]\n  Samples --> Q[p95 queue wait]\n  Samples --> Sat[busy / total]\n  Samples --> Retry[retried / claimed]\n  E2E --> Win[[operator window]]\n  Q --> Win\n  Sat --> Win\n  Retry --> Win"
+  }
+ ],
+ "ch40": [
+  {
+   "id": "e663ddfc1f84",
+   "width": 1156,
+   "chart": "flowchart TD\n  subgraph SLOW[\"i-j-k order, slow\"]\n    IJK[\"inner loop varies k\"] --> Bcol[\"B walked down a column\\\nstrided, cache-hostile\"]\n  end\n  subgraph FAST[\"i-k-j order, fast\"]\n    IKJ[\"inner loop varies j\"] --> Brow[\"B walked along a row\\\ncontiguous, cache-friendly\"]\n    IKJ --> Areuse[\"a[i,k] held in a register\"]\n  end"
+  },
+  {
+   "id": "3efb126d2152",
+   "width": 831,
+   "chart": "flowchart TD\n  Mat[\"sparse matrix\\\nmost cells are zero\"] --> V[\"values: nonzero entries\"]\n  Mat --> C[\"col_index: column of each value\"]\n  Mat --> R[\"row_ptr: where each row starts\"]\n  R --> Slice[\"row i = values[row_ptr[i] .. row_ptr[i+1]]\"]\n  C --> Slice"
+  },
+  {
+   "id": "97995a370fff",
+   "width": 852,
+   "chart": "flowchart TD\n  C[\"output matrix C\"] --> S0[\"rows 0..n owned by worker 0\"]\n  C --> S1[\"rows n..2n owned by worker 1\"]\n  C --> S2[\"rows 2n..3n owned by worker 2\"]\n  S0 --> Done[\"join, no shared lock\"]\n  S1 --> Done\n  S2 --> Done"
+  }
+ ],
+ "ch41": [
+  {
+   "id": "98c008338e34",
+   "width": 892,
+   "chart": "flowchart TD\n  Client -->|HTTP| Handler\n  Handler --> Service\n  Service --> Domain[domain rules]\n  Service --> Store[(database)]\n  Service --> Broker[[message broker]]\n  Service --> Plugin[native risk plugin]\n  Service --> Tasks[async enrichment]\n  Domain -->|domain error| Service\n  Store -->|infra error| Service\n  Broker -->|infra error| Service\n  Plugin -->|status code| Service\n  Tasks -->|join + inner| Service\n  Service -->|one translated error| Handler\n  Handler -->|status code + log once| Client"
+  },
+  {
+   "id": "19cd726a7298",
+   "width": 814,
+   "chart": "flowchart TD\n  D[Domain layer] -->|domain error: empty order| S[Service layer]\n  I[Infrastructure layer] -->|infra error: row missing| S\n  S -->|classify + translate| T{Next boundary}\n  T --> H[HTTP status]\n  T --> B[broker nack / dead-letter]\n  T --> C[CLI exit code]\n  T --> F[FFI status code]"
+  }
+ ],
+ "ch42": [
+  {
+   "id": "ba6729654d19",
+   "width": 1164,
+   "chart": "flowchart TD\n  subgraph Risks [\"Where the system can break\"]\n    Inv[Local invariant]\n    Hostile[Hostile bytes]\n    Replay[Duplicate delivery]\n    Out[Generated output]\n    Budget[Latency budget]\n  end\n  subgraph Layers [\"Cheapest layer that proves it\"]\n    Unit[\"Unit / property test\"]\n    Fuzz[Fuzz target]\n    Async[Deterministic async harness]\n    Snap[\"Golden / snapshot\"]\n    Bench[Benchmark lane]\n  end\n  Inv --> Unit\n  Hostile --> Fuzz\n  Replay --> Async\n  Out --> Snap\n  Budget --> Bench"
+  }
+ ],
+ "ch43": [
+  {
+   "id": "85811d7342aa",
+   "width": 1161,
+   "chart": "flowchart TD\n  Req[\"Incoming request\"] --> Svc[\"Rust service\"]\n  Svc --> L[\"Logs<br/>what happened (one event)\"]\n  Svc --> T[\"Traces<br/>where time went (causal path)\"]\n  Svc --> M[\"Metrics<br/>how much / how fast (aggregate)\"]\n  Svc --> P[\"Profiles<br/>where CPU and memory go (cost)\"]\n  L --> Op([\"Operator answers the incident\"])\n  T --> Op\n  M --> Op\n  P --> Op"
+  },
+  {
+   "id": "6172ec406656",
+   "width": 788,
+   "chart": "flowchart TD\n  QP[\"queue p95\"] --> Budget[\"latency budget<br/>(upper bound, not true p95)\"]\n  HP[\"handler p95\"] --> Budget\n  Acc[\"accepted count\"] --> SR[\"success rate\"]\n  Fail[\"failed count\"] --> SR\n  Budget --> Alert{\"over budget or<br/>below success SLO?\"}\n  SR --> Alert\n  Sat[\"saturation\"] --> Alert\n  Alert -->|yes| Page([\"alert = true\"])\n  Alert -->|no| Ok([\"healthy\"])"
+  }
+ ],
+ "ch44": [
+  {
+   "id": "aa48b6fe9626",
+   "width": 844,
+   "chart": "flowchart TD\n  Src[one crate graph] --> Bin[static linux binary]\n  Src --> Img[container image]\n  Src --> Wasm[browser wasm module]\n  Src --> Lib[native library]\n  Bin -->|musl + smoke test| ReleaseB[release: binary]\n  Img -->|distroless + health probe| ReleaseI[release: image]\n  Wasm -->|glue + bundler| ReleaseW[release: wasm]\n  Lib -->|cdylib + ABI| ReleaseL[release: library]"
+  },
+  {
+   "id": "dc72bb33617a",
+   "width": 831,
+   "chart": "flowchart TD\n  T[BuildTarget value] --> M{match target}\n  M -->|LinuxGnu| G[name: ...-linux-gnu]\n  M -->|LinuxMusl| Mu[name: ...-linux-musl]\n  M -->|Wasm| W[name: ....wasm]\n  M -->|NativeLib| L[name: lib....so]\n  Mu --> S{is_static?}\n  S -->|musl| Yes[static = true]"
+  }
+ ],
+ "ch47": [
+  {
+   "id": "2bab4414508c",
+   "width": 761,
+   "chart": "flowchart TD\n  Proto[billing.proto schema] --> GoGen[Go codegen]\n  Proto --> CsGen[C# codegen]\n  Proto --> CppGen[C++ codegen]\n  Proto --> RustGen[Rust / tonic codegen]\n  GoGen --> GoSvc[Go service]\n  CsGen --> CsSvc[C# service]\n  CppGen --> CppSvc[C++ service]\n  RustGen --> Adapter[hand-written adapter]\n  Adapter --> Domain[Rust domain logic]"
+  },
+  {
+   "id": "8f344c97dbf4",
+   "width": 1776,
+   "chart": "flowchart TD\n  subgraph Unary\n    C1[client] -->|1 req| S1[server]\n    S1 -->|1 resp| C1\n  end\n  subgraph ServerStream\n    C2[client] -->|1 req| S2[server]\n    S2 -->|many resp| C2\n  end\n  subgraph ClientStream\n    C3[client] -->|many req| S3[server]\n    S3 -->|1 resp| C3\n  end\n  subgraph BiDi\n    C4[client] -->|many req| S4[server]\n    S4 -->|many resp| C4\n  end"
+  }
+ ],
+ "ch48": [
+  {
+   "id": "37d912f220e8",
+   "width": 953,
+   "chart": "flowchart TD\n  Push[new outbound message] --> Q{queue full?}\n  Q -->|no| Enqueue[enqueue, writer drains]\n  Q -->|yes| Policy{slow-consumer policy}\n  Policy -->|drop newest| DropNew[discard this message]\n  Policy -->|drop oldest| DropOld[evict head, enqueue]\n  Policy -->|coalesce| Snap[replace with latest snapshot]\n  Policy -->|disconnect| Evict[close the connection]"
+  }
+ ],
+ "ch50": [
+  {
+   "id": "6c3fae522c28",
+   "width": 1228,
+   "chart": "flowchart TD\n  subgraph RR[Request-response: one bounded answer]\n    A[Peer A] -->|FetchChunk index=3| B[Peer B]\n    B -->|Chunk index=3 bytes| A\n  end\n  subgraph PS[Pub-sub: fan-out to subscribers]\n    P[Publisher] -->|publish heads| T(((topic: heads)))\n    T --> S1[Subscriber 1]\n    T --> S2[Subscriber 2]\n    T --> S3[Subscriber 3]\n  end"
+  }
+ ],
+ "ch51": [
+  {
+   "id": "4c698d10656c",
+   "width": 831,
+   "chart": "flowchart TD\n  A[line_a + line_b = total] --> G1[a few add constraints]\n  B[total less-equal limit] --> G2[range-check gadget: many bit constraints]\n  C[hash equals commitment] --> G3[hash gadget: many round constraints]\n  G1 --> Cost[total prover cost]\n  G2 --> Cost\n  G3 --> Cost"
+  }
+ ],
+ "ch52": [
+  {
+   "id": "2afae88102d2",
+   "width": 1072,
+   "chart": "flowchart TD\n  PlanFor[plan_for] --> List[Vec of Invocation]\n  List --> I0[compile]\n  List --> I1[setup]\n  List --> I2[compute-witness]\n  List --> I3[generate-proof]\n  List --> I4[export-verifier]\n  List --> I5[verify]\n  I3 --> Render[render -> command string]\n  I4 --> Artifact[.sol artifact path]"
+  },
+  {
+   "id": "11a349785434",
+   "width": 856,
+   "chart": "flowchart TD\n  subgraph PB[ProofBundle - proving side]\n    Contract[verifier_contract]\n    Public[public_inputs]\n    ProofPath[proof_json_path]\n    Witness[witness_path]\n  end\n  Contract --> Call\n  Public --> Call\n  ProofPath --> Call\n  Witness -. dropped .-x Call\n  subgraph VC[VerifierCall - Ethereum side]\n    Call[contract + fn + inputs + proof]\n  end"
+  }
+ ],
+ "ch55": [
+  {
+   "id": "10aa6fc21cf1",
+   "width": 1090,
+   "chart": "flowchart TB\n  subgraph Solana\n    P1[Program code stateless] --> A1[(Account A)]\n    P1 --> A2[(Account B)]\n  end\n  subgraph CosmWasm\n    P2[Contract code] --> KV[(Private kv store)]\n  end\n  subgraph EVM\n    P3[Contract code] --> S3[(Owned storage slots)]\n  end"
+  }
+ ],
+ "ch56": [
+  {
+   "id": "a0d5ae17c3cd",
+   "width": 814,
+   "chart": "flowchart TD\n  Core[\"core<br/>language + portable primitives<br/>(always available)\"] --> Alloc[\"alloc<br/>Vec / String / Box<br/>(needs a global allocator)\"]\n  Alloc --> Std[\"std<br/>threads / files / net / time<br/>(needs an OS)\"]\n  MCU[\"thumbv7em-none-eabihf<br/>microcontroller\"] -.stops at.-> Core\n  Bare[\"x86_64-unknown-none<br/>freestanding / kernel\"] -.stops at.-> Alloc\n  Wasm[\"wasm32-unknown-unknown<br/>wasm guest\"] -.stops at.-> Alloc\n  Linux[\"aarch64-unknown-linux-gnu<br/>full userspace\"] -.reaches.-> Std"
+  },
+  {
+   "id": "d3c894b665ed",
+   "width": 802,
+   "chart": "flowchart TD\n  Caller[\"downstream crate\"] --> Feat{enabled features?}\n  Feat -->|none| C[\"checksum(&[u8]) -> u32<br/>core only\"]\n  Feat -->|alloc| A[\"encode_frame -> Vec&lt;u8&gt;<br/>owned helper\"]\n  Feat -->|std| S[\"write_diagnostic -> io::Result<br/>host adapter\"]\n  C --> Any[\"compiles on every target\"]\n  A --> Heap[\"targets with an allocator\"]\n  S --> OS[\"targets with an OS\"]"
+  }
+ ]
+}

@@ -1,26 +1,27 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Rust has type identity, not broad runtime object inspection",
-    body: "Rust can answer narrow runtime questions such as 'what concrete type is this?' or 'can I recover it from erased storage?' It does not, by default, enumerate arbitrary fields, methods, or annotations at runtime.",
+    title: "Rust answers type identity, not open-ended object inspection",
+    body: "The runtime questions Rust will answer for you are deliberately small: 'is this erased value really a RequestContext?' and 'can I recover the concrete type I stored?' It will not, by default, hand you a list of a struct's fields, walk its methods, or read attributes off a live value the way a managed runtime does. The information a reflective runtime keeps around at execution time is, in Rust, mostly consumed by the compiler and then discarded, because monomorphization has already specialized the code that needed it.",
   },
   {
-    title: "`Any` and `TypeId` belong at narrow erased boundaries",
-    body: "A request extension bag, a typed registry, or a plugin escape hatch may justify erased storage. Most application code should still use ordinary structs, enums, and trait methods.",
+    title: "Any and TypeId belong at narrow erased seams",
+    body: "There are a few places where erased storage is genuinely the right model: a per-request extension bag, a typed registry keyed by concrete type, a plugin host that occasionally needs to recover one specific implementation. Those are seams, not the body of an application. The vast majority of code should keep its types visible and lean on ordinary structs, enums, and trait methods, where the compiler can still check the relationships for you.",
   },
   {
-    title: "If metadata matters, model it or generate it explicitly",
-    body: "Schema, field labels, plugin capabilities, and admin-facing descriptors are usually better as explicit data or compile-time generated artifacts than as runtime reflection guesses.",
+    title: "If metadata matters, model it or generate it on purpose",
+    body: "When you find yourself wishing for reflection, the question to ask is what you actually want to do with the metadata. Field labels, plugin capabilities, a JSON Schema for an admin page, a descriptor a client can read at startup: these are all better expressed as explicit data or as an artifact generated at compile time from the source that already knows the shape. Reflection guesses the answer at runtime; a descriptor states it, can be reviewed, and cannot drift away from a type the way an inferred name can.",
   },
 ]
 
@@ -135,16 +136,20 @@ const pluginCards = [
 
 const comparisonCallouts = [
   {
-    title: "C++ RTTI background",
-    body: "Rust is closer to C++ RTTI than to a reflection-heavy managed runtime. `TypeId` and downcasting exist, but Rust does not default to field enumeration or late-bound metadata discovery.",
+    title: "C++ background",
+    body: "The closest thing you already know is RTTI: typeid and dynamic_cast give you runtime type identity and a checked downcast, and that is almost exactly what TypeId and Any provide. The shift is that there is no Boost.Hana, no reflection TS to lean on, and no field walking at all; the structural introspection you might have reached for at compile time moves into the derive-macro system instead of templates.",
   },
   {
     title: "C# background",
-    body: "C# exposes rich runtime reflection over types, members, and attributes. Rust deliberately keeps that surface small and pushes most structural introspection toward macros and explicit metadata.",
+    body: "This is the largest mental adjustment. System.Reflection lets you enumerate members, read attributes, and construct types by name at runtime, and a lot of C# library design assumes that power. Rust gives you none of it by default. The instinct to scan a type for [Attribute]-decorated members has to be retrained into either a derive macro that emits the code at compile time or an explicit descriptor you write once and the compiler keeps honest.",
   },
   {
     title: "Go background",
-    body: "Go has a runtime `reflect` package, but even there, heavy reflection usually carries cost and complexity. Rust narrows the default surface further and encourages explicit descriptors sooner.",
+    body: "Go's reflect package is the everyday tool for generic-ish code, struct-tag parsing, and serializers, so 'just reflect over it' is a normal reflex. Rust does not offer a runtime field walk, and the idioms that Go solves with reflection are solved here with traits, generics, and serde's derive instead. Expect to declare the shape rather than discover it.",
+  },
+  {
+    title: "Python background",
+    body: "Everything is introspectable at runtime in Python: __dict__, getattr, dir(), decorators that rewrite classes on import. Rust removes that whole layer. There is no object whose attributes you can list at runtime; the value you stored in a typemap can only be recovered as the one concrete type you ask for by name. Dynamic-attribute habits become explicit data and compile-time generation.",
   },
 ]
 
@@ -304,7 +309,42 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-3">The four tools, and what each one is for</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              It helps to see the whole landscape before the details, because &ldquo;reflection&rdquo; in Rust is not
+              one feature but four narrow tools that solve four different problems. Two of them work at runtime and two
+              of them work at compile time. The runtime pair,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TypeId</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Any</code>, gives you type identity
+              and checked recovery of a value you erased on purpose. The compile-time pair, derive macros and
+              compiler-built labels such as{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">type_name</code>, lets the source code
+              that already knows a type&rsquo;s shape emit new code or descriptors before the program runs. Almost every
+              real need maps onto one of these four; the trap is reaching for a fifth that does not exist.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  N[I want to introspect a type] --> Q{When do I know the type?}\n  Q -->|At runtime, erased| R[Runtime tools]\n  Q -->|At build time, in source| C[Compile-time tools]\n  R --> T1[TypeId: identity key]\n  R --> T2[Any: checked downcast]\n  C --> T3[derive macros: emit code]\n  C --> T4[type_name / stringify: labels]`}
+              caption="The first question is when you know the type: erased at runtime, or visible in source at build time. Each answer leads to its own pair of tools."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Two of those four tools are routinely misused as stable identifiers. The second half marks which ones:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  T1[TypeId: identity key] -.weak as.-> X[Not a schema or protocol key]\n  T4[type_name / stringify: labels] -.weak as.-> X`}
+              caption="TypeId and the compiler-built labels are process-local or diagnostic only; neither is a stable schema or protocol key, so the dotted edges warn against persisting them."
+            />
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Why Rust has limited runtime reflection</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The absence of broad reflection is a design choice, not a missing feature. Rust specializes generic code
+              by monomorphization and resolves most calls statically, which means the per-type metadata a reflective
+              runtime would need to keep alive has usually been compiled away by the time the program runs. Carrying it
+              anyway would add weight to every binary and pull assumptions that belong in source into runtime tables.
+              The practical consequence is the three cards below: there is no field walk, layout and codegen stay
+              explicit, and the needs people actually have turn out to be narrower than &ldquo;reflect over anything.&rdquo;
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {limitedReflectionCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -316,7 +356,26 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">`Any` and `TypeId`</h4>
+            <h4 className="font-semibold text-foreground mb-3">Any and TypeId: erase a type, then recover it safely</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TypeId</code> is a small,
+              copyable token that uniquely identifies one concrete type, valid within a single process and a single
+              build of your program. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Any</code> is
+              the trait that lets you store a value behind an erased pointer such as{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Box&lt;dyn Any&gt;</code> and later
+              ask, at runtime, &ldquo;is the thing in here actually a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">RetryBudget</code>?&rdquo;
+              The two work together: you erase a value to put it in a heterogeneous container, you key or check it by{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TypeId</code>, and you recover it as
+              exactly one named type. The recovery is always checked, so a wrong guess returns{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">None</code> rather than reinterpreting
+              bytes. One constraint shapes all of this: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Any</code>{" "}
+              is for <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&apos;static</code> types,
+              because a runtime identity cannot encode a borrow that only lives for part of the program.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  V[Concrete value: RetryBudget] -->|Box::new| E[Box dyn Any]\n  E -->|store| M[(HashMap keyed by TypeId)]\n  M -->|lookup by TypeId of T| E2[Box dyn Any]\n  E2 -->|downcast_ref T| D{Type matches?}\n  D -->|yes| Some[Some and ref to RetryBudget]\n  D -->|no| None2[None]`}
+              caption="A value is erased into Box<dyn Any>, stored under its TypeId, and only ever comes back as the one concrete type you ask for; a mismatch is None, never a reinterpretation."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {anyTypeIdCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -337,7 +396,13 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Downcasting</h4>
+            <h4 className="font-semibold text-foreground mb-3">Downcasting: recovering one named type by borrow, by mut, or by value</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Downcasting is the act of recovery, and it comes in three forms that mirror Rust&rsquo;s ownership
+              choices. The form you pick follows how the erased container holds the value and what the caller needs to
+              do with it: read it, mutate it in place, or take ownership back. None of these is a cast in the
+              C-language sense; each one checks the type first and only succeeds if it matches.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {downcastCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -375,7 +440,16 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-start justify-between gap-4 flex-col lg:flex-row">
               <div className="flex-1">
-                <h4 className="font-semibold text-foreground mb-3">Compile-time reflection through macros</h4>
+                <h4 className="font-semibold text-foreground mb-3">Compile-time introspection through macros</h4>
+                <p className="text-sm text-muted-foreground leading-6 mb-4">
+                  This is where most of what other languages call reflection actually happens in Rust, just earlier in
+                  the timeline. A derive macro reads the syntax of your struct or enum and writes more Rust before type
+                  checking, so a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Serialize</code>{" "}
+                  implementation that &ldquo;knows&rdquo; every field is generated rather than discovered. The result is the
+                  same capability a reflective serializer offers, with the cost paid at build time and the field walk
+                  visible to the compiler. The compiler-built labels in the third card are a separate, smaller tool: good
+                  for logs and panics, but never a contract.
+                </p>
                 <div className="grid gap-4 lg:grid-cols-3">
                   {macroCards.map((card) => (
                     <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -397,7 +471,14 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-start justify-between gap-4 flex-col lg:flex-row">
               <div className="flex-1">
-                <h4 className="font-semibold text-foreground mb-3">Schema generation</h4>
+                <h4 className="font-semibold text-foreground mb-3">Generating schema instead of inspecting values</h4>
+                <p className="text-sm text-muted-foreground leading-6 mb-4">
+                  When you need a machine-readable description of a type for documentation, client generation, or
+                  validation, generate it from the source rather than inspecting live values. A crate such as schemars
+                  uses the same derive machinery to turn a transport DTO into a JSON Schema at build time. That keeps the
+                  schema close to the type it describes and frees the domain model to evolve behind the wire DTO, instead
+                  of tying a public contract to whatever fields a value happens to expose at runtime.
+                </p>
                 <div className="grid gap-4 lg:grid-cols-2">
                   {schemaCards.map((card) => (
                     <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -414,24 +495,24 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Reflection-like systems for plugins</h4>
+            <h4 className="font-semibold text-foreground mb-3">Plugin systems that declare rather than infer</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A plugin host is the classic place where engineers from reflective languages reach for runtime inspection:
+              load a plugin, scan it for its name and capabilities, dispatch accordingly. The calmer Rust design inverts
+              that. Each plugin returns a descriptor through an ordinary trait method, so the host reads metadata the
+              same way it reads any other return value, and downcasting is held back as a rare escape hatch for the one
+              specialized path that genuinely needs a concrete type. The diagram makes the split concrete: the wide path
+              is trait dispatch, and the narrow dotted path is the occasional downcast.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  H[Plugin host] -->|metadata| T[trait method: common path]\n  H -->|run| T\n  T --> A[Plugin A]\n  T --> B[Plugin B]\n  H -.as_any then downcast.-> S[One concrete plugin: rare path]`}
+              caption="The common path is a trait method every plugin implements; downcasting via as_any is the narrow dotted exception, not the main API."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {pluginCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
                   <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparing Rust with C#, Go, and C++ RTTI</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
                 </div>
               ))}
             </div>
@@ -448,6 +529,27 @@ export function PageCh21ReflectionAndTypeIntrospection() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Reflection is one of the topics where prior experience cuts both ways: the vocabulary transfers, but the
+            reflexes mislead. The shift to keep in mind is that Rust moves structural introspection from a runtime
+            capability you call to a compile-time capability you generate, and keeps only a narrow runtime identity
+            check for the cases that truly need it. Read the card for your own background before the production patterns.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -513,6 +615,21 @@ export function PageCh21ReflectionAndTypeIntrospection() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: every method on{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TypeMap</code> uses the generic
+              parameter <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T</code> twice over, once
+              to compute <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TypeId::of::&lt;T&gt;()</code>{" "}
+              as the map key and once to drive the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">downcast_ref::&lt;T&gt;()</code> on
+              the way out. The store itself is untyped (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">HashMap&lt;TypeId, Box&lt;dyn Any&gt;&gt;</code>),
+              yet the public API only ever returns the concrete type the caller named. Trace one insert and one get
+              through the diagram, then read the same two paths in the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Ins[insert RetryBudget] -->|TypeId of T as key| Put[(values map)]\n  Ins -->|Box::new value| Put\n  Get[get RetryBudget] -->|TypeId of T| Look{key present?}\n  Look -->|no| N[None]\n  Look -->|yes| Dc[downcast_ref T]\n  Dc -->|matches| Ref[Some and ref to RetryBudget]`}
+              caption="insert keys the box by TypeId::of::<T>(); get recomputes the same TypeId, then downcast_ref::<T>() turns the erased box back into a typed reference."
+            />
             <RustCodeEditor
               code={codes.reflection_any_typeid_registry}
               onChange={(newCode) => updateCode("reflection_any_typeid_registry", newCode)}
@@ -569,6 +686,21 @@ export function PageCh21ReflectionAndTypeIntrospection() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: two of the three results come straight off the trait. Listing the names and reading{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">metadata().kind</code> never touches{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Any</code> at all, because that data
+              lives on the trait every plugin implements. Only the third result, the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pretty</code> flag, is specific to one
+              concrete plugin, so it is the single place that calls{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">as_any()</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">downcast_ref::&lt;JsonFormatter&gt;()</code>.
+              The diagram shows that asymmetry: the wide trait path and the one narrow downcast.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  V["Vec of<br/>Box dyn Plugin"] --> M[metadata:<br/>name and kind]\n  M --> Names[plugins =<br/>json,redact]\n  M --> Kind[first kind =<br/>formatter]\n  V --> F[find_map as_any<br/>downcast<br/>JsonFormatter]\n  F -->|matched once| P[json<br/>pretty = true]`}
+              caption="Names and kinds come from the trait method on every plugin; only the pretty flag requires a downcast to the one concrete JsonFormatter."
+            />
             <RustCodeEditor
               code={codes.reflection_plugin_metadata_downcast}
               onChange={(newCode) => updateCode("reflection_plugin_metadata_downcast", newCode)}

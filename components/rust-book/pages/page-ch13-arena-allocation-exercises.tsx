@@ -1,0 +1,237 @@
+"use client"
+
+// Chapter 13 · exercise workbook page (ch13-arena-allocation-exercises).
+// Exercise data consumed by the workbook PDF builder
+// (exports/extract_chapter_prose.py reads the const blocks and the
+// RustPracticeCard below). Not yet wired into app navigation; wiring
+// requires lockstep edits to types.ts / index.ts / index.tsx.
+// Intended component name: PageCh13ArenaAllocationExercises
+
+export {}
+
+/*
+interface Exercise {
+  number: number
+  kind: string
+  title: string
+  objective: string
+  starterPrompt: string
+  prompts?: string[]
+  acceptanceCriteria: string[]
+  hints: string[]
+}
+
+const exercises: Exercise[] = [
+  {
+    number: 1,
+    kind: "warm-up comprehension",
+    title: "State the bump allocator's lifetime model",
+    objective: "Explain why an arena trades per-object freeing for one coarse region teardown.",
+    starterPrompt: "Using the chapter's two-column mental model, describe what a bump allocator like Bump<N> does on allocation versus on reset, and why a query service that builds and discards a working graph per request is a good fit.",
+    prompts: [
+      "Name the single piece of mutable state a bump allocator tracks across allocations.",
+      "Describe what alloc_bytes does to that state and what reset does to it.",
+      "Explain why there is no per-object free path in this design.",
+      "Give one workload from the chapter where this model is the wrong fit.",
+    ],
+    acceptanceCriteria: [
+      "The answer identifies the used cursor as the only mutable state and states that allocation moves it forward.",
+      "The answer states that reset (or drop) releases the whole region in one step, with no individual frees.",
+      "The answer ties the fit to workloads where most temporary objects share one scope, such as request-scoped scratch or parser workspaces.",
+      "The answer notes the weakness: it is poor when individual objects must be freed independently.",
+    ],
+    hints: [
+      "The chapter frames this as append-only allocation now, coarse reset later.",
+      "Think about which operation is cheap and which operation simply does not exist.",
+    ],
+  },
+  {
+    number: 2,
+    kind: "code reading",
+    title: "Trace evaluation through the index-arena AST",
+    objective: "Read an arena-and-handle AST and follow how ExprId handles drive recursive evaluation.",
+    starterPrompt: "In the chapter's ExprArena example, five nodes are allocated: Number(2), Number(3), Number(4), Add(two, three), and Mul(sum, four). Walk the eval call on the root by hand without running the code.",
+    prompts: [
+      "Write down which slot index each alloc call returns, given that ExprId(n) is the node's position in the nodes vector.",
+      "Expand arena.eval(root) into the recursive calls it makes through the get lookups.",
+      "State the final printed value and the printed node count.",
+      "Explain what would change if Add held Box<Expr> instead of ExprId.",
+    ],
+    acceptanceCriteria: [
+      "The answer maps two->0, three->1, four->2, sum->3, root->4 as the issued ExprId values.",
+      "The trace shows eval(root) = eval(sum) * eval(four) = (2 + 3) * 4 = 20.",
+      "The answer reports value = 20 and nodes = 5 as printed output.",
+      "The answer explains that ExprId is logical identity into one owning vector, not shared ownership, so edges are indices rather than owners.",
+    ],
+    hints: [
+      "Allocation order is the slot order, because alloc pushes onto nodes and returns its length as the id.",
+      "Every variant holds ExprId values, so eval reborrows from the arena root on each recursive step.",
+    ],
+  },
+  {
+    number: 3,
+    kind: "implementation",
+    title: "Add a checkpoint-and-rewind API to the bump allocator",
+    objective: "Extend a region allocator with scoped reuse without introducing per-object frees.",
+    starterPrompt: "Starting from Bump<N> with its used cursor, add fn mark(&self) -> usize and fn rewind(&mut self, mark: usize) so a caller can allocate temporary scratch, then roll the cursor back to a saved point and reuse that space.",
+    prompts: [
+      "Make mark return the current used cursor without mutating the arena.",
+      "Make rewind set used back to a previously returned mark value.",
+      "Decide what rewind should do if mark is greater than the current used and document your choice.",
+      "Confirm that alloc_bytes after a rewind overwrites the reclaimed bytes.",
+    ],
+    acceptanceCriteria: [
+      "mark has signature fn mark(&self) -> usize and returns self.used without changing state.",
+      "rewind sets self.used to the provided mark so subsequent allocations reuse the region above it.",
+      "The implementation never frees individual allocations and keeps allocation append-only above the cursor.",
+      "A short test shows that allocating, marking, allocating more, then rewinding restores used to the marked value.",
+    ],
+    hints: [
+      "This is the same one-cursor idea as reset, but to an arbitrary saved position instead of zero.",
+      "rewind is only sound forward to backward; guard or document the case where mark exceeds the live cursor.",
+    ],
+  },
+  {
+    number: 4,
+    kind: "implementation",
+    title: "Add deletion-aware handles to the AST arena",
+    objective: "Replace a plain usize index with a generational handle that detects stale access.",
+    starterPrompt: "Extend ExprArena so a node can be removed and its slot reused, and so a handle issued before removal is rejected afterward. Give each slot a generation counter and make ExprId carry the generation it was issued for.",
+    prompts: [
+      "Store nodes as slots that hold a generation plus an Option<Expr>, and change ExprId to (index, generation).",
+      "On remove, clear the slot's value and bump its generation.",
+      "Make get return Option<&Expr> by comparing the handle's generation against the slot's current generation.",
+      "Reuse a freed slot on the next alloc and confirm the old handle now fails the generation check.",
+    ],
+    acceptanceCriteria: [
+      "ExprId carries both an index and a generation, not a bare usize.",
+      "Removing a node bumps that slot's generation so any previously issued handle no longer matches.",
+      "get returns None for a handle whose generation differs from the slot's current generation.",
+      "A reused slot serves new handles correctly while the stale handle to the old occupant returns None.",
+    ],
+    hints: [
+      "The generation counter exists precisely to distinguish the slot's old occupant from its new one.",
+      "A live read must check index in range, slot is occupied, and generation matches before returning the reference.",
+    ],
+  },
+  {
+    number: 5,
+    kind: "debugging or refactoring",
+    title: "Remove the reference cycle from an Rc graph",
+    objective: "Convert an Rc-based node graph with a leaking back-edge into an arena-and-index graph.",
+    starterPrompt: "You are given a small graph of Rc<RefCell<Node>> where edges are Rc<Node> owners and a back-edge from D to A forms a cycle that never drops to zero. Refactor it so one arena owns all nodes and every edge is a NodeId index.",
+    prompts: [
+      "Identify why the back-edge in the Rc version leaks and which counts never reach zero.",
+      "Introduce an arena that owns all nodes in one vector and hands out NodeId handles.",
+      "Rewrite each edge to store a NodeId instead of an Rc<Node>.",
+      "Explain why the identical back-edge no longer leaks after the change.",
+    ],
+    acceptanceCriteria: [
+      "The answer explains that in the Rc version edges are owners, so the cycle keeps strong counts above zero and the nodes are never dropped.",
+      "The refactored graph has exactly one owner: the arena vector of nodes.",
+      "Every edge stores a NodeId index rather than an Rc or Box, so edges own nothing.",
+      "The answer states the cycle is removed by construction because indices are not owners, and the whole region drops together.",
+    ],
+    hints: [
+      "The chapter's repair is one arena owning all nodes plus edges that store handles instead of pointers.",
+      "You remove cycles by construction, not by adding Weak references after the fact.",
+    ],
+  },
+  {
+    number: 6,
+    kind: "design or production scenario",
+    title: "Choose between borrowed-reference and index arenas at a boundary",
+    objective: "Decide which arena style is sound when data must cross subsystem boundaries.",
+    starterPrompt: "A query service parses a request into an arena-backed AST, then needs to hand part of that data to a cache and to an async task that may outlive the request. Decide whether to expose arena-borrowed references or stable handles, and justify it against the borrow checker.",
+    prompts: [
+      "Contrast what a reference arena returns versus what an index arena returns across the boundary.",
+      "State which option the borrow checker forbids from outliving the arena, and why.",
+      "Decide what crosses to the cache and the async task, and what stays phase-local.",
+      "Name the three questions the chapter says to ask before picking an arena style.",
+    ],
+    acceptanceCriteria: [
+      "The answer states that a reference arena hands back a borrow tied to the arena's lifetime, which the borrow checker forbids from outliving the arena.",
+      "The answer states that an index arena hands back a small owned handle that can travel across async tasks, queues, and caches.",
+      "The design keeps arena-borrowed references for phase-local synchronous work and uses owned values or stable handles for data that crosses boundaries.",
+      "The answer lists the three decision questions: reference versus handle, whether deletion is needed, and whether stale-handle protection matters.",
+    ],
+    hints: [
+      "Arena-borrowed references are strongest when the whole phase stays local and synchronous.",
+      "If data must outlive the region or cross to a long-lived subsystem, prefer owned values or stable handles.",
+    ],
+  },
+]
+
+const reviewQuestions = [
+  "What single piece of mutable state does a bump allocator maintain, and what do allocation and reset each do to it?",
+  "Why does an arena-and-index AST avoid the reference-cycle problem that an Rc<RefCell<Node>> graph can hit?",
+  "What is the difference between what a reference arena and an index arena hand back across a boundary, and which one the borrow checker ties to the arena's lifetime?",
+  "What problem does a generation counter on an arena handle solve that a plain usize index does not?",
+  "When is the arena model the wrong fit, given that its cheap operation is whole-region reset rather than per-object free?",
+]
+
+const workingLoop = [
+  "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
+  "Write the smallest version that compiles, then make it correct.",
+  "Check each acceptance criterion explicitly before moving on.",
+  "Name one tradeoff or failure mode your solution accepts.",
+]
+
+<RustPracticeCard
+  title={"Runnable lab · bump allocator with overflow and reset"}
+  filename="bump_allocator_lab.rs"
+  runKey="ch13_ex_bump"
+  expectedOutput={"used = 9\na = query\nb = plan\noverflow = true\nafter reset = 0\nc = next"}
+  helperText={"Complete alloc_bytes so the bump allocator copies bytes append-only, rejects requests that would overflow the fixed region, and returns each allocation's (start, end) range. Allocation only moves the cursor forward; reset releases the whole region at once."}
+  initialCode={`struct Bump<const N: usize> {
+    buf: [u8; N],
+    used: usize,
+}
+
+impl<const N: usize> Bump<N> {
+    fn new() -> Self {
+        Self { buf: [0; N], used: 0 }
+    }
+
+    // TODO: implement append-only allocation.
+    // Reject the request if it would overflow the region; otherwise copy the
+    // bytes in, advance the cursor (self.used), and return the (start, end) range.
+    fn alloc_bytes(&mut self, bytes: &[u8]) -> Option<(usize, usize)> {
+        let _ = bytes;
+        Some((0, 0)) // placeholder: allocates nothing yet
+    }
+
+    fn slice(&self, range: (usize, usize)) -> &[u8] {
+        &self.buf[range.0..range.1]
+    }
+
+    fn used(&self) -> usize {
+        self.used
+    }
+
+    fn reset(&mut self) {
+        self.used = 0;
+    }
+}
+
+fn main() {
+    let mut arena = Bump::<16>::new();
+
+    let a = arena.alloc_bytes(b"query").unwrap();
+    let b = arena.alloc_bytes(b"plan").unwrap();
+    println!("used = {}", arena.used());
+    println!("a = {}", std::str::from_utf8(arena.slice(a)).unwrap());
+    println!("b = {}", std::str::from_utf8(arena.slice(b)).unwrap());
+
+    let overflow = arena.alloc_bytes(b"too-many-bytes");
+    println!("overflow = {}", overflow.is_none());
+
+    arena.reset();
+    println!("after reset = {}", arena.used());
+
+    let c = arena.alloc_bytes(b"next").unwrap();
+    println!("c = {}", std::str::from_utf8(arena.slice(c)).unwrap());
+}
+`}
+/>
+*/

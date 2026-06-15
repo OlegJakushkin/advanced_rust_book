@@ -1,0 +1,168 @@
+{
+ "chapterKey": "ch02",
+ "num": 2,
+ "title": "The Rust Mental Model",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Predict the ownership timeline",
+   "objective": "Practice narrating which binding owns a value after each move and where `Drop` is guaranteed to run.",
+   "starterPrompt": "Read a short ownership-transfer sequence with `service`, `alias`, and `consume`, then narrate the owner after each move in plain English.",
+   "prompts": [
+    "Which binding owns the string after each line?",
+    "At what scope does the string get dropped?",
+    "Which extra line could you add that would fail to compile, and why?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that ownership moves from `service` to `alias`, then from `alias` into `consume`.",
+    "You identify the end of `consume` as the drop point for the owned `String`.",
+    "Your failing-line example correctly refers to using a moved binding after ownership transfer."
+   ],
+   "hints": [
+    "For non-`Copy` types, assignment normally transfers ownership.",
+    "Describe ownership one scope at a time instead of thinking about hidden object identity."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Map stack and heap storage precisely",
+   "objective": "Explain which parts of a composite value are inline and which parts own heap allocations.",
+   "starterPrompt": "Analyze a `Batch` struct that stores a fixed array plus a `Vec<String>`, then write a short note about which pieces are inline and which pieces own heap allocations.",
+   "prompts": [
+    "Which parts of `Batch` are stored inline in the local value?",
+    "What heap allocations exist?",
+    "Which value owns each heap allocation?"
+   ],
+   "acceptanceCriteria": [
+    "You identify the fixed-size array as inline in the `Batch` value.",
+    "You explain that `Vec<String>` contains inline metadata while its element buffer is heap allocated.",
+    "You note that each `String` element owns its own heap-backed bytes."
+   ],
+   "hints": [
+    "Separate the outer struct layout from the storage used by each field’s owned data.",
+    "A `Vec<T>` is a fixed-size handle that owns a separate buffer."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Refactor imperative mutation into expression-oriented Rust",
+   "objective": "Rewrite a function so temporary state stays narrow and the final result is produced by expressions.",
+   "starterPrompt": "Refactor `classify(depth: usize) -> (&'static str, usize)` so the tuple comes directly from an expression instead of a wide mutable temporary.",
+   "prompts": [
+    "Keep the return type the same.",
+    "Prefer `if` and block expressions.",
+    "Do not introduce heap allocation or cloning."
+   ],
+   "acceptanceCriteria": [
+    "Your final version avoids the wide `mut scaled` binding.",
+    "The result is still `(&'static str, usize)`.",
+    "The control flow is expression-oriented rather than early-return driven everywhere."
+   ],
+   "hints": [
+    "An `if` expression can return a tuple.",
+    "A short inner block can compute a value without widening mutable scope."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Explain the lifetime bug instead of fighting the annotation",
+   "objective": "Diagnose why returning a reference to local data fails and propose correct repairs.",
+   "starterPrompt": "Diagnose a function that tries to return the first line of a local `String` by reference, then explain why that borrow cannot outlive the owner.",
+   "prompts": [
+    "What rule Rust is enforcing",
+    "Why adding a random lifetime annotation does not solve it",
+    "Two valid repairs with different tradeoffs"
+   ],
+   "acceptanceCriteria": [
+    "You explain that the returned reference would outlive the local `String` owner.",
+    "You state that lifetimes describe valid borrowing relationships and do not extend object lifetime.",
+    "You propose at least two real repairs, such as returning an owned `String` or borrowing from caller-provided input."
+   ],
+   "hints": [
+    "Ask who owns `text` and when that owner is dropped.",
+    "A repair is valid only if the referenced data outlives the returned reference."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Choose owned versus borrowed data at a queue boundary",
+   "objective": "Make an ownership plan for a realistic parser-to-worker pipeline.",
+   "starterPrompt": "You are designing an ingest path with the flow `&[u8] request bytes -> parse headers -> build Event -> send to worker queue -> persist -> emit metrics`.",
+   "prompts": [
+    "Which data stays borrowed only inside parsing?",
+    "Which data becomes owned inside `Event` before the queue boundary?",
+    "Where is cloning acceptable, and where is it a smell?",
+    "What cleanup should rely on ordinary scope exit or `Drop`?"
+   ],
+   "acceptanceCriteria": [
+    "You keep borrowed data local to parsing or validation where possible.",
+    "You convert data that crosses the queue boundary into owned values.",
+    "You justify cloning as an explicit economic choice rather than a default response.",
+    "You describe cleanup in terms of ownership and scope, not hidden runtime behavior."
+   ],
+   "hints": [
+    "A worker queue is usually an ownership boundary.",
+    "Try to name the owner at each subsystem edge."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What is the difference between a value and a binding in Rust?",
+  "Where do `Vec<T>` metadata and `Vec<T>` elements usually live?",
+  "What does a lifetime annotation constrain, and what does it not do?",
+  "Why can block expressions reduce mutation pressure in production code?",
+  "When is `Drop` useful, and what kinds of logic should usually stay out of it?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Exercise 3",
+  "filename": "classify_lab.rs",
+  "runKey": "ch02_ex_classify",
+  "expectedOutput": "steady 170\nhot 600",
+  "initialCode": "fn classify(depth: usize) -> (&'static str, usize) {\n    let mut scaled = 0;\n\n    if depth > 1000 {\n        scaled = depth / 2;\n        return (\"hot\", scaled);\n    }\n\n    scaled = depth + 50;\n    (\"steady\", scaled)\n}\n\nfn main() {\n    let (status_a, value_a) = classify(120);\n    let (status_b, value_b) = classify(1200);\n    println!(\"{} {}\", status_a, value_a);\n    println!(\"{} {}\", status_b, value_b);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapter 01",
+  "Opening scenario",
+  "Operational checklist",
+  "Mental model",
+  "Core concepts",
+  "translating prior instincts",
+  "Two corrections that remove a lot of confusion",
+  "Expressions, statements, and blocks in one pass",
+  "Lifetime repair rule of thumb",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: move a value and observe deterministic drop",
+  "Example 2: use block expressions to build owned heap data with narrow mutation",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Reliable Rust services depend on a precise model of values, ownership transfer, drops, stack and heap storage, expressions, and references. This chapter defines that model for code review and debugging.",
+  "Chapter 01 explained why Rust feels different at a high level. This chapter turns that intuition into an operational model: who owns a value, what actually moves, what gets dropped, and why lifetimes are proofs about references rather than a runtime memory system.",
+  "A message-ingestion service parses inbound bytes, enriches records, and dispatches owned jobs to workers. The business requirement is a precise value lifecycle: where data is created, which component owns it, where heap storage is used, and when cleanup occurs.",
+  "The useful model is simpler: ownership transferred. For small fixed-size `Copy` values the data is copied. For non-`Copy` types, think of the old binding as no longer owning the value. That is the rule that matters when reading APIs and diagnostics.",
+  "Owned values live until their owner is dropped. Lifetimes constrain references that point at those values. If the owner is dropped, no annotation can keep a reference to it valid.",
+  "A statement performs work in the enclosing scope. It does not become the value of that scope.",
+  "An expression produces a value. In Rust, if, match, and blocks are often value-producing tools, not only control-flow syntax.",
+  "The last line without a semicolon becomes the block’s value. Add a trailing semicolon and the block evaluates to () instead.",
+  "When a lifetime error appears, repair ownership before you reach for annotations. Usually the real choice is one of two shapes: borrow from caller-owned input that already lives long enough, or return an owned value so the function transfers data instead of a reference. Randomly ",
+  "Deterministic destruction is powerful, but it is not magic. Destructors should release resources and maintain invariants, not hide slow network calls, lock acquisition chains, or critical business logic that is hard to reason about during unwinding and shutdown.",
+  "The binding in `main` stops owning the value after the function call, and cleanup runs when the new owner leaves scope.",
+  "Quick check: run the baseline once, then rename the file or move more fields through the handoff to make the ownership timeline concrete.",
+  "The outer bindings stay immutable while a short inner block uses mutation to assemble the final value.",
+  "Quick check: confirm the expected output, then experiment with the block contents and see how narrow mutation still produces an owned final value.",
+  "The exercise page asks you to predict move and drop behavior, classify stack and heap ownership precisely, refactor imperative code into expression-oriented Rust, and explain a lifetime error in operational terms."
+ ],
+ "codeSamples": {
+  "mental_model_move_drop": "struct FileHandle {\n    name: String,\n}\n\nimpl Drop for FileHandle {\n    fn drop(&mut self) {\n        println!(\"drop {}\", self.name);\n    }\n}\n\nfn ship(handle: FileHandle) {\n    println!(\"shipping {}\", handle.name);\n}\n\nfn main() {\n    let handle = FileHandle {\n        name: String::from(\"audit.log\"),\n    };\n\n    println!(\"before move\");\n    ship(handle);\n    println!(\"after ship\");\n}",
+  "mental_model_blocks_heap": "fn main() {\n    let queue_depth = 2048;\n\n    let status = if queue_depth > 1024 { \"hot\" } else { \"steady\" };\n\n    let labels = {\n        let mut labels = Vec::with_capacity(8);\n        labels.push(String::from(\"ingest\"));\n        labels.push(String::from(\"priority\"));\n        labels\n    };\n\n    let capacity = {\n        let heap_slots = labels.capacity();\n        heap_slots\n    };\n\n    println!(\"status = {}\", status);\n    println!(\"capacity = {}\", capacity);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
@@ -27,15 +28,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You may already know CUDA from C++ host code. The key Rust difference is not the GPU itself. It is the host-side wrapper discipline: safe ownership on the Rust side, small unsafe launch regions, and explicit buffer contracts.",
+    body: "You probably already know CUDA from C++ host code, so the kernels and the driver API will look familiar. The shift is that in C++ the host-side contract — buffer length, device residency, launch shape — lives in comments and team convention. In Rust you push that contract into types and a small checked function, and the GPU itself is the part that stays the same.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of runtime marshalling and more in terms of explicit resource ownership. A device buffer is not a managed array with nicer syntax. It is a separate memory domain with transfer and lifetime cost.",
+    body: "Stop thinking in terms of a managed runtime marshalling arrays for you. A device buffer is not a GC-tracked array that happens to live on a card; it is a separate memory domain with its own allocation, copy, and free. Rust makes that ownership explicit, which is closer to how the hardware actually behaves than a managed abstraction would suggest.",
   },
   {
     title: "Go background",
-    body: "Do not treat a GPU like another goroutine target. Device work is a scarce specialized resource behind transfers and queueing. The honest design usually looks like a bounded worker lane, not a free fan-out destination.",
+    body: "A GPU is not another goroutine destination. Goroutines are cheap and you fan out freely; a device is one scarce piece of hardware sitting behind a transfer bus and a launch queue. The honest Rust design is a bounded worker lane with admission control and a CPU fallback, not an unbounded go func that fires kernels.",
+  },
+  {
+    title: "Python background",
+    body: "In Python the GPU usually hides behind PyTorch, CuPy, or a kernel a framework launched for you, so device memory and copies feel invisible. In Rust you are often the layer that owns those copies and launches. The trap is assuming the boundary is free the way a one-line .cuda() call makes it look; here you account for the transfer and the launch yourself.",
   },
 ]
 
@@ -280,8 +285,10 @@ export function PageCh37CudaAndGpuAcceleration() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          GPU acceleration is justified by throughput, transfer cost, memory layout, and launch overhead. This chapter
-          covers Rust-side control of accelerator work without hiding those costs.
+          A GPU is a throughput machine guarded by an expensive boundary. The kernel does not run until you have paid to
+          move data across the bus, configured a launch, and synchronized the result back. This chapter is about owning
+          that boundary from Rust honestly: when the accelerator actually pays for itself, how to wrap a kernel launch so
+          its invariants are checked instead of assumed, and how to run a GPU as a bounded resource inside a real service.
         </p>
       </div>
 
@@ -319,9 +326,18 @@ export function PageCh37CudaAndGpuAcceleration() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A batch-scoring service is adding a GPU-backed execution lane beside an existing CPU path. The business
-            requirement is to prove the accelerator boundary pays for itself by measuring queue wait, host-device
-            transfer, launch overhead, kernel time, synchronization, and fallback behavior.
+            A batch-scoring service already runs on the CPU and meets its latency target most of the time. Under load it
+            starts to fall behind, and someone proposes adding a GPU-backed execution lane beside the existing CPU path.
+            The card is approved on the assumption that &ldquo;the GPU is faster.&rdquo; That assumption is the thing this
+            chapter refuses to take on faith.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            The real requirement is to prove the accelerator boundary pays for itself before it ships. That means
+            measuring the whole round trip, not just the kernel: how long requests wait in the queue, how many bytes cross
+            to the device and back, what each launch costs, how long the kernel actually runs, where the host blocks on a
+            synchronize, and what happens when the device is busy or out of memory. A kernel that is individually fast can
+            still produce a feature that is slower and less reliable than the CPU path it replaced. The Rust code in this
+            chapter is built to make every one of those costs visible instead of hidden behind a convenient wrapper.
           </p>
         </section>
 
@@ -347,11 +363,39 @@ export function PageCh37CudaAndGpuAcceleration() {
           </div>
         </section>
 
+        <section className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">The shape of a GPU offload</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Before any of the details, fix the overall shape in your head. A request arrives on the host, where ordinary
+            Rust owns the data. To use the GPU you copy that data across the bus into device memory, launch a kernel,
+            wait for it, then copy the result back. Each arrow in the picture below is a cost the kernel itself does not
+            pay for: the host-to-device copy, the launch, the synchronize, and the device-to-host copy. The kernel is the
+            one box in the middle that does arithmetic; everything around it is boundary tax. When people say the GPU
+            &ldquo;won&rdquo; they usually mean the middle box shrank, while the surrounding arrows are what actually
+            decide whether the feature is faster end to end.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Req[Request on host] --> HostBuf[Host buffer: owned Vec]\n  HostBuf -->|copy H2D| DevIn[(Device input)]\n  DevIn -->|launch + sync| Kernel[GPU kernel: the only arithmetic]\n  Kernel --> DevOut[(Device output)]\n  DevOut -->|copy D2H| Result[Host result]\n  Result --> Resp[Response]`}
+            caption="The kernel is one box; the copies, the launch, and the synchronize are the boundary tax around it."
+          />
+        </section>
+
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Three ideas carry most of the weight in this chapter. The GPU is a throughput device, not a latency device,
+            so it only repays you when the work is big and regular enough to amortize that boundary. Rust&apos;s job is
+            rarely to write the kernel; it is to keep the host side of the boundary honest, so ownership, lengths, and
+            lifetimes are stated before any unsafe launch runs. And the decision to accelerate is a systems decision, not
+            a math one: a perfect kernel sitting behind bad queueing or too many tiny launches still produces a slow
+            service.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -370,7 +414,15 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">When GPU acceleration makes sense</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6">
+              The single number that predicts whether a GPU helps is <em>arithmetic intensity</em>: how much math you do
+              per byte you move across the bus. A workload that does a great deal of computation on a small amount of data
+              can hide the transfer cost behind the kernel and win comfortably. A workload that touches each byte once and
+              then ships it back spends most of its time on the bus, and the GPU rarely beats a tuned CPU loop there. The
+              cards below are really four facets of the same question: is there enough regular, dense, batched work to make
+              the boundary worth crossing?
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {whenGpuCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -378,7 +430,13 @@ export function PageCh37CudaAndGpuAcceleration() {
                 </div>
               ))}
             </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              CUDA is one option on a spectrum, not the default destination for anything slow. Before reaching for the
+              device, place the work on this ladder of escalating mechanisms. Most service code never needs to climb past
+              the first two rungs, and the right answer is frequently &ldquo;a CPU path that does the same logical work,
+              measured honestly&rdquo; rather than any accelerator at all.
+            </p>
+            <div className="mt-3 grid gap-3 lg:grid-cols-4">
               {choiceRows.map((row) => (
                 <div key={row.title} className="rounded-lg border border-border bg-card p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">{row.title}</div>
@@ -389,8 +447,13 @@ export function PageCh37CudaAndGpuAcceleration() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Rust and CUDA ecosystem overview</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <h4 className="font-semibold text-foreground mb-3">How Rust reaches the GPU</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Rust does not have a single blessed CUDA story, and that is fine, because the choice is mostly about where
+              your team wants the boundary to sit rather than which crate is fashionable. There are three broad shapes,
+              and they differ in how much of the device you are choosing to own directly.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {ecosystemCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -410,22 +473,32 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Calling CUDA kernels from Rust</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              Whatever FFI or wrapper layer you pick, the safe call shape is the same and it is worth memorizing. There is
+              one public, safe function the rest of the service calls, and one tiny private <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">unsafe</code> function
+              that does the actual launch. The safe function&apos;s only job is to check the invariants the unsafe launch
+              depends on — buffer lengths, shapes, launch configuration — and only then enter the unsafe region. Look at
+              how <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">checked_launch</code> calls <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">validate_lengths</code> first
+              and treats a validation failure as a normal <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code> error: the unsafe
+              block is never reached unless the preconditions already hold. That gate is the whole pattern.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Caller[Service code] --> Checked[checked_launch: safe]\n  Checked --> Validate{validate lengths and config}\n  Validate -->|invalid| Err[Return LaunchError]\n  Validate -->|valid| Unsafe[unsafe raw_launch]\n  Unsafe --> Driver[Driver / FFI launch]\n  Driver --> Ok[Return Ok]`}
+              caption="One safe gate validates every precondition; the unsafe launch is only reachable once the checks pass."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-sm text-muted-foreground leading-6">
-                  The operational shape is usually the same no matter which wrapper or FFI layer you choose: validate
-                  lengths and launch configuration on the Rust side, keep the raw launch in one small unsafe region, and
-                  return an ordinary Rust result to the rest of the service.
-                </p>
-                <pre className="mt-3 rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
+                <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
                   <code className="font-mono text-foreground">{callBoundarySnippet}</code>
                 </pre>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  This is one of the cleanest places for Rust to help. C++ host code often leaves buffer shape and launch
-                  invariants to convention. A Rust wrapper can make those checks routine without pretending the device call
-                  itself is safe by default.
+                  This is one of the cleanest places for Rust to earn its keep. In C++ host code the buffer shape and
+                  launch invariants usually live in convention and review comments, so a mismatched length is a silent
+                  corruption waiting to happen. The Rust version makes those checks routine and impossible to skip,
+                  without ever pretending the device call itself is safe by default — the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">unsafe</code> keyword
+                  still marks exactly where the responsibility shifts from the compiler to you.
                 </p>
               </div>
             </div>
@@ -433,6 +506,19 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">GPU memory ownership</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              The most common mental-model mistake is to treat device memory as if it were just host memory with a faster
+              processor attached. It is not. Host memory and device memory are two separate domains with separate
+              allocators, and a pointer into one is meaningless in the other. A <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;T&gt;</code> on
+              the host describes a host layout and nothing more; getting that data to the device is an explicit copy that
+              allocates a separate device buffer with its own lifetime. Model that device buffer as its own owner handle —
+              something that allocates on construction and frees on drop — so the residency on the card is tied to a Rust
+              value the host controls. The diagram shows the two domains and the only legal way to move between them.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph Host[Host memory domain]\n    Vec[Vec or slice: owned by Rust]\n  end\n  subgraph Device[Device memory domain]\n    Buf[DeviceBuffer: owns residency]\n  end\n  Vec -->|copy_to_device| Buf\n  Buf -->|copy_to_host| Vec\n  Buf -->|drop frees device memory| Freed[Released]`}
+              caption="Two separate domains. A host owner and a device owner; copies cross between them and drop frees the device side."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {memoryCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -445,7 +531,17 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Host-device transfer costs and kernel launch overhead</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6">
+              Two fixed costs sit between you and the kernel, and both are easy to forget because neither shows up in a
+              kernel-only profile. The first is the copy across the bus, paid in both directions: every input you move to
+              the device and every result you move back is bytes on the wire. For small vector-shaped operations this copy
+              alone can dwarf the kernel. The second is the launch itself, which carries real per-call overhead in the
+              driver. A service that launches one tiny kernel per request often loses to a plain CPU loop even when each
+              individual launch is efficient, simply because it pays the launch tax hundreds of times. The way out is
+              usually fewer, bigger launches and keeping intermediate data resident on the device instead of round-tripping
+              it.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {overheadCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -464,7 +560,16 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Matrix and vector workloads</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6">
+              The classic GPU demo is a vector add, and it is a misleading one. Vector add reads two arrays, adds them, and
+              writes a third: one arithmetic operation per several bytes moved, which makes it memory-bandwidth-limited and
+              acutely transfer-sensitive. It is a fine way to learn the boundary, but a poor argument that offloading pays.
+              Dense matrix multiply is the opposite case. Multiplying two N-by-N matrices moves on the order of N-squared
+              bytes but does on the order of N-cubed arithmetic, so the math grows faster than the data and the transfer
+              cost gets buried under real work. That is why GEMM, batched GEMM, convolutions, and large reductions are
+              where the GPU earns its reputation, while tiny elementwise transforms often do not.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {matrixVectorCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -476,6 +581,18 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling CUDA workloads</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              The point of profiling here is to refuse to call the whole feature &ldquo;GPU work&rdquo; and instead break
+              the wall-clock time into named stages. A request spends time waiting in the queue, copying host-to-device,
+              launching and running the kernel, synchronizing, and copying device-to-host. Each stage points at a different
+              fix: a queue-bound path needs admission and capacity changes, a transfer-bound path needs bigger batches or
+              pinned memory, a launch-bound path needs fewer launches, and only a kernel-bound path is improved by tuning
+              occupancy or registers. The timeline below is the question every profile should answer.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q[Queue wait] --> H2D[H2D copy]\n  H2D --> K[Kernel run]\n  K --> Sync[Synchronize]\n  Sync --> D2H[D2H copy]\n  D2H --> Done[Result ready]`}
+              caption="Attribute wall-clock time to each stage. The widest stage, not the kernel, names your real bottleneck."
+            />
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {profilingChecklist.map((item) => (
                 <li key={item}>{item}</li>
@@ -491,7 +608,15 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Rust abstractions over GPU code</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6">
+              Good GPU code tends to layer into three levels, and the most common design mistake is exposing the wrong one
+              to the rest of the system. At the bottom is a narrow safe wrapper around a single launch. In the middle are
+              the handles that make reuse and admission explicit — a device buffer, a stream, a job queue. At the top is a
+              domain API. The rest of your service should almost never see <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">launch_kernel</code>;
+              it should see <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">score_batch</code> or <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">run_inference</code>.
+              Kernel names are an implementation detail, and leaking them upward couples your business logic to the device.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {abstractionCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -503,7 +628,16 @@ export function PageCh37CudaAndGpuAcceleration() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Integrating CUDA with async and distributed systems</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6">
+              Once a GPU lives inside an async service, treat it the way you would treat any scarce shared resource: as one
+              worker behind a bounded queue, not as an open destination for fan-out. Async tasks can generate work far
+              faster than a single device can absorb it, so the queue is where you decide who waits, when work spills to a
+              CPU fallback, and when overload becomes visible to operators. Two further rules keep the integration honest.
+              Own your input data before you hand it to a task, because borrowed request-local buffers cannot safely back a
+              job that outlives the request. And never serialize a raw device pointer across a process boundary — device
+              residency does not survive the trip, so ship owned data envelopes and rebuild device buffers at the worker.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {integrationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -513,11 +647,16 @@ export function PageCh37CudaAndGpuAcceleration() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+            <h4 className="font-semibold text-foreground mb-3">How this lands depending on where you came from</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              The GPU hardware is the same regardless of your background; what differs is the habit you bring to its
+              boundary. Each of these is a mental-model shift rather than an API mapping — the trap that the language you
+              know best sets for you when you reach for a device.
+            </p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
                   <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
                 </div>
@@ -531,6 +670,11 @@ export function PageCh37CudaAndGpuAcceleration() {
             <Wrench className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            These are the habits that keep a GPU lane healthy once it is more than a benchmark. They share a theme: state
+            the budget and the ownership before the device ever runs, and measure the whole path afterward, so the
+            accelerator stays a deliberate decision rather than an assumption.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
@@ -545,6 +689,11 @@ export function PageCh37CudaAndGpuAcceleration() {
             <Bug className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Almost every failure mode below is a systems mistake wearing a performance costume. The kernel is rarely the
+            problem; the trouble is what surrounds it — too many small launches, too much copying, a borrowed buffer that
+            outlived its request, or one shared device with no admission control.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
@@ -574,8 +723,12 @@ export function PageCh37CudaAndGpuAcceleration() {
               <div>
                 <h4 className="font-semibold text-foreground">Example 1: a safe Rust wrapper around a kernel launch</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The wrapper owns the host-side checks. The unsafe launch is small, auditable, and isolated behind a
-                  length-stable device-buffer contract.
+                  This is the safe-gate pattern from earlier, made runnable. Read it in the order of the flow diagram
+                  above: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">launch_vec_add</code> calls <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">build_launch_config</code> first
+                  (which rejects empty input and zero thread counts), allocates the three <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">DeviceBuffer</code> owners,
+                  and only then enters the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">unsafe</code> block. Notice the SAFETY comment that
+                  states the invariants the raw launch relies on. The unsafe region is a handful of lines; everything that
+                  could go wrong has been checked before it.
                 </p>
               </div>
               {codes.cuda_gpu_kernel_launch_wrapper !== DEFAULT_CODES.cuda_gpu_kernel_launch_wrapper && (
@@ -628,8 +781,11 @@ export function PageCh37CudaAndGpuAcceleration() {
               <div>
                 <h4 className="font-semibold text-foreground">Example 2: estimate transfer and launch budget before offload</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The first GPU decision is often a budgeting question: how many bytes cross the boundary, how much math
-                  happens per byte, and how much launch overhead is already visible.
+                  The first GPU decision is a budgeting question, and this code makes it an explicit one. The function to
+                  watch is <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">should_use_gpu</code>: it does
+                  not offload just because the work exists, it requires three conditions to hold at once — enough transfer
+                  bytes, high enough arithmetic intensity, and low enough launch overhead. The diagram traces that gate; if
+                  any branch fails, the honest answer is to stay on the CPU.
                 </p>
               </div>
               {codes.cuda_gpu_transfer_budget !== DEFAULT_CODES.cuda_gpu_transfer_budget && (
@@ -643,6 +799,10 @@ export function PageCh37CudaAndGpuAcceleration() {
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Workload] --> Bytes{enough transfer bytes}\n  Bytes -->|no| Cpu[Stay on CPU]\n  Bytes -->|yes| Intensity{high enough intensity}\n  Intensity -->|no| Cpu\n  Intensity -->|yes| Launch{launch overhead low}\n  Launch -->|no| Cpu\n  Launch -->|yes| Gpu[Offload to GPU]`}
+              caption="should_use_gpu offloads only when all three thresholds pass; any single failure routes back to the CPU."
+            />
             <RustCodeEditor
               code={codes.cuda_gpu_transfer_budget}
               onChange={(newCode) => updateCode("cuda_gpu_transfer_budget", newCode)}
@@ -712,607 +872,3 @@ export function PageCh37CudaAndGpuAcceleration() {
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch37-cuda-and-gpu-acceleration-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose CPU, Rayon, MPI, or CUDA from the workload",
-    objective: "Practice selecting the execution model that matches the real bottleneck instead of treating acceleration tools as interchangeable.",
-    starterPrompt:
-      "Classify four workloads: a tiny request-local transform over one 4 KB buffer, a large one-node batch score over host memory, a multi-node domain-decomposed solver, and a dense batched tensor operation with high arithmetic intensity.",
-    prompts: [
-      "Which workload wants plain CPU execution because launch and transfer overhead would dominate?",
-      "Which workload wants Rayon because the data already lives on one node and CPU saturation is the real need?",
-      "Which workload wants MPI because the process boundary is already the dominant partition?",
-      "Which workload wants CUDA because dense math can amortize the host-device boundary?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least one workload for CPU, one for Rayon, one for MPI, and one for CUDA.",
-      "You justify each choice with workload shape rather than library familiarity.",
-      "You mention at least one transfer or launch overhead argument in the CUDA case.",
-    ],
-    hints: [
-      "Start with arithmetic intensity and batch size.",
-      "Then ask whether the real boundary is local host memory, one CPU node, or a cluster process split.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Estimate host-device transfer cost for a matrix workload",
-    objective: "Translate one matrix job into bytes on the bus before discussing kernels.",
-    starterPrompt:
-      "A service offloads one `f32` matrix multiply with `A(4096x4096)`, `B(4096x4096)`, and output `C(4096x4096)`, transferring all three buffers exactly once for the request.",
-    prompts: [
-      "How many bytes does one `4096 x 4096` `f32` matrix occupy?",
-      "What is the total HtoD plus DtoH traffic if A and B go to the device and C comes back once?",
-      "Why is this transfer budget less painful for GEMM than for tiny vector add?",
-      "What extra cost remains even after the bytes are counted?",
-    ],
-    acceptanceCriteria: [
-      "You compute or approximate the total traffic correctly at about 201,326,592 bytes, or about 192 MiB.",
-      "You explain why dense high-intensity math amortizes the boundary better than tiny low-intensity work.",
-      "You still mention launch or synchronization overhead as a separate cost category.",
-    ],
-    hints: [
-      "A matrix has `rows * cols` elements, and each `f32` is 4 bytes.",
-      "The point is not exact decimal formatting. The point is whether the workload can pay for the transfer.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Sketch a safe Rust wrapper around a CUDA kernel call",
-    objective: "Build the host-side wrapper that validates shape and launch config before one small unsafe boundary.",
-    starterPrompt:
-      "Implement a small `build_config` and `validate_buffers` pair, then call one `unsafe fn raw_launch(...)` only after those checks succeed.",
-    prompts: [
-      "Keep the wrapper responsible for equal lengths and nonzero launch parameters.",
-      "Return a Rust `Result` from the checked boundary.",
-      "Keep the unsafe region smaller than the validation logic around it.",
-      "Treat the device buffers as explicit owners rather than borrowed host slices.",
-    ],
-    acceptanceCriteria: [
-      "The wrapper checks buffer shape before the unsafe call.",
-      "The wrapper computes block count from length and threads per block.",
-      "The wrapper returns a Rust `Result` rather than exposing a vague boolean or implicit failure.",
-      "The runnable lab prints the expected blocks, threads, and success flag.",
-    ],
-    hints: [
-      "This is the same repair pattern you already use around FFI and unsafe code elsewhere in the book.",
-      "The GPU boundary is not special here. The invariants still belong in the safe wrapper.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair a tiny-kernel service path that lost to the CPU",
-    objective: "Refactor a design that launches too often, copies too much, and synchronizes too eagerly.",
-    starterPrompt:
-      "A service currently copies one small vector to the device, launches one kernel, waits immediately, copies the result back, and repeats that whole cycle per request item.",
-    prompts: [
-      "Which fix should come first: batch work, fuse kernels, reuse device buffers, or keep the path on CPU?",
-      "What signal would tell you the path is launch-bound rather than kernel-bound?",
-      "When is the best repair to not use the GPU at all for this route?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one batching or fusion repair and one CPU fallback condition.",
-      "You explain the path in terms of transfer, launch, and synchronization overhead rather than only 'GPU is faster.'",
-      "You mention at least one profiling signal such as launch count, queue wait, or transfer time.",
-    ],
-    hints: [
-      "The simplest win is often fewer launches.",
-      "The second simplest win is not offloading work that is too small to amortize the trip.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Profile a CUDA workload before rewriting the kernel",
-    objective: "Separate transfer-bound, launch-bound, sync-bound, and kernel-bound cases clearly.",
-    starterPrompt:
-      "A profiling report says kernel time is 2 ms, host-device copies are 11 ms, queue wait is 6 ms, and total wall time is 24 ms for one batch scorer.",
-    prompts: [
-      "Which category dominates the first diagnosis?",
-      "Which rewrite is probably premature because the report points elsewhere?",
-      "What next measurement would you take inside the dominant category?",
-      "How would you prove the fix improved the real path rather than only one micro-kernel number?",
-    ],
-    acceptanceCriteria: [
-      "You identify transfer or admission cost, not kernel math, as the dominant issue.",
-      "You reject at least one likely but wrong optimization target, such as low-level kernel tuning first.",
-      "You propose one next measurement and one validation metric after the fix.",
-    ],
-    hints: [
-      "If copies and queue wait dominate, shaving a few microseconds off kernel arithmetic is not the first win.",
-      "Wall time should drive the next question first.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Integrate a GPU worker into an async and distributed service",
-    objective: "Make queue budget, retry policy, and device ownership explicit when the GPU becomes a shared specialist subsystem.",
-    starterPrompt:
-      "You are designing `ingest -> parse -> score on GPU -> persist -> notify`, with bursty traffic, one device per host, and a requirement that duplicate replay stay harmless after crash recovery.",
-    prompts: [
-      "Where should the bounded GPU queue sit, and what does it own?",
-      "When should the async side hand over owned data to the GPU worker?",
-      "How will you separate transient GPU retry from terminal failure or CPU fallback?",
-      "What metrics would you require before calling the system production-ready?",
-    ],
-    acceptanceCriteria: [
-      "You define one explicit bounded GPU admission point.",
-      "You move owned payloads across the async-to-GPU boundary rather than borrowed request-local views.",
-      "You describe one idempotency or duplicate-safe completion rule for replay after crash or lease expiry.",
-      "You mention at least three observability hooks such as queue age, transfer bytes, launch count, device saturation, or fallback rate.",
-    ],
-    hints: [
-      "Treat the GPU like a scarce worker pool, not like a free helper thread.",
-      "The cleanest design makes queueing, retries, and replay policy visible before the first incident.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What kinds of workloads actually amortize host-device transfer and launch cost well?",
-  "Why is a safe Rust wrapper around a kernel launch mostly an ownership and invariant story?",
-  "What is the practical difference between host memory ownership and device memory ownership?",
-  "Why are queue wait and launch count often more useful than one isolated kernel timing?",
-  "When is CUDA the wrong choice even when a kernel itself is efficient?",
-]
-
-const workingLoop = [
-  "Count bytes, launches, and sync points before tuning arithmetic.",
-  "Keep host-side ownership explicit and device-side ownership modeled as a separate handle.",
-  "Shrink the unsafe launch region until the invariants are obvious to a reviewer.",
-  "Treat the GPU as a bounded specialist worker inside async or distributed systems.",
-]
-
-export function PageCh37CudaAndGpuAccelerationExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 73
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 37 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice CUDA design the way it survives production review: explicit transfer budgeting, checked launch wrappers,
-          and GPU admission policy that still makes sense inside a larger Rust system.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a throughput-and-boundary review. The best answer does not say only “GPU = fast.”
-                It says how many bytes cross the boundary, what the launch invariants are, and which queue or retry budget
-                keeps the device usable under real load.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(72)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 37
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  CUDA design drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Safe launch wrapper"
-          description={
-            <>
-              Repair the starter so the wrapper validates equal lengths, rejects zero-sized launches, computes block count
-              from length and threads per block, and only then reports a successful launch.
-            </>
-          }
-          filename="safe_launch_wrapper_lab.rs"
-          runKey="ch37_ex_safe_kernel_wrapper"
-          expectedOutput={"blocks = 8\nthreads = 128\nlaunch ok = true"}
-          helperText={
-            <>
-              Tip: the block formula should be a ceiling division, not a plain truncating division. Keep the shape check in
-              the safe wrapper and let the raw launch stay small.
-            </>
-          }
-          initialCode={`#[derive(Debug, Clone, Copy)]
-struct LaunchConfig {
-    threads_per_block: u32,
-    blocks: u32,
-}
-
-fn validate_buffers(a_len: usize, b_len: usize, out_len: usize) -> Result<(), &'static str> {
-    Ok(())
-}
-
-fn build_config(a_len: usize, threads_per_block: u32) -> LaunchConfig {
-    LaunchConfig {
-        threads_per_block,
-        blocks: 0,
-    }
-}
-
-fn main() {
-    let len = 1_024_usize;
-    let threads_per_block = 128_u32;
-
-    let launch_ok = validate_buffers(len, len, len).is_ok();
-    let config = build_config(len, threads_per_block);
-
-    println!("blocks = {}", config.blocks);
-    println!("threads = {}", config.threads_per_block);
-    println!("launch ok = {}", launch_ok);
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to choose CPU, Rayon, MPI, or CUDA from workload shape, estimate
-            host-device boundary cost before offload, wrap a kernel launch behind a checked Rust API, and reason about GPU
-            admission and replay policy in the same operational language you use for the rest of the system.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch37_cuda_and_gpu_acceleration/safe_kernel_launch_wrapper.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct LaunchConfig {
-    threads_per_block: u32,
-    blocks: u32,
-}
-
-#[derive(Debug)]
-struct DeviceBuffer {
-    len: usize,
-    bytes: usize,
-}
-
-impl DeviceBuffer {
-    fn for_f32(len: usize) -> Self {
-        Self {
-            len,
-            bytes: len * std::mem::size_of::<f32>(),
-        }
-    }
-}
-
-fn build_launch_config(len: usize, threads_per_block: u32) -> Result<LaunchConfig, &'static str> {
-    if len == 0 {
-        return Err("empty input");
-    }
-
-    if threads_per_block == 0 {
-        return Err("threads_per_block must be > 0");
-    }
-
-    let blocks = ((len as u32) + threads_per_block - 1) / threads_per_block;
-
-    Ok(LaunchConfig {
-        threads_per_block,
-        blocks,
-    })
-}
-
-unsafe fn raw_launch_vec_add(
-    config: LaunchConfig,
-    a: &DeviceBuffer,
-    b: &DeviceBuffer,
-    out: &mut DeviceBuffer,
-) -> Result<(), &'static str> {
-    if a.len != b.len || a.len != out.len {
-        return Err("shape mismatch");
-    }
-
-    if config.blocks == 0 || config.threads_per_block == 0 {
-        return Err("invalid launch");
-    }
-
-    Ok(())
-}
-
-fn launch_vec_add(len: usize, threads_per_block: u32) -> Result<(LaunchConfig, usize), &'static str> {
-    let config = build_launch_config(len, threads_per_block)?;
-    let a = DeviceBuffer::for_f32(len);
-    let b = DeviceBuffer::for_f32(len);
-    let mut out = DeviceBuffer::for_f32(len);
-
-    unsafe {
-        // SAFETY:
-        // - this wrapper creates all three device buffers with the same logical length.
-        // - build_launch_config guarantees nonzero block and thread counts.
-        // - the raw launch does not outlive these local buffers in this demo.
-        raw_launch_vec_add(config, &a, &b, &mut out)?;
-    }
-
-    Ok((config, a.bytes + b.bytes + out.bytes))
-}
-
-fn main() {
-    let (config, device_bytes) = launch_vec_add(4_096, 256).unwrap();
-
-    println!("blocks = {}", config.blocks);
-    println!("threads = {}", config.threads_per_block);
-    println!("device bytes = {}", device_bytes);
-}
-````
-
-### File: `examples/ch37_cuda_and_gpu_acceleration/transfer_budget_estimator.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct Workload {
-    elements: usize,
-    flops_per_element: u64,
-    input_buffers: usize,
-    output_buffers: usize,
-}
-
-fn transfer_bytes(work: Workload) -> usize {
-    work.elements * std::mem::size_of::<f32>() * (work.input_buffers + work.output_buffers)
-}
-
-fn arithmetic_intensity(work: Workload) -> f64 {
-    work.flops_per_element as f64
-        / (std::mem::size_of::<f32>() as f64 * (work.input_buffers + work.output_buffers) as f64)
-}
-
-fn should_use_gpu(work: Workload, launch_us: u64) -> bool {
-    let bytes = transfer_bytes(work);
-    let intensity = arithmetic_intensity(work);
-
-    bytes >= 8_000_000 && intensity >= 4.0 && launch_us <= 50
-}
-
-fn main() {
-    let work = Workload {
-        elements: 1_000_000,
-        flops_per_element: 64,
-        input_buffers: 2,
-        output_buffers: 1,
-    };
-    let launch_us = 25_u64;
-
-    println!("transfer bytes = {}", transfer_bytes(work));
-    println!("intensity = {:.2}", arithmetic_intensity(work));
-    println!("gpu faster = {}", should_use_gpu(work, launch_us));
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -69,4 +69,6 @@ export { PageCh34MemoryProfiling } from "./page-ch34-memory-profiling"
- export { PageCh34MemoryProfilingExercises } from "./page-ch34-memory-profiling-exercises"
- export { PageCh35PerformanceProfiling } from "./page-ch35-performance-profiling"
- export { PageCh35PerformanceProfilingExercises } from "./page-ch35-performance-profiling-exercises"
- export { PageCh36DistributedTasksProfiling } from "./page-ch36-distributed-tasks-profiling"
- export { PageCh36DistributedTasksProfilingExercises } from "./page-ch36-distributed-tasks-profiling-exercises"
-+export { PageCh37CudaAndGpuAcceleration } from "./page-ch37-cuda-and-gpu-acceleration"
-+export { PageCh37CudaAndGpuAccelerationExercises } from "./page-ch37-cuda-and-gpu-acceleration-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -81,6 +81,8 @@ import {
-   PageCh34MemoryProfilingExercises,
-   PageCh35PerformanceProfiling,
-   PageCh35PerformanceProfilingExercises,
-   PageCh36DistributedTasksProfiling,
-   PageCh36DistributedTasksProfilingExercises,
-+  PageCh37CudaAndGpuAcceleration,
-+  PageCh37CudaAndGpuAccelerationExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -158,6 +160,8 @@ const PAGE_COMPONENTS = [
-   PageCh34MemoryProfilingExercises,
-   PageCh35PerformanceProfiling,
-   PageCh35PerformanceProfilingExercises,
-   PageCh36DistributedTasksProfiling,
-   PageCh36DistributedTasksProfilingExercises,
-+  PageCh37CudaAndGpuAcceleration,
-+  PageCh37CudaAndGpuAccelerationExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh37Output } from "./rust-simulator-ch37"
- import { simulateCh36Output } from "./rust-simulator-ch36"
- import { simulateCh35Output } from "./rust-simulator-ch35"
- import { simulateCh34Output } from "./rust-simulator-ch34"
-@@ -1014,6 +1015,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch37Output = simulateCh37Output(code, key)
-+  if (ch37Output !== null) return ch37Output
- 
-   const ch36Output = simulateCh36Output(code, key)
-   if (ch36Output !== null) return ch36Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -26,6 +26,7 @@ import { DEFAULT_CODES_CH33 } from "./default-codes-ch33"
- import { DEFAULT_CODES_CH34 } from "./default-codes-ch34"
- import { DEFAULT_CODES_CH35 } from "./default-codes-ch35"
- import { DEFAULT_CODES_CH36 } from "./default-codes-ch36"
-+import { DEFAULT_CODES_CH37 } from "./default-codes-ch37"
- 
- export interface PageConfig {
-   id: string
-@@ -912,6 +913,28 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Design saturation metrics, trace tail-latency incidents, identify retry storms, and capacity-plan distributed workers",
-         icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch37-cuda-and-gpu-acceleration",
-+    title: "Chapter 37 · CUDA and GPU Acceleration",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch37-cuda-and-gpu-acceleration",
-+        title: "CUDA and GPU Acceleration",
-+        shortTitle: "CUDA and GPU",
-+        description:
-+          "When GPU acceleration pays, Rust and CUDA integration shapes, safe kernel launch wrappers, device-memory ownership, transfer and launch overhead, profiling, abstractions, and async or distributed integration",
-+        icon: "book",
-+        codeKeys: ["cuda_gpu_kernel_launch_wrapper", "cuda_gpu_transfer_budget"],
-+      },
-+      {
-+        id: "ch37-cuda-and-gpu-acceleration-exercises",
-+        title: "Chapter 37 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Estimate transfer cost, sketch a safe kernel wrapper, and choose CPU, Rayon, MPI, or CUDA from workload shape",
-+        icon: "trophy",
-       },
-     ],
-   },
-@@ -1366,5 +1389,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH34,
-   ...DEFAULT_CODES_CH35,
-   ...DEFAULT_CODES_CH36,
-+  ...DEFAULT_CODES_CH37,
- }
- 
- export interface BookState {
-````

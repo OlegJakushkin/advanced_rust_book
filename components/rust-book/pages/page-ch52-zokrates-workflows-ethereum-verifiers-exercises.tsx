@@ -407,7 +407,7 @@ fn main() {
 /*
 ````
 
-### File: `components/rust-book/pages/page-ch54-no-std-rust-constrained-runtime-derivatives-exercises.tsx`
+### File: `components/rust-book/pages/page-ch56-no-std-rust-constrained-runtime-derivatives-exercises.tsx`
 ```tsx
 "use client"
 
@@ -603,10 +603,10 @@ const runtimeChecklist = [
   "Cross-target CI proves the advertised runtime contract instead of leaving it to documentation alone.",
 ]
 
-export function PageCh54NoStdRustConstrainedRuntimeDerivativesExercises() {
+export function PageCh56NoStdRustConstrainedRuntimeDerivativesExercises() {
   const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = getPageIndexById("ch54-no-std-rust-constrained-runtime-derivatives-exercises")
-  const mainPageIndex = getPageIndexById("ch54-no-std-rust-constrained-runtime-derivatives")
+  const pageIndex = getPageIndexById("ch56-no-std-rust-constrained-runtime-derivatives-exercises")
+  const mainPageIndex = getPageIndexById("ch56-no-std-rust-constrained-runtime-derivatives")
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -618,7 +618,7 @@ export function PageCh54NoStdRustConstrainedRuntimeDerivativesExercises() {
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
           <Trophy className="h-4 w-4" />
-          Chapter 54 · Page {pageIndex + 1} of {PAGES.length}
+          Chapter 56 · Page {pageIndex + 1} of {PAGES.length}
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
@@ -640,7 +640,7 @@ export function PageCh54NoStdRustConstrainedRuntimeDerivativesExercises() {
             </div>
             <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 54
+              Back to Chapter 56
             </Button>
           </div>
         </section>

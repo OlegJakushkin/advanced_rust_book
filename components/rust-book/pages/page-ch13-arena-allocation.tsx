@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -27,15 +28,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "If you have used region allocators, pool allocators, or `pmr`-style allocation strategies, the idea will feel familiar. Rust adds a sharper distinction between arena-borrowed references and index-based handles, because aliasing and lifetime rules stay explicit.",
+    body: "The mechanics are familiar from region allocators, pool allocators, and the pmr machinery, so the bump cursor and the whole-region reset will feel like home. The shift is that Rust forces you to declare, in the type, whether a value is a reference borrowed from the arena or an index handle into it. The aliasing and lifetime rules that you tracked by convention before are now checked by the compiler, which is why the reference-versus-handle choice is a real design decision rather than an implementation detail.",
   },
   {
     title: "C# background",
-    body: "This is not a garbage collector feature. It is a deliberate lifetime grouping tool. Instead of letting the runtime discover dead objects later, you decide that a whole region of objects belongs to one phase and goes away together.",
+    body: "An arena is not a garbage collector feature and there is no finalizer thread reclaiming it later. The mental shift is that you, not the runtime, decide that a whole group of objects belongs to one phase and disappears together at a point you choose. You trade the convenience of the GC discovering dead objects for the predictability of releasing a region in one cheap step, with no pause and no nondeterministic timing.",
   },
   {
     title: "Go background",
-    body: "This is not the same as `sync.Pool`. Pools are about reuse across lifetimes. Arenas are about grouping lifetimes. A request parser, compiler front-end, or query planner often wants region semantics more than reuse semantics.",
+    body: "This is not sync.Pool. A pool is about reusing individual objects across many lifetimes to dodge allocation; an arena is about grouping many objects into one lifetime so they die together. The shift is from thinking object-by-object to thinking phase-by-phase: a request parser, compiler front end, or query planner usually wants region semantics, where the whole working set is dropped at once, far more than it wants per-object reuse.",
+  },
+  {
+    title: "Python background",
+    body: "There is no reference counting walking the graph and no cyclic-GC pass to break cycles for you. The shift is that an arena sidesteps the cycle problem entirely: edges become integer handles, not owning references, so a parent-points-to-child-points-to-parent graph never forms a reference cycle in the first place. Instead of relying on a collector to eventually notice the region is dead, you own a single drop that frees all of it at a known moment.",
   },
 ]
 
@@ -237,6 +242,43 @@ export function PageCh13ArenaAllocation() {
               </div>
             ))}
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The shape to hold in your head is two columns. On the left, the general heap tracks each object on its own:
+            every allocation and every free is an independent event the allocator has to bookkeep. On the right, an arena
+            tracks one region: every object is born into it, and the whole region is released in a single step. The arena
+            does not make any one allocation magically faster so much as it collapses many free operations into one.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  subgraph Heap[General heap]\n    A1[alloc node] --> F1[free node]\n    A2[alloc node] --> F2[free node]\n    A3[alloc node] --> F3[free node]\n  end`}
+            caption="General heap: every object is freed on its own, so each allocation has a matching independent free the allocator must track."
+          />
+          <p className="text-sm text-muted-foreground leading-6">
+            Side by side, the arena collapses all of those individual frees into one region teardown:
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  subgraph Arena[Arena region]\n    B1[alloc node] --> R[reset / drop once]\n    B2[alloc node] --> R\n    B3[alloc node] --> R\n  end`}
+            caption="Arena region: many objects share one lifetime, so a single reset or drop reclaims all of them at once."
+          />
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this maps to other languages</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Most engineers arrive at arenas with a habit from another language, and the habit is usually close enough to
+            be misleading. The cards below name the one mental-model shift that matters for each background, rather than
+            the API differences, because the API is the easy part once the model is right.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-5">
@@ -276,19 +318,38 @@ request ends
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  A common Rust repair for graph-shaped data is simple: let one arena own all nodes, then let edges store
-                  `NodeId` handles instead of `Rc<Node>` pointers. The graph becomes one owner plus cheap handles, not a
-                  web of ref-counted owners.
+                  A common Rust repair for graph-shaped data is simple: let one arena own all nodes, then let edges store{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">NodeId</code> handles instead of{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc&lt;Node&gt;</code> pointers. The
+                  graph becomes one owner plus cheap handles, not a web of ref-counted owners.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  This is often calmer than `Rc<RefCell<T>>` for ASTs, IR, routing graphs, and domain DAGs. You remove
-                  cycles by construction because edges are not owners. You also regain explicit control over mutation and
-                  traversal from the arena root.
+                  This is often calmer than{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc&lt;RefCell&lt;T&gt;&gt;</code> for
+                  ASTs, IR, routing graphs, and domain DAGs. You remove cycles by construction because edges are not
+                  owners. You also regain explicit control over mutation and traversal from the arena root.
                 </p>
               </div>
             </div>
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The diagram below is the same graph drawn two ways. Look at where ownership lives. On the left every edge is
+              an owner, so a back-edge from D to A forms a reference cycle that never drops to zero and leaks. On the right
+              the arena is the only owner and every edge is just an index, so the identical back-edge is harmless data and
+              one drop frees the whole region.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph RC[Rc edges own]\n    A[Node A] -->|owns| B[Node B]\n    B -->|owns| D[Node D]\n    D -->|owns, back-edge| A\n  end`}
+              caption="Owning Rc edges: the back-edge from D to A closes a reference cycle that never drops to zero, so the whole loop leaks."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Side by side, the same shape redrawn so the arena is the only owner and every edge is just an index:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph IDX[Arena + index edges]\n    Ar[(Arena owns all)] --> N0[id 0]\n    Ar --> N1[id 1]\n    Ar --> N3[id 3]\n    N0 -->|edge id 1| N1\n    N1 -->|edge id 3| N3\n    N3 -->|edge id 0, back-edge| N0\n  end`}
+              caption="Index edges into a single-owner arena: the identical back-edge is now a harmless integer, and one drop frees the whole region."
+            />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -325,6 +386,16 @@ request ends
                 </div>
               ))}
             </div>
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The difference is what crosses the boundary back to the caller. A reference arena hands back a borrow that
+              is chained to the arena&apos;s lifetime, so the borrow checker will not let that reference outlive the
+              arena. An index arena hands back a small plain value that owns nothing, so it can travel anywhere; the cost
+              is that you must go back to the arena to turn the handle into data.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  C[Caller] -->|"alloc(value)"| Ar[Arena]\n  Ar -->|"&'a T borrow, tied to arena"| RefPath[Use within arena lifetime]\n  Ar -->|"NodeId, plain value"| IdPath[Travel anywhere]\n  IdPath -->|"arena.get(id)"| Ar`}
+              caption="Two return shapes from the same alloc call: a borrow welded to the arena's lifetime, or a handle that owns nothing and must be resolved back through the arena."
+            />
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 A useful rule: if you want data to cross async tasks, queues, caches, or other long-lived subsystem
@@ -344,6 +415,14 @@ request ends
                 </div>
               ))}
             </div>
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The whole point of a generation counter is what happens to a slot after it is freed and reused. A plain{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">usize</code> index would still point at
+              the slot and silently read whatever now lives there. A generational handle carries the generation it was
+              issued for: when a slot is removed its generation is bumped, so a handle minted earlier no longer matches and
+              the lookup fails cleanly instead of aliasing the new occupant. That clean failure is exactly the bug class a
+              raw index cannot protect against.
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -376,17 +455,6 @@ request ends
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
         <section className="space-y-4">
@@ -452,6 +520,17 @@ request ends
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: there is exactly one piece of mutable state, the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">used</code> cursor. Every allocation
+              only moves it forward, and the single cheap teardown sets it back to zero. There is no per-allocation free
+              path anywhere in the type. The diagram traces what the cursor does for the exact byte strings in{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">main</code>.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  S["used = 0"] -->|"alloc b'arena123' (8)"| A["used = 8"]\n  A -->|"alloc b'logs' (4)"| B["used = 12"]\n  B -->|"read slice (0..8)"| R["arena123"]\n  B -->|"reset()"| Z["used = 0"]`}
+              caption="The cursor only ever moves forward on alloc; reset snaps it back to zero in one step, logically discarding everything at once."
+            />
             <RustCodeEditor
               code={codes.arena_allocation_bump_scratch}
               onChange={(newCode) => updateCode("arena_allocation_bump_scratch", newCode)}
@@ -488,9 +567,14 @@ request ends
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="font-semibold text-foreground">Example 2: arena-backed AST with stable IDs instead of `Rc` edges</h4>
+                <h4 className="font-semibold text-foreground">
+                  Example 2: arena-backed AST with stable IDs instead of{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc</code> edges
+                </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  One owner stores all nodes. Expressions point to each other by `ExprId`, and evaluation reborrows from
+                  One owner stores all nodes. Expressions point to each other by{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ExprId</code>, and evaluation
+                  reborrows from
                   the arena root.
                 </p>
               </div>
@@ -505,6 +589,18 @@ request ends
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the enum variants hold{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ExprId</code> values, not{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Box&lt;Expr&gt;</code> or{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc&lt;Expr&gt;</code>. A node never owns
+              another node; the arena owns them all in one vector, and an edge is just an index into that vector. The
+              diagram is the tree this program builds, with each node labelled by the slot it lands in.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Root["id 4: Mul"] --> Sum["id 3: Add"]\n  Root --> Four["id 2: Number(4)"]\n  Sum --> Two["id 0: Number(2)"]\n  Sum --> Three["id 1: Number(3)"]`}
+              caption="The expression (2 + 3) * 4 as five arena slots. eval walks the tree by resolving each ExprId back through the arena, so 2 + 3 = 5 then 5 * 4 = 20, across 5 nodes."
+            />
             <RustCodeEditor
               code={codes.arena_allocation_index_ast}
               onChange={(newCode) => updateCode("arena_allocation_index_ast", newCode)}
@@ -531,7 +627,8 @@ request ends
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Edges</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `ExprId` is logical identity, not shared ownership.
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ExprId</code> is logical identity,
+                  not shared ownership.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -547,8 +644,9 @@ request ends
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to build a tiny arena-backed AST, compare an `Rc` graph with an
-            arena-and-handle graph, and reason explicitly about deallocation, locality, and deletion tradeoffs.
+            The companion exercise page asks you to build a tiny arena-backed AST, compare an{" "}
+            <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Rc</code> graph with an arena-and-handle
+            graph, and reason explicitly about deallocation, locality, and deletion tradeoffs.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 13 Exercises
@@ -570,568 +668,3 @@ request ends
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch13-arena-allocation-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose region lifetime, shared ownership, or ordinary ownership on purpose",
-    objective: "Practice deciding whether a workload really wants an arena instead of a normal owner graph or ref-counted sharing.",
-    starterPrompt:
-      "Classify four cases: a request parser that builds a temporary AST, a long-lived cache entry graph with arbitrary eviction, a single-thread UI tree with parent links, and a connection registry with frequent insert/remove operations.",
-    prompts: [
-      "Which case has one coarse-grained lifetime and therefore fits an arena best?",
-      "Which case wants deletion and reuse rather than region teardown?",
-      "Which case may still justify `Rc` or `Weak` because sharing is semantically real?",
-      "Which case should probably stay ordinary owned structs and vectors?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one strong arena candidate and justify it with shared lifetime, not only performance hope.",
-      "You distinguish deletion-heavy registries from pure region workloads.",
-      "You explain at least one case where shared ownership remains semantically real and an arena is not automatically better.",
-    ],
-    hints: [
-      "Ask first: do these values live and die together?",
-      "If arbitrary individual deletion is part of the job, a pure bump arena is usually the wrong first tool.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Compare an `Rc` graph with an arena-and-handle graph",
-    objective: "Read two designs and explain the ownership and operational differences instead of only saying one is faster.",
-    starterPrompt:
-      "Compare a small AST built with `Rc<RefCell<Node>>` and parent/child pointers against an AST built as `Vec<Node>` plus `NodeId` handles.",
-    prompts: [
-      "Where does ownership live in each design?",
-      "Where would cycle or runtime borrow problems appear in the `Rc<RefCell<T>>` design?",
-      "What does the handle-based design give up, and what does it gain?",
-      "Which design is calmer for serialization, testing, or mutation from the owner root?",
-    ],
-    acceptanceCriteria: [
-      "You explain one-owner-plus-handles versus shared ref-counted ownership precisely.",
-      "You name runtime borrow checks and cycle risk as concrete tradeoffs in the `Rc<RefCell<T>>` version.",
-      "You name at least one benefit and one cost of the arena-and-handle version.",
-    ],
-    hints: [
-      "The question is not only about speed. It is about where ownership and mutation authority live.",
-      "Try to answer as if you were reviewing the design with another senior engineer.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Build a tiny arena-backed AST",
-    objective: "Implement a small owner-plus-handle AST so evaluation reborrows from the arena instead of walking shared pointers.",
-    starterPrompt:
-      "Implement `ExprArena` with `ExprId`, `Expr::Number`, and `Expr::Add`, then allocate two numbers and one add node and evaluate the result.",
-    prompts: [
-      "Keep the owner as `Vec<Expr>`.",
-      "Return `ExprId` from allocation.",
-      "Evaluate by recursively looking nodes up from `&self`.",
-      "Do not use `Rc`, `RefCell`, or raw pointers.",
-    ],
-    acceptanceCriteria: [
-      "The arena owns all nodes in one vector.",
-      "The API returns handles rather than borrowed node references.",
-      "Evaluation works by reborrowing from the arena root.",
-      "The runnable lab prints the expected value and node count.",
-    ],
-    hints: [
-      "This is the same basic pattern used in many AST and IR builders.",
-      "If the arena is the owner, handles are enough for edges.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair a stale-handle design before deletion lands in production",
-    objective: "Replace plain slot indices with a handle strategy that stays honest once removal and reuse appear.",
-    starterPrompt:
-      "You inherit a table-backed registry that stores objects in `Vec<Option<T>>` and hands out raw `usize` indices. A new requirement adds removal and slot reuse.",
-    prompts: [
-      "Why can a plain `usize` become a stale logical identity after reuse?",
-      "Would a free list plus generation counter repair the handle story?",
-      "When would a generational arena or slot map be cheaper than hand-rolled bookkeeping?",
-    ],
-    acceptanceCriteria: [
-      "You explain the stale-handle failure mode concretely.",
-      "You propose a handle scheme with generation or another explicit validity check.",
-      "You justify when to keep a custom design and when to move to a specialized crate.",
-    ],
-    hints: [
-      "Deletion changes the semantics of a handle, not only the storage.",
-      "A stale handle bug is usually much worse than a few bytes of extra metadata.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "List deallocation and locality tradeoffs like a production reviewer",
-    objective: "Practice stating the real arena tradeoffs without slogans.",
-    starterPrompt:
-      "Review a proposal to use a bump arena for a compiler front-end pass and write a short tradeoff note for the team.",
-    prompts: [
-      "What becomes cheaper about allocation and cleanup?",
-      "What deallocation flexibility is lost?",
-      "Why might locality improve?",
-      "What kinds of values do not belong in this region by default?",
-    ],
-    acceptanceCriteria: [
-      "You name both the cleanup win and the coarse-grained free limitation.",
-      "You mention locality or cache behavior explicitly.",
-      "You call out at least one kind of heavy or long-lived value that should probably stay outside the arena.",
-    ],
-    hints: [
-      "A good answer mentions lifetime grouping, not just 'fewer mallocs.'",
-      "If a value has a wider lifetime than the pass, it is a bad arena resident by default.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose bump arena, generational arena, slab, or general allocation for a service",
-    objective: "Map four different allocator shapes to one realistic distributed-service design.",
-    starterPrompt:
-      "You are designing `request bytes -> parse -> build AST -> route to workers -> track live connections -> evict idle sessions -> persist summaries`.",
-    prompts: [
-      "Which phase wants a request-scoped bump arena?",
-      "Which runtime table wants deletion plus stale-handle protection?",
-      "Which part wants slot reuse because the objects are homogeneous and churn heavily?",
-      "Which data should stay under ordinary ownership because its lifetime is wide or mixed?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least one bump-arena phase, one generational or slot-based table, and one part that stays ordinary allocation.",
-      "You justify each choice with lifetime shape and mutation pattern.",
-      "You mention at least one testing or observability hook, such as allocation count, handle-validity assertions, or memory-usage tracking.",
-    ],
-    hints: [
-      "One system can legitimately use more than one allocation policy.",
-      "The cleanest answer names the owner and lifetime boundary at each stage.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What makes an arena a lifetime design tool rather than only an optimization?",
-  "When is a handle-based arena calmer than `Rc<RefCell<T>>`?",
-  "Why do generational handles exist, and what bug class do they prevent?",
-  "What is the practical difference between a bump arena and a slab allocator?",
-  "Why are arena-borrowed references often a poor fit for async or long-lived subsystem boundaries?",
-]
-
-const workingLoop = [
-  "State the lifetime shape first: whole phase, slot reuse, or arbitrary mixed lifetimes.",
-  "Pick the owner model second: borrowed-from-arena references or stable handles.",
-  "Name what deallocation flexibility you are giving up in exchange for locality or allocator calm.",
-  "If deletion exists, ask immediately whether stale-handle protection is now required.",
-]
-
-export function PageCh13ArenaAllocationExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 25
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 13 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice choosing arenas where the lifetime model is real, not fashionable, and translating graphs into one
-          owner plus stable handles when that makes the system calmer.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an ownership and lifetime review. The best answer does not stop at “arena = fast.”
-                It explains which values share a lifetime, where ownership lives, what handle policy exists, and what
-                deallocation tradeoff the team is accepting.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(24)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 13
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Arena design drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Tiny arena-backed AST"
-          description={
-            <>
-              Fix the evaluator so it computes an addition node by reborrowing from the arena. The checker expects the
-              final expression to evaluate to{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">42</code> with exactly three nodes
-              allocated.
-            </>
-          }
-          filename="arena_ast_lab.rs"
-          runKey="ch13_ex_arena_ast"
-          expectedOutput={"value = 42\nnodes = 3"}
-          helperText={
-            <>
-              Tip: keep the owner as <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;Expr&gt;</code>,
-              return <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ExprId</code> from allocation,
-              and make the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Add</code> branch call{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">self.eval</code> on both children.
-            </>
-          }
-          initialCode={`#[derive(Clone, Copy, Debug, PartialEq, Eq)]\nstruct ExprId(usize);\n\n#[derive(Debug)]\nenum Expr {\n    Number(i64),\n    Add(ExprId, ExprId),\n}\n\n#[derive(Default)]\nstruct ExprArena {\n    nodes: Vec<Expr>,\n}\n\nimpl ExprArena {\n    fn alloc(&mut self, expr: Expr) -> ExprId {\n        let id = ExprId(self.nodes.len());\n        self.nodes.push(expr);\n        id\n    }\n\n    fn eval(&self, id: ExprId) -> i64 {\n        match &self.nodes[id.0] {\n            Expr::Number(value) => *value,\n            Expr::Add(left, right) => 0,\n        }\n    }\n}\n\nfn main() {\n    let mut arena = ExprArena::default();\n    let left = arena.alloc(Expr::Number(10));\n    let right = arena.alloc(Expr::Number(32));\n    let root = arena.alloc(Expr::Add(left, right));\n\n    println!(\"value = {}\", arena.eval(root));\n    println!(\"nodes = {}\", arena.nodes.len());\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to explain when an arena is the right lifetime model, build a
-            tiny AST with owner-plus-handle design, compare that model against `Rc` graphs without hand-waving, and
-            choose bump arenas, generational arenas, slabs, or ordinary ownership from workload shape rather than habit.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch13_arena_allocation/fixed_bump_buffer.rs`
-````
-struct Bump<const N: usize> {
-    buf: [u8; N],
-    used: usize,
-}
-
-impl<const N: usize> Bump<N> {
-    fn new() -> Self {
-        Self {
-            buf: [0; N],
-            used: 0,
-        }
-    }
-
-    fn alloc_bytes(&mut self, bytes: &[u8]) -> Option<(usize, usize)> {
-        let end = self.used.checked_add(bytes.len())?;
-        if end > N {
-            return None;
-        }
-
-        let start = self.used;
-        self.buf[start..end].copy_from_slice(bytes);
-        self.used = end;
-        Some((start, end))
-    }
-
-    fn slice(&self, range: (usize, usize)) -> &[u8] {
-        &self.buf[range.0..range.1]
-    }
-
-    fn used(&self) -> usize {
-        self.used
-    }
-
-    fn reset(&mut self) {
-        self.used = 0;
-    }
-}
-
-fn main() {
-    let mut arena = Bump::<32>::new();
-    let first = arena.alloc_bytes(b"arena123").unwrap();
-    let _second = arena.alloc_bytes(b"logs").unwrap();
-
-    println!("used = {}", arena.used());
-    println!(
-        "first = {}",
-        std::str::from_utf8(arena.slice(first)).unwrap()
-    );
-
-    arena.reset();
-    println!("after reset = {}", arena.used());
-}
-````
-
-### File: `examples/ch13_arena_allocation/arena_indexed_ast.rs`
-````
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ExprId(usize);
-
-#[derive(Debug)]
-enum Expr {
-    Number(i64),
-    Add(ExprId, ExprId),
-    Mul(ExprId, ExprId),
-}
-
-#[derive(Default)]
-struct ExprArena {
-    nodes: Vec<Expr>,
-}
-
-impl ExprArena {
-    fn alloc(&mut self, expr: Expr) -> ExprId {
-        let id = ExprId(self.nodes.len());
-        self.nodes.push(expr);
-        id
-    }
-
-    fn get(&self, id: ExprId) -> &Expr {
-        &self.nodes[id.0]
-    }
-
-    fn eval(&self, id: ExprId) -> i64 {
-        match self.get(id) {
-            Expr::Number(value) => *value,
-            Expr::Add(left, right) => self.eval(*left) + self.eval(*right),
-            Expr::Mul(left, right) => self.eval(*left) * self.eval(*right),
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-fn main() {
-    let mut arena = ExprArena::default();
-
-    let two = arena.alloc(Expr::Number(2));
-    let three = arena.alloc(Expr::Number(3));
-    let four = arena.alloc(Expr::Number(4));
-    let sum = arena.alloc(Expr::Add(two, three));
-    let root = arena.alloc(Expr::Mul(sum, four));
-
-    println!("value = {}", arena.eval(root));
-    println!("nodes = {}", arena.len());
-}
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -2,6 +2,7 @@
- import { DEFAULT_CODES_CH10 } from "./default-codes-ch10"
- import { DEFAULT_CODES_CH11 } from "./default-codes-ch11"
- import { DEFAULT_CODES_CH12 } from "./default-codes-ch12"
-+import { DEFAULT_CODES_CH13 } from "./default-codes-ch13"
- 
- export interface PageConfig {
-   id: string
-@@ -297,6 +298,29 @@ export const CHAPTERS: ChapterConfig[] = [
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch13-arena-allocation",
-+    title: "Chapter 13 · Arena Allocation and Region-Based Memory",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch13-arena-allocation",
-+        title: "Arena Allocation and Region-Based Memory",
-+        shortTitle: "Arena Allocation",
-+        description:
-+          "Bump allocators, arena-backed ASTs, region lifetimes, generational handles, slabs, and locality tradeoffs",
-+        icon: "book",
-+        codeKeys: ["arena_allocation_bump_scratch", "arena_allocation_index_ast"],
-+      },
-+      {
-+        id: "ch13-arena-allocation-exercises",
-+        title: "Chapter 13 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Build a tiny arena-backed AST, compare Rc graphs with arena handles, and reason about lifetime-grouped memory",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
- 
-@@ -728,6 +752,7 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH10,
-   ...DEFAULT_CODES_CH11,
-   ...DEFAULT_CODES_CH12,
-+  ...DEFAULT_CODES_CH13,
- }
- 
- export interface BookState {
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -22,3 +22,5 @@ export { PageCh11HashMapsAndSetsExercises } from "./page-ch11-hash-maps-and-set
- export { PageCh12MatricesAndMultidimensionalData } from "./page-ch12-matrices-and-multidimensional-data"
- export { PageCh12MatricesAndMultidimensionalDataExercises } from "./page-ch12-matrices-and-multidimensional-data-exercises"
-+export { PageCh13ArenaAllocation } from "./page-ch13-arena-allocation"
-+export { PageCh13ArenaAllocationExercises } from "./page-ch13-arena-allocation-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -33,6 +33,8 @@ import {
-   PageCh11HashMapsAndSetsExercises,
-   PageCh12MatricesAndMultidimensionalData,
-   PageCh12MatricesAndMultidimensionalDataExercises,
-+  PageCh13ArenaAllocation,
-+  PageCh13ArenaAllocationExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -61,6 +63,8 @@ const PAGE_COMPONENTS = [
-   PageCh11HashMapsAndSetsExercises,
-   PageCh12MatricesAndMultidimensionalData,
-   PageCh12MatricesAndMultidimensionalDataExercises,
-+  PageCh13ArenaAllocation,
-+  PageCh13ArenaAllocationExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,7 +1,9 @@
-+import { simulateCh13Output } from "./rust-simulator-ch13"
- import { simulateCh12Output } from "./rust-simulator-ch12"
- import { simulateCh11Output } from "./rust-simulator-ch11"
- import { simulateCh10Output } from "./rust-simulator-ch10"
- import { simulateCh09Output } from "./rust-simulator-ch09"
-+
- 
- export const RUST_COMPILER_ERROR_PREFIX = "__RUSTC_ERROR__\n"
- 
-@@ -991,6 +993,9 @@ export function simulateRustExecution(code: string, key?: string, filename = "ma
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
- 
-+  const ch13Output = simulateCh13Output(code, key)
-+  if (ch13Output !== null) return ch13Output
-+
-   const ch12Output = simulateCh12Output(code, key)
-   if (ch12Output !== null) return ch12Output
- 
-````

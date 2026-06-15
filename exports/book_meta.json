@@ -1,6 +1,18 @@
 {
   "chapters": [
     {
+      "id": "part-1-getting-your-bearings",
+      "title": "Part I · Getting Your Bearings in Rust",
+      "pages": [
+        {
+          "id": "part-1-getting-your-bearings",
+          "title": "Part I · Getting Your Bearings in Rust",
+          "desc": "Recalibrate your mental model and stand up a working toolchain before you fight the borrow checker.",
+          "codes": []
+        }
+      ]
+    },
+    {
       "id": "ch01-why-rust-feels-different",
       "title": "Chapter 01 · Why Rust Feels Different",
       "pages": [
@@ -59,6 +71,18 @@
           "id": "ch03-project-structure-and-tooling-exercises",
           "title": "Chapter 03 Exercises",
           "desc": "Design workspace layout, feature matrices, dependency policy, and the command pack for CI",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "part-2-memory-ownership-data-layout",
+      "title": "Part II · Memory, Ownership, and Data Layout",
+      "pages": [
+        {
+          "id": "part-2-memory-ownership-data-layout",
+          "title": "Part II · Memory, Ownership, and Data Layout",
+          "desc": "Ownership, borrowing, lifetimes, smart pointers, and the containers you reach for daily — the part that makes every later API make sense.",
           "codes": []
         }
       ]
@@ -274,6 +298,18 @@
       ]
     },
     {
+      "id": "part-3-designing-types-abstractions",
+      "title": "Part III · Designing Types and Abstractions",
+      "pages": [
+        {
+          "id": "part-3-designing-types-abstractions",
+          "title": "Part III · Designing Types and Abstractions",
+          "desc": "Express interfaces, domain models, generics, and serialization the way Rust’s type system wants.",
+          "codes": []
+        }
+      ]
+    },
+    {
       "id": "ch14-interfaces-in-rust-traits",
       "title": "Chapter 14 · Interfaces in Rust: Traits",
       "pages": [
@@ -442,6 +478,18 @@
       ]
     },
     {
+      "id": "part-4-concurrency-async-systems-io",
+      "title": "Part IV · Concurrency, Async, and Systems IO",
+      "pages": [
+        {
+          "id": "part-4-concurrency-async-systems-io",
+          "title": "Part IV · Concurrency, Async, and Systems IO",
+          "desc": "Threads, synchronization, futures, Tokio, and low-level IO — what makes Rust a systems language, not just a safe one.",
+          "codes": []
+        }
+      ]
+    },
+    {
       "id": "ch22-multithreading-in-rust",
       "title": "Chapter 22 · Multithreading in Rust",
       "pages": [
@@ -565,6 +613,18 @@
           "id": "ch27-io-tricks-and-systems-programming-patterns-exercises",
           "title": "Chapter 27 Exercises",
           "desc": "Compare buffered and unbuffered reads, design a backpressure-aware IO pipeline, and reason clearly about descriptor ownership",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "part-5-integration-distributed-hpc",
+      "title": "Part V · Integration, Distributed Systems, and HPC",
+      "pages": [
+        {
+          "id": "part-5-integration-distributed-hpc",
+          "title": "Part V · Integration, Distributed Systems, and HPC",
+          "desc": "When your problem leaves a single process: FFI, WASM, brokers, distributed and MPI workloads, GPUs, and the profiling they demand.",
           "codes": []
         }
       ]
@@ -843,6 +903,18 @@
       ]
     },
     {
+      "id": "part-6-engineering-for-production",
+      "title": "Part VI · Engineering Systems for Production",
+      "pages": [
+        {
+          "id": "part-6-engineering-for-production",
+          "title": "Part VI · Engineering Systems for Production",
+          "desc": "Error strategy at scale, testing, observability, packaging, and a capstone that ties it together.",
+          "codes": []
+        }
+      ]
+    },
+    {
       "id": "ch41-error-handling-in-large-systems",
       "title": "Chapter 41 · Error Handling in Large Systems",
       "pages": [
@@ -943,6 +1015,18 @@
           "id": "ch45-capstone-distributed-rust-system-exercises",
           "title": "Chapter 45 Exercises",
           "desc": "Review the capstone like a staff engineer: architecture, milestones, queue budgets, replay safety, profiling evidence, and rollout gates",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "part-7-networked-services-secure-boundaries",
+      "title": "Part VII · Networked Services and Secure Boundaries",
+      "pages": [
+        {
+          "id": "part-7-networked-services-secure-boundaries",
+          "title": "Part VII · Networked Services and Secure Boundaries",
+          "desc": "Build the service layer — REST/OpenAPI, gRPC, WebSockets, TLS, and peer-to-peer — that exposes your system to the world.",
           "codes": []
         }
       ]
@@ -1053,6 +1137,18 @@
       ]
     },
     {
+      "id": "part-8-frontier-specializations",
+      "title": "Part VIII · Frontier Specializations",
+      "pages": [
+        {
+          "id": "part-8-frontier-specializations",
+          "title": "Part VIII · Frontier Specializations",
+          "desc": "Dip in on demand: zero-knowledge proofs, verifiable and portable ML inference, on-chain smart contracts, and no-std for constrained targets.",
+          "codes": []
+        }
+      ]
+    },
+    {
       "id": "ch51-zero-knowledge-proofs-rust-engineers",
       "title": "Chapter 51 · Zero-Knowledge Proofs for Rust Engineers",
       "pages": [
@@ -1116,11 +1212,53 @@
       ]
     },
     {
-      "id": "ch54-no-std-rust-constrained-runtime-derivatives",
-      "title": "Chapter 54 · no-std Rust and Constrained Runtime Derivatives",
+      "id": "ch54-onnx-runtime-model-inference",
+      "title": "Chapter 54 · ONNX Model Inference in Rust",
       "pages": [
         {
-          "id": "ch54-no-std-rust-constrained-runtime-derivatives",
+          "id": "ch54-onnx-runtime-model-inference",
+          "title": "ONNX Model Inference in Rust",
+          "desc": "Run portable ONNX models from Rust: the ort runtime versus pure-Rust tract, tensors and shapes, execution providers, batching, and dependency-light deployment",
+          "codes": [
+            "onnx_session_load_run",
+            "onnx_tensor_batch_argmax"
+          ]
+        },
+        {
+          "id": "ch54-onnx-runtime-model-inference-exercises",
+          "title": "Chapter 54 Exercises",
+          "desc": "Load and run a session, shape and batch tensors, choose execution providers, and own pre- and post-processing at the model boundary",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch55-smart-contracts-solana-sei",
+      "title": "Chapter 55 · Smart Contracts in Rust: Solana, Sei, and Beyond",
+      "pages": [
+        {
+          "id": "ch55-smart-contracts-solana-sei",
+          "title": "Smart Contracts in Rust: Solana, Sei, and Beyond",
+          "desc": "Write on-chain Rust across execution models: Solana's account and program split, Sei and CosmWasm wasm actors, and how both compare with EVM, NEAR, and ink!",
+          "codes": [
+            "smart_contract_solana_counter",
+            "smart_contract_platform_compare"
+          ]
+        },
+        {
+          "id": "ch55-smart-contracts-solana-sei-exercises",
+          "title": "Chapter 55 Exercises",
+          "desc": "Model an account-based program, contrast wasm-actor and account execution, and reason about serialization, gas, and deterministic execution boundaries",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "id": "ch56-no-std-rust-constrained-runtime-derivatives",
+      "title": "Chapter 56 · no-std Rust and Constrained Runtime Derivatives",
+      "pages": [
+        {
+          "id": "ch56-no-std-rust-constrained-runtime-derivatives",
           "title": "no-std Rust and Constrained Runtime Derivatives",
           "desc": "Design portable Rust surfaces across core, alloc, and std: fixed-capacity memory, DMA/MMIO ownership, embedded layering, and host-testable no_std crates",
           "codes": [
@@ -1129,8 +1267,8 @@
           ]
         },
         {
-          "id": "ch54-no-std-rust-constrained-runtime-derivatives-exercises",
-          "title": "Chapter 54 Exercises",
+          "id": "ch56-no-std-rust-constrained-runtime-derivatives-exercises",
+          "title": "Chapter 56 Exercises",
           "desc": "Choose the right runtime surface, design fixed-capacity paths, audit constrained unsafe code, and keep portable logic testable from the host",
           "codes": []
         }
@@ -1261,7 +1399,7 @@
     "ch41-error-handling-in-large-systems": "Large systems need error contracts that separate domain failures, infrastructure failures, retry policy, and operator context. This chapter covers Rust error handling as a production interface.",
     "ch46-fastapi-style-web-apps-swagger-openapi-codegen": "Web API delivery needs typed handlers, documented contracts, generated transport code, and domain services isolated from HTTP concerns. This chapter builds that production boundary in Rust.",
     "ch52-zokrates-workflows-ethereum-verifiers": "Proof workflows need controlled source programs, setup material, witness custody, generated verifiers, and deployment tracking. This chapter covers ZoKrates and Ethereum verification as staged production artifacts.",
-    "ch54-no-std-rust-constrained-runtime-derivatives": "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
+    "ch56-no-std-rust-constrained-runtime-derivatives": "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
     "ch09-smart-pointers-and-pinning-exercises": "Practice choosing Box, Rc, Arc, Weak, and Pin from real ownership and runtime constraints.",
     "ch10-arrays-slices-and-vectors-exercises": "Drill slice-first APIs, capacity planning, and when a Vec should stay contiguous rather than turn into a looser shape.",
     "ch13-arena-allocation-exercises": "Use this page to think in region lifetimes, stable handles, and arena ownership instead of raw pointer convenience.",
@@ -1278,7 +1416,7 @@
     "ch40-matrix-optimization-games-exercises": "Practice choosing dense or sparse layouts, tiling strategy, and fair benchmark boundaries before claiming a matrix win.",
     "ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises": "Keep HTTP DTOs, service commands, generated docs, and codegen drift under explicit review.",
     "ch52-zokrates-workflows-ethereum-verifiers-exercises": "Review artifact custody, verifier inputs, rollout policy, and toolchain drift before a proof workflow becomes a production dependency.",
-    "ch54-no-std-rust-constrained-runtime-derivatives-exercises": "Practice designing core/alloc/std boundaries, fixed-capacity data paths, and constrained-runtime audits without losing testability."
+    "ch56-no-std-rust-constrained-runtime-derivatives-exercises": "Practice designing core/alloc/std boundaries, fixed-capacity data paths, and constrained-runtime audits without losing testability."
   },
   "example_titles": {
     "ch09-smart-pointers-and-pinning": {},
@@ -1302,6 +1440,6 @@
     "ch41-error-handling-in-large-systems": {},
     "ch46-fastapi-style-web-apps-swagger-openapi-codegen": {},
     "ch52-zokrates-workflows-ethereum-verifiers": {},
-    "ch54-no-std-rust-constrained-runtime-derivatives": {}
+    "ch56-no-std-rust-constrained-runtime-derivatives": {}
   }
 }

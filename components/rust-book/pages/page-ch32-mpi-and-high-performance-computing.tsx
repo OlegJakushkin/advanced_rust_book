@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
@@ -149,15 +150,19 @@ const productionEnvironmentCards = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "The layout and collective questions will feel familiar. The main Rust gain is that ownership inside each rank becomes easier to audit, especially in hybrid MPI plus threads designs.",
+    body: "You have probably written MPI in C++ already, so the collective vocabulary and the layout questions transfer directly. The shift is that inside each rank, the hybrid MPI-plus-threads code that used to rely on review discipline now has an enforced ownership story: the compiler audits which thread owns which slice, so the part of HPC that historically caused the subtle bugs becomes checkable.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of runtime object graphs and more in terms of flat buffers, phases, and explicit ownership. HPC code is usually easier to reason about when the runtime behavior is simple and predictable.",
+    body: "Stop thinking in terms of a managed object graph that the runtime keeps alive for you. An MPI rank is a bare process: there is no shared heap across ranks, no garbage collector pausing all of them at once, and no implicit serialization. Model the work as flat buffers moving through explicit phases, and the performance behavior becomes something you can predict instead of profile-and-pray.",
   },
   {
     title: "Go background",
-    body: "Do not map MPI to channels. MPI is process-level message passing with typed collective operations and cluster launch semantics, not an in-process concurrency convenience layer.",
+    body: "Do not map MPI onto goroutines and channels. A channel is in-process concurrency; an MPI collective is a synchronized exchange across separate OS processes that a cluster launcher started on different machines. The mental trap is reaching for a channel-shaped abstraction when the real boundary is a typed buffer crossing the network with its own counts and displacements.",
+  },
+  {
+    title: "Python background",
+    body: "If you are porting from NumPy and mpi4py, the algorithm carries over but the cost model inverts. In Python the expensive lines are the Python ones and you push work into C; in Rust the loop you write is the loop that runs, so you stop fighting the interpreter and start owning the buffer layout directly. Resist pickling rich objects into collectives the way mpi4py lets you: on hot numeric paths, keep the payload a flat typed slice.",
   },
 ]
 
@@ -221,8 +226,10 @@ export function PageCh32MpiAndHighPerformanceComputing() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          High-performance cluster jobs need explicit process boundaries, collective operations, flat buffers, and failure
-          expectations. This chapter covers MPI-style computation from the Rust application layer.
+          A cluster job is not one program running faster. It is dozens or thousands of separate processes, on separate
+          machines, agreeing on when to exchange data. This chapter is about writing the Rust half of that agreement:
+          partitioning work into flat buffers, choosing collective operations that match the exchange you actually need,
+          and keeping the cost of communication visible instead of buried.
         </p>
       </div>
 
@@ -258,10 +265,21 @@ export function PageCh32MpiAndHighPerformanceComputing() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A simulation workload is being ported to Rust while keeping the cluster MPI launch model and hybrid per-rank
-            threading. The business requirement is explicit ownership by rank: partition flat buffers, use collectives for
-            structured exchange, keep serialization off hot numeric paths, and profile communication separately from
-            computation.
+            A scientific simulation that already runs on a cluster is being ported to Rust. The team wants to keep
+            everything that works about the existing setup: the MPI launch model, the scheduler that places one rank per
+            socket, and the per-rank threading that fills each socket with local CPU work. What they want from Rust is
+            the part that has been fragile in the old code base, namely confidence about which buffer is owned by which
+            rank and which thread, so that a layout mistake fails at compile time rather than as a silent wrong answer at
+            scale.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            That goal turns into four concrete commitments, and the rest of the chapter is really an expansion of them.
+            Partition the data into flat, contiguous buffers so a rank&apos;s share is a slice, not a graph. Use
+            collective operations when the whole group participates in one structured exchange, and reserve point-to-point
+            messages for the irregular cases. Keep general-purpose serialization off the hot numeric paths, where a flat
+            typed buffer is both faster and easier to reason about. And measure communication separately from
+            computation, because at cluster scale the time a job spends waiting in collectives is usually the number that
+            decides whether it scales.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -279,6 +297,34 @@ export function PageCh32MpiAndHighPerformanceComputing() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The single most useful idea to hold onto is that an MPI program has two completely different boundaries
+            stacked on top of each other, and they obey different rules. The outer boundary is between ranks. A rank is a
+            full operating-system process with its own address space, so nothing inside it is reachable from another rank
+            except through data you explicitly send. The inner boundary is between threads inside one rank. There the
+            familiar Rust concurrency model applies unchanged: shared references, <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code>,{" "}
+            <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Sync</code>, channels, and locks all mean
+            what they mean everywhere else. The diagram below is the shape worth memorizing before reading any further.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD
+  subgraph Cluster
+    subgraph Node0["Node 0"]
+      R0["Rank 0 process"]
+      R1["Rank 1 process"]
+    end
+    subgraph Node1["Node 1"]
+      R2["Rank 2 process"]
+      R3["Rank 3 process"]
+    end
+  end
+  R0 -. MPI messages .- R1
+  R1 -. MPI messages .- R2
+  R2 -. MPI messages .- R3
+  R0 --> T0["threads + owned slice"]
+  R3 --> T3["threads + owned slice"]`}
+            caption="Two boundaries: explicit messages between ranks (processes), ordinary Rust ownership between threads inside a rank."
+          />
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -296,7 +342,16 @@ export function PageCh32MpiAndHighPerformanceComputing() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">MPI concepts for Rust developers</h4>
+            <h4 className="font-semibold text-foreground mb-3">The three nouns every MPI program starts from</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              MPI has a large API surface, but almost everything is built from three ideas. A{" "}
+              <strong className="text-foreground">communicator</strong> is the group of processes that are allowed to talk
+              to each other. A <strong className="text-foreground">rank</strong> is one process&apos;s integer index inside
+              that group. The <strong className="text-foreground">size</strong> is how many ranks the group has. Every
+              partition decision in this chapter is just arithmetic on a rank and a size: rank 1 of 3 takes this slice,
+              rank 2 of 3 takes the next one. The cards below name the building blocks, and the snippet after them is the
+              opening of essentially every MPI program written with the Rust <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">mpi</code> crate.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {mpiConceptCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -305,7 +360,14 @@ export function PageCh32MpiAndHighPerformanceComputing() {
                 </div>
               ))}
             </div>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+            <p className="text-xs text-muted-foreground leading-5 mt-4 mb-1">
+              What to read for: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">initialize()</code> hands
+              back a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">universe</code> whose lifetime is
+              the MPI session, and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">rank</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">size</code> are the two numbers the rest
+              of your code branches on.
+            </p>
+            <pre className="mt-2 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{`use mpi::traits::*;
 let universe = mpi::initialize().unwrap();
 let world = universe.world();
@@ -315,7 +377,15 @@ let size = world.size();`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Processes vs threads</h4>
+            <h4 className="font-semibold text-foreground mb-3">Why ranks and threads are not the same tool</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              This is the distinction that most often trips up engineers arriving from a shared-memory background. Both
+              ranks and threads give you parallelism, so it is tempting to treat them interchangeably, but they solve
+              different problems and fail in different ways. Ranks give you more memory and more machines at the price of
+              having to move every shared byte explicitly. Threads give you cheap sharing at the price of having to reason
+              about exclusive mutation. A real cluster job almost always uses both, and the skill is keeping clear about
+              which one you are reaching for in any given line.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {processVsThreadCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -347,7 +417,14 @@ let size = world.size();`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Rust MPI crates</h4>
+            <h4 className="font-semibold text-foreground mb-3">Choosing a Rust MPI crate</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Rust does not ship its own MPI implementation, and it should not. MPI is a standard with several mature
+              implementations (Open MPI, MPICH, and vendor variants) that are tuned for specific interconnects and already
+              installed on the cluster. A Rust crate is a binding to whichever one is present, not a replacement for it.
+              That framing matters because it tells you where your real dependency lives: not in <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cargo.toml</code>,
+              but in the system library and launcher your job will actually link and run against.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {crateCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -365,13 +442,27 @@ let size = world.size();`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Data layout for MPI</h4>
+            <h4 className="font-semibold text-foreground mb-3">Why flat buffers win in MPI</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Data layout is the decision that quietly determines how hard everything else will be. MPI sends operate on
+              contiguous regions described by a starting pointer and a count, and so do the caches and the FFI boundary
+              into the system MPI library. A flat row-major buffer satisfies all three at once: a rank&apos;s rows are a
+              single slice, the send is one range, and the CPU walks memory in order. The moment you reach for a nested
+              structure such as a vector of vectors, you trade that single predictable buffer for many scattered
+              allocations, and every collective and every FFI call now has to reassemble what should have stayed
+              contiguous. The rules below are how to stay on the easy path.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {layoutRules.map((rule) => (
                 <li key={rule}>{rule}</li>
               ))}
             </ul>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+            <p className="text-xs text-muted-foreground leading-5 mt-4 mb-1">
+              The arithmetic that makes this work is one line: a cell&apos;s position in the flat buffer is{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">row * cols + col</code>, so a rank&apos;s
+              row range maps to a cell range by multiplying both ends by <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cols</code>.
+            </p>
+            <pre className="mt-2 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{`// row-major dense buffer
 offset = row * cols + col
 
@@ -382,7 +473,16 @@ end_cell   = end_row * cols`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Serialization and binary protocols</h4>
+            <h4 className="font-semibold text-foreground mb-3">When to serialize and when not to</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Rust&apos;s serialization story is excellent, and that is exactly why it is worth saying clearly where it does
+              not belong. A dense numeric exchange (an allreduce over a million doubles, repeated every iteration) should
+              move as raw <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">f64</code> bytes, because the
+              data already has a fixed shape and any envelope is pure overhead on the hottest path in the program. A control
+              message that says &quot;reconfigure to this topology&quot; runs once and benefits from a real schema. The
+              guideline below is just that split made explicit: match the ceremony of the payload to how often it crosses the
+              wire.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {serializationRules.map((rule) => (
                 <li key={rule}>{rule}</li>
@@ -397,7 +497,47 @@ end_cell   = end_row * cols`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Collective operations</h4>
+            <h4 className="font-semibold text-foreground mb-3">Collective operations and the shapes they make</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A collective is a single operation that every rank in a communicator calls together. The payoff over hand-rolled
+              sends and receives is twofold: far less boilerplate, and a synchronization contract the MPI implementation can
+              optimize as a whole (often using tree or ring algorithms you would not want to write by hand). The trick to
+              choosing among them is to picture the direction the data flows. Broadcast pushes one buffer out to everyone;
+              scatter splits one buffer into pieces; gather collects pieces back; reduce folds them into one value at the
+              root; allreduce folds them and hands the result back to everyone. The diagram makes those four shapes concrete.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Broadcast
+    B0["root"] --> B1["rank 1"]
+    B0 --> B2["rank 2"]
+    B0 --> B3["rank 3"]
+  end
+  subgraph Scatter
+    S0["root buffer"] --> S1["chunk 1"]
+    S0 --> S2["chunk 2"]
+    S0 --> S3["chunk 3"]
+  end`}
+              caption="Fan-out collectives: broadcast pushes one buffer to everyone, scatter splits one buffer into per-rank pieces."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The other two shapes run in the opposite direction, collecting data back toward the root:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Gather
+    G1["local 1"] --> G0["root buffer"]
+    G2["local 2"] --> G0
+    G3["local 3"] --> G0
+  end
+  subgraph Allreduce
+    A1["partial"] --> AS["sum"]
+    A2["partial"] --> AS
+    A3["partial"] --> AS
+    AS --> AB["every rank"]
+  end`}
+              caption="Fan-in collectives: gather collects pieces back to the root, allreduce folds them then redistributes the result to every rank."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {collectiveCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -409,7 +549,17 @@ end_cell   = end_row * cols`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Hybrid MPI plus threads</h4>
+            <h4 className="font-semibold text-foreground mb-3">Combining MPI ranks with per-rank threads</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The dominant production layout is not &quot;one rank per core.&quot; It is one rank per socket or per NUMA
+              domain, with each rank running a thread pool (Rayon, or plain threads) across the cores it owns. The reasoning
+              is economic: crossing the network is expensive, so you want as few ranks as the memory budget allows, and you
+              fill each rank&apos;s cores with cheap shared-memory parallelism. This gives you two ownership layers to keep
+              straight. Between ranks, ownership moves by message. Inside a rank, ownership is the ordinary Rust story of
+              owned chunks and scoped borrowed slices handed to the pool. The one configuration mistake that wrecks this is
+              oversubscription: if every rank spawns a full machine&apos;s worth of threads, the node thrashes on context
+              switches instead of computing.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {hybridCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -425,7 +575,16 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Profiling MPI programs</h4>
+            <h4 className="font-semibold text-foreground mb-3">Where the time actually goes</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The instinct from single-process work is to profile the arithmetic kernel, and in HPC that instinct is
+              frequently wrong. A collective is a barrier: it does not complete until the slowest rank arrives. So when a
+              profiler shows ranks blocked in an allreduce, that time is usually not the cost of the reduction itself, it is
+              the cost of one rank having more work to do than the others. The first question to ask of a slow cluster job is
+              therefore not &quot;which line is hot&quot; but &quot;are all the ranks finishing their local work at the same
+              time.&quot; Measure compute, packing, and time-blocked-in-collectives as three separate numbers, and look at
+              load imbalance before you touch the math.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {profilingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -437,7 +596,15 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Rust in HPC production environments</h4>
+            <h4 className="font-semibold text-foreground mb-3">What the cluster environment demands</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A surprising share of failed cluster jobs have nothing to do with the algorithm and everything to do with the
+              environment the job runs in. The binary must link against the same MPI family it launches against, the launcher
+              and scheduler have to agree on how many ranks go where, and logging has to survive the fact that there are now
+              many processes producing output at once. None of this is exotic, but it is easy to leave implicit until the
+              first run at scale fails in a way that single-machine testing never reproduced. The cards below name the
+              assumptions worth writing down before launch day.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {productionEnvironmentCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -447,17 +614,26 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
               ))}
             </div>
           </div>
+        </section>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Notes by background</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How to think about this coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            MPI predates Rust by decades and exists in C, C++, Fortran, and Python, so most readers arrive with some prior
+            model of either MPI or of parallelism in their home language. The useful question is not &quot;what is the Rust
+            API for X&quot; but &quot;what mental habit do I need to drop.&quot; Each card below is one such shift, not a
+            library cheat sheet.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -509,8 +685,10 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
               <div>
                 <h4 className="font-semibold text-foreground">Example 1: block partitioning for dense row-major work</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This is the partition math each MPI rank applies before touching its local rows. In a real MPI program,
-                  `rank` and `size` come from the communicator. The partition function itself stays the same.
+                  This is the partition math every MPI rank runs before it touches any data. In a real program{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">rank</code> and{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">size</code> come from the
+                  communicator; here they are constants so the example runs standalone. The function is identical either way.
                 </p>
               </div>
               {codes.mpi_partition_dense_rows !== DEFAULT_CODES.mpi_partition_dense_rows && (
@@ -524,6 +702,23 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">block_range</code> turns
+              the pair (rank, size) into a half-open row range, handing one extra row to each of the first few ranks so the
+              eight rows split as 3, 3, 2 instead of leaving a remainder stranded. Then{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">local_sum</code> converts that row range
+              into a cell range by multiplying by <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cols</code>{" "}
+              and sums only that slice. Follow the data through the three boxes below before reading the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  IN["rows=8, ranks=3, rank=1"] --> BR["block_range"]
+  BR --> P["range 3..6 (3 rows)"]
+  P --> CELLS["cells 9..18 = range x cols"]
+  CELLS --> SUM["local_sum over slice"]
+  SUM --> OUT["subtotal = 126.0"]`}
+              caption="Rank and size in, a contiguous row range out, then a slice sum on only this rank's rows."
+            />
             <RustCodeEditor
               code={codes.mpi_partition_dense_rows}
               onChange={(newCode) => updateCode("mpi_partition_dense_rows", newCode)}
@@ -564,8 +759,10 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
               <div>
                 <h4 className="font-semibold text-foreground">Example 2: counts, displacements, and collective-friendly layout</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Many scatter and gather bugs reduce to getting one small table wrong. Keep counts in rows if that is
-                  the algorithm, and convert to cells or bytes only when the collective boundary expects it.
+                  A scatter or gather needs two parallel tables: how many elements go to each rank, and at what offset each
+                  rank&apos;s slice begins. Most scatter and gather bugs are simply one of these tables computed in the wrong
+                  unit. The discipline is to keep counts in the unit the algorithm thinks in (rows) and convert to the unit
+                  the collective wants (cells) at exactly one place.
                 </p>
               </div>
               {codes.mpi_collective_counts_and_allreduce !== DEFAULT_CODES.mpi_collective_counts_and_allreduce && (
@@ -579,6 +776,24 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">row_counts</code> answers
+              the load question in rows (10 rows over 3 ranks becomes 4, 3, 3). Then{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">displacements_in_cells</code> walks those
+              counts once, multiplying by <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cols</code> to
+              produce the per-rank starting offset a real scatter would consume. The final allreduce is a separate fan-in
+              that hands every rank the same total. The diagram traces those two tables and the reduction.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD
+  RC["row_counts: 4, 3, 3"] --> D["displacements_in_cells (x cols)"]
+  D --> DI["offsets: 0, 16, 28"]
+  DI --> SC["scatter slices to ranks"]
+  SC --> LC["each rank computes a partial"]
+  LC --> AR["allreduce sum"]
+  AR --> ALL["same total on every rank"]`}
+              caption="Counts in rows, displacements in cells, then a scatter feeds local work that an allreduce folds back together."
+            />
             <RustCodeEditor
               code={codes.mpi_collective_counts_and_allreduce}
               onChange={(newCode) => updateCode("mpi_collective_counts_and_allreduce", newCode)}

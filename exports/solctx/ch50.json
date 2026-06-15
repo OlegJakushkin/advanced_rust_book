@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch50",
+ "num": 50,
+ "title": "libp2p and Peer-to-Peer Rust Systems",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Model one tiny P2P protocol as events and state transitions",
+   "objective": "Practice designing a peer protocol as owned events and explicit state transitions before any real sockets or crates appear.",
+   "starterPrompt": "Design a minimal sync protocol where a node discovers a peer, opens a connection, sends one state request, receives one state summary, and later observes one gossip update.",
+   "prompts": [
+    "Which events belong to the network edge and which commands belong to local application logic?",
+    "Which peer or request IDs must be carried through the state machine?",
+    "Which state transitions add pending work and which clear it?",
+    "What should the node record so another engineer can replay the same sequence in a deterministic test?"
+   ],
+   "acceptanceCriteria": [
+    "You separate local commands from inbound network events clearly.",
+    "You include at least one pending-request or connected-peer state transition.",
+    "You identify at least one stable correlation field such as peer ID or request ID.",
+    "You explain the design in terms of owned events rather than shared mutable transport access."
+   ],
+   "hints": [
+    "A protocol loop is usually easier to test when every event is a plain value.",
+    "If the state change is important in production, it should have a name in the model."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Identify ownership and async-task boundaries in a swarm loop",
+   "objective": "Read a libp2p-style event loop and explain who owns the swarm, who owns application state, and what moves through channels or tasks.",
+   "starterPrompt": "You inherit a node that stores the swarm behind a broad shared lock while several unrelated tasks mutate protocol state and write directly to transport handles.",
+   "prompts": [
+    "Which part of the system should own the swarm loop directly?",
+    "Which data should cross boundaries as owned commands or events instead of as shared references?",
+    "Which path becomes easier to reason about once one writer owns outbound transport effects?",
+    "What cancellation or shutdown bug becomes more likely when many tasks all think they own the connection state?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one owner for the swarm and one owner for application state explicitly.",
+    "You propose owned messages or commands at one async or channel boundary.",
+    "You connect the answer to shutdown, ordering, or duplicate-state risk rather than only to syntax taste."
+   ],
+   "hints": [
+    "The broad shared lock is often compensating for a missing ownership boundary.",
+    "One event loop with owned inputs is usually calmer than many tasks with partial transport authority."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Build a small libp2p-style swarm loop over owned enums",
+   "objective": "Implement one small event loop that records connected peers, tracks one pending request map, and clears state on response.",
+   "starterPrompt": "Create `PeerId`, `Event`, and `SwarmState`, then handle a connect, request, and response sequence with no real networking required.",
+   "prompts": [
+    "Keep the owner as one plain Rust struct.",
+    "Use one map keyed by request ID for pending work.",
+    "Use one small log or event queue for observability.",
+    "Do not use `Rc`, `RefCell`, or raw pointers for the main design."
+   ],
+   "acceptanceCriteria": [
+    "The event loop keeps one central owner for protocol state.",
+    "Requests create pending entries and responses clear them.",
+    "The runnable lab prints the expected connected count, pending count, and final log line.",
+    "The code is plausible Rust and easy to test without a live network."
+   ],
+   "hints": [
+    "This is the same ownership story many real libp2p nodes want internally.",
+    "A pending-request map is often the simplest way to make response handling honest."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair peer discovery with abuse controls and observability",
+   "objective": "Turn an unbounded peer-discovery feature into one that has explicit limits, dedupe, and telemetry before it melts under hostile or noisy inputs.",
+   "starterPrompt": "A discovery subsystem accepts every advertised peer, queues unlimited dials, and emits no metric for dial failure, relay fallback, or duplicate discovery.",
+   "prompts": [
+    "Where should dedupe live: known peer set, pending dial set, or both?",
+    "Which queue or dial-attempt budgets should be explicit?",
+    "Which peer records should be rejected before expensive work happens?",
+    "What metrics or logs should exist before the feature rolls to production?"
+   ],
+   "acceptanceCriteria": [
+    "You add or propose at least one dedupe boundary and one explicit budget.",
+    "You identify one cheap validation step that should run before expensive dial or allocation work.",
+    "You mention at least two observability hooks such as dial failure count, relay usage, or oldest pending dial age.",
+    "You explain one test or simulation case for the repair."
+   ],
+   "hints": [
+    "Discovery is both a correctness problem and a resource-exhaustion problem.",
+    "If you do not measure relay fallback, you may not know the network is degraded until users tell you."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design NAT traversal, relay fallback, and connectivity telemetry",
+   "objective": "Choose a realistic connectivity policy for peers that do not all live on public routable networks.",
+   "starterPrompt": "You are deploying a peer mesh across laptops, cloud VMs, and branch-office devices. Some peers can accept inbound dials, some cannot, and relay capacity is limited.",
+   "prompts": [
+    "Which peers should try direct dial first, and when should they fall back to a relay?",
+    "Which metrics should prove whether relay usage is becoming the default path accidentally?",
+    "How would you decide the lease or retry policy for repeated failed direct dials?",
+    "What operator dashboard fields would you require before rollout?"
+   ],
+   "acceptanceCriteria": [
+    "You define one direct-dial path and one relay fallback path explicitly.",
+    "You mention at least one retry or budget rule for failed connectivity attempts.",
+    "You include at least three observability hooks such as hole-punch success, relay usage, dial failure rate, or oldest queued outbound connection.",
+    "You keep the explanation grounded in product and network shape rather than generic P2P enthusiasm."
+   ],
+   "hints": [
+    "A relay is a useful escape hatch and a dangerous silent default.",
+    "Connectivity budgets matter before application throughput budgets do."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose P2P vs brokered messaging, gRPC, or HTTP for one product",
+   "objective": "Defend whether a given product boundary really benefits from P2P instead of from a more centralized transport.",
+   "starterPrompt": "Your team is building a collaborative edge cache, a public billing API, and an internal durable task pipeline. Choose the primary communication model for each and justify the choice.",
+   "prompts": [
+    "Which path truly benefits from direct peer identity and partial decentralization?",
+    "Which path wants durable replay and queue semantics instead of mesh connectivity?",
+    "Which path wants typed service RPC or plain HTTP rather than overlay routing?",
+    "Would any of the systems benefit from a hybrid model, and where would the boundary split?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one case for P2P and at least one case against it with a clear reason.",
+    "You include at least one hybrid design where control plane and data plane use different transports.",
+    "You explain the choice in terms of durability, topology, or operational cost rather than only in terms of implementation style."
+   ],
+   "hints": [
+    "P2P is not the advanced answer to every network problem.",
+    "Hybrid is often the calm senior answer when topology and durability pull in different directions."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why do owned events and commands make a swarm loop easier to test than shared transport state does?",
+  "What is the practical difference between peer identity, channel security, and application-level authorization?",
+  "Why are NAT traversal and relay fallback product concerns instead of networking trivia?",
+  "When is a deterministic scalar version plus tie-break rule enough for sync, and when is it too weak?",
+  "What signs tell you a product really wants P2P instead of a broker or service API?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Swarm loop with owned events",
+  "filename": "swarm_loop_lab.rs",
+  "runKey": "ch50_ex_swarm_loop",
+  "expectedOutput": "connected = 1\npending = 0\nlast = response peer-b state-v3",
+  "initialCode": "use std::collections::{HashMap, VecDeque};\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]\nstruct PeerId(&'static str);\n\n#[derive(Debug, Clone)]\nenum Event {\n    Connected(PeerId),\n    Request {\n        peer: PeerId,\n        id: u64,\n    },\n    Response {\n        peer: PeerId,\n        id: u64,\n        body: String,\n    },\n}\n\n#[derive(Debug, Default)]\nstruct SwarmState {\n    connected: Vec<PeerId>,\n    pending: HashMap<u64, PeerId>,\n    log: VecDeque<String>,\n}\n\nimpl SwarmState {\n    fn on_event(&mut self, event: Event) {\n        match event {\n            Event::Connected(peer) => {\n                self.connected.push(peer);\n            }\n            Event::Request { peer, id } => {\n                self.pending.insert(id, peer);\n                self.log.push_back(format!(\"request {}\", id));\n            }\n            Event::Response { peer, id, body } => {\n                // repair this branch\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut state = SwarmState::default();\n    let peer = PeerId(\"peer-b\");\n\n    state.on_event(Event::Connected(peer));\n    state.on_event(Event::Request { peer, id: 7 });\n    state.on_event(Event::Response {\n        peer,\n        id: 7,\n        body: String::from(\"state-v3\"),\n    });\n\n    println!(\"connected = {}\", state.connected.len());\n    println!(\"pending = {}\", state.pending.len());\n    println!(\"last = {}\", state.log.back().map(String::as_str).unwrap_or(\"none\"));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 25, 30, 31, 38, 43, 47, 48, and 49",
+  "Opening scenario",
+  "Mental model",
+  "How this lands by background",
+  "Core concepts",
+  "The layers a peer connection is built from",
+  "How a libp2p node is wired in Rust: swarm, behaviours, and events",
+  "Two protocol shapes: a question to one peer, or news for many",
+  "Reaching a peer: discovery, NAT, and the relay fallback ladder",
+  "Security: knowing the peer is not the same as trusting the request",
+  "State synchronization and conflict handling",
+  "Observability, testing, and simulation for P2P networks",
+  "When to choose P2P vs client-server, message brokers, or distributed task queues",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: the swarm loop as one owner with two entry points",
+  "Example 2: merging conflicting updates with one deterministic rule",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Peer-to-peer systems need one controlled swarm loop, explicit protocols, connectivity policy, identity management, and convergence rules. This chapter covers libp2p from those production requirements.",
+  "Chapter 25 covered Tokio task boundaries. Chapter 30 covered brokered delivery and replay. Chapter 31 covered distributed task execution. Chapter 38 covered Merkle-based verification. Chapter 43 covered observability. Chapter 47 covered gRPC transport contracts. Chapter 48 covere",
+  "A field-deployed coordination system must keep exchanging state when nodes lose their link to a central server or sit behind restrictive home and carrier networks. There is no broker to lean on and no single endpoint everyone dials. Each node has to find peers on its own, prove w",
+  "That last phrase is the design constraint that matters. The temptation is to spread network state across many objects and let callbacks mutate it from everywhere. The calmer shape is a single loop: it waits on two sources — commands coming down from your application, and events c",
+  "The select! below is the loop in the diagram. The two arms are the two arrows into the loop: one drains application commands, the other drains network events. Both hand their value to a function that takes &mut node.state, so there is exactly one owner of the state and no shared-",
+  "The exact libp2p Rust APIs evolve over time, and crate method names will not match this sketch line for line. The architecture is far more stable than the names: one swarm owns the network edge, behaviours own protocol state, and your application translates owned commands and own",
+  "Before any code, three corrections clear up most early confusion. The word &ldquo;peer-to-peer&rdquo; suggests a single clever socket that magically connects everyone; it is really a stack of separate protocols you assemble on purpose. The word &ldquo;libp2p&rdquo; suggests one c",
+  "P2P work pulls hard on instincts you already have, and some of those instincts help while others quietly mislead. The useful question is not which crate maps to which library; it is where each language taught you to put trust, and how that placement has to move in Rust. Read the ",
+  "A single connection to a peer is not one thing; it is a short stack of concerns, each solving a different problem, layered in a fixed order. You establish who the peer is, you pick a path for the bytes, you upgrade that path to an encrypted channel, and only then do you split it ",
+  "The Rust libp2p design has one organising idea worth getting right early. The swarm is the outer machine that owns connections and does the polling; it does not understand your protocols. Each protocol — identify, discovery, request-response, pub-sub — lives in its own behaviour,",
+  "One useful correction for engineers coming from framework-heavy networking is this: the swarm is not your business object, and a behaviour is not your whole node. Keep network orchestration and domain state separate so tests can drive protocol state machines without real sockets ",
+  "Almost every peer interaction is one of two shapes, and they have different contracts. Request-response is a question put to one named peer that expects exactly one bounded answer: fetch a state summary, ask for a chunk, pull one slice of work. Its contract is correlation (matchi",
+  "Side by side, the other shape sends one message to many peers at once:",
+  "The request-response message types below are deliberately small. Notice that the request carries only what the peer on the wire needs to act — a known version, a root hash, an index — and that Reject is a first-class response, not an exception. A transport message should answer o",
+  "On a laptop demo, dialing a peer is one step that always succeeds. On real networks it is a ladder of attempts, because most users sit behind NAT that refuses unsolicited inbound connections. A node first tries to dial the peer directly. If that fails, it can attempt hole punchin",
+  "In a P2P system the attacker is on the inside: any peer can connect, and a valid cryptographic identity only tells you who is sending bytes, not that the bytes are safe to act on. Identity, signed records, and channel encryption each solve one narrow problem and none of them vali",
+  "“Authenticated channel” and “safe application request” are separate claims. Keep size checks, rate limits, and protocol authorization even when the remote peer is cryptographically identified.",
+  "The right answer is often hybrid. A system can use HTTP or gRPC for control plane, a broker for durable work and replay, and libp2p only where peer discovery, direct data exchange, or partial decentralization are real product requirements. The point is to choose from workload sha",
+  "The most expensive P2P bug is often not a bad packet decode. It is an under-specified operational model: no NAT fallback, no bounded queues, no replay-safe sync semantics, or no way to explain a failure once the network becomes partially partitioned.",
+  "The interactive examples stay self-contained and compile as ordinary Rust without a live network. That keeps the ownership model stable even if libp2p crate APIs evolve. Treat them as libp2p-style protocol loops and state machines rather than as copy-paste setup code.",
+  "One owner, SwarmState, keeps all protocol state. Commands and inbound network events are owned enums that can cross async or channel boundaries.",
+  "What to look at: the state machine has exactly two doors, on_command and on_event, and both take &mut self — the same single-owner shape as the loop at the top of the chapter. Follow one request through: SendRequest records the request id in pending_requests, and the matching Res",
+  "The swarm-state owner holds the maps and queues. Commands and events move in as owned values.",
+  "Pending requests live in one map and are removed only when the matching response arrives.",
+  "The loop records network events in one application log without requiring a live transport to teach the idea.",
+  "This example is intentionally modest: pick the highest version, then break ties deterministically by author. In real systems you may need stronger CRDT, log, or Merkle-based semantics.",
+  "What to look at: merge_peer_updates folds the updates through pick_newer, so the whole merge is just that one comparison applied repeatedly. The comparison is the contract every peer must share: higher version wins; on an equal version, the larger author string wins. Trace the in",
+  "A tie-break rule is part of the sync contract. Two peers need the same merge rule to converge.",
+  "Scalar versions and peer-ID ordering are simple and often insufficient once true concurrent edits matter.",
+  "This is the right place to ask whether your real workload wants logs, CRDTs, or Merkle diffing instead."
+ ],
+ "codeSamples": {
+  "libp2p_swarm_state_machine": "use std::collections::{BTreeSet, HashMap, VecDeque};\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\nstruct PeerId(&'static str);\n\n#[derive(Debug, Clone)]\nenum LocalCommand {\n    Dial(PeerId),\n    SendRequest {\n        peer: PeerId,\n        request_id: u64,\n        body: String,\n    },\n    Publish {\n        topic: &'static str,\n        body: String,\n    },\n}\n\n#[derive(Debug, Clone)]\nenum NetworkEvent {\n    ConnectionEstablished(PeerId),\n    Response {\n        peer: PeerId,\n        request_id: u64,\n        body: String,\n    },\n    Gossip {\n        peer: PeerId,\n        topic: &'static str,\n        body: String,\n    },\n}\n\n#[derive(Debug, Default)]\nstruct SwarmState {\n    connected: BTreeSet<PeerId>,\n    pending_requests: HashMap<u64, PeerId>,\n    log: VecDeque<String>,\n}\n\nimpl SwarmState {\n    fn on_command(&mut self, command: LocalCommand) {\n        match command {\n            LocalCommand::Dial(peer) => {\n                self.log.push_back(format!(\"dial {}\", peer.0));\n            }\n            LocalCommand::SendRequest {\n                peer,\n                request_id,\n                body,\n            } => {\n                self.pending_requests.insert(request_id, peer);\n                self.log.push_back(format!(\"request {} {}\", peer.0, body));\n            }\n            LocalCommand::Publish { topic, body } => {\n                self.log.push_back(format!(\"publish {} {}\", topic, body));\n            }\n        }\n    }\n\n    fn on_event(&mut self, event: NetworkEvent) {\n        match event {\n            NetworkEvent::ConnectionEstablished(peer) => {\n                self.connected.insert(peer);\n                self.log.push_back(format!(\"connected {}\", peer.0));\n            }\n            NetworkEvent::Response {\n                peer,\n                request_id,\n                body,\n            } => {\n                self.pending_requests.remove(&request_id);\n                self.log.push_back(format!(\"response {} {}\", peer.0, body));\n            }\n            NetworkEvent::Gossip { peer, topic, body } => {\n                self.log\n                    .push_back(format!(\"gossip {} {} {}\", topic, peer.0, body));\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut swarm = SwarmState::default();\n    let peer = PeerId(\"peer-b\");\n\n    swarm.on_command(LocalCommand::Dial(peer));\n    swarm.on_event(NetworkEvent::ConnectionEstablished(peer));\n    swarm.on_command(LocalCommand::SendRequest {\n        peer,\n        request_id: 7,\n        body: String::from(\"want-state\"),\n    });\n    swarm.on_event(NetworkEvent::Response {\n        peer,\n        request_id: 7,\n        body: String::from(\"state-v3\"),\n    });\n    swarm.on_event(NetworkEvent::Gossip {\n        peer,\n        topic: \"heads\",\n        body: String::from(\"tip=9\"),\n    });\n\n    println!(\"connected = {}\", swarm.connected.len());\n    println!(\"pending = {}\", swarm.pending_requests.len());\n    println!(\n        \"last = {}\",\n        swarm.log.back().map(String::as_str).unwrap_or(\"none\")\n    );\n}",
+  "libp2p_state_sync_conflicts": "#[derive(Debug, Clone, PartialEq, Eq)]\nstruct VersionedValue {\n    version: u64,\n    author: &'static str,\n    value: String,\n}\n\nfn pick_newer(local: VersionedValue, remote: VersionedValue) -> VersionedValue {\n    if remote.version > local.version {\n        remote\n    } else if remote.version < local.version {\n        local\n    } else if remote.author > local.author {\n        remote\n    } else {\n        local\n    }\n}\n\nfn merge_peer_updates(\n    current: VersionedValue,\n    updates: Vec<VersionedValue>,\n) -> VersionedValue {\n    updates.into_iter().fold(current, pick_newer)\n}\n\nfn main() {\n    let current = VersionedValue {\n        version: 3,\n        author: \"peer-a\",\n        value: String::from(\"allow-read\"),\n    };\n\n    let merged = merge_peer_updates(\n        current,\n        vec![\n            VersionedValue {\n                version: 4,\n                author: \"peer-b\",\n                value: String::from(\"allow-write\"),\n            },\n            VersionedValue {\n                version: 4,\n                author: \"peer-c\",\n                value: String::from(\"allow-write+audit\"),\n            },\n        ],\n    );\n\n    println!(\"version = {}\", merged.version);\n    println!(\"author = {}\", merged.author);\n    println!(\"value = {}\", merged.value);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,148 +1,165 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "FFI is a compiler boundary, not a style preference",
-    body: "Rust and C++ do not share one stable language ABI. A production interop layer is therefore a contract boundary: calling convention, layout, ownership, lifetime, and unwind policy must all be stated explicitly.",
+    title: "The boundary is a binary contract the compiler does not check for you",
+    body: "Inside one Rust crate the compiler verifies ownership, lifetimes, layout, and that every path either returns or unwinds correctly. None of that survives a call across the language boundary. Rust and C++ do not share one stable language-level ABI, so the moment a symbol is called from foreign code the only things both sides agree on are the bytes in registers and on the stack. Calling convention, struct layout, who frees what, how long a pointer stays valid, and what happens on failure all become a contract you write down by hand and that nothing automatically enforces. Treat the seam the way you would treat a published wire format, not an internal function call.",
   },
   {
-    title: "The calm default is a narrow C ABI seam",
-    body: "Even when the far side is C++, the most stable public seam is usually C ABI plus explicit wrappers. Direct C++ interop can be excellent when both sides are curated together, but raw C++ object layout and exceptions are not a portable ABI story.",
+    title: "A narrow C ABI seam is the calm default, even when the far side is C++",
+    body: "C++ has no portable object ABI: name mangling, vtable layout, exception tables, and standard-library types differ across compilers, versions, and even build flags. The C ABI, by contrast, is the one calling convention every toolchain on a platform already agrees on. So the most durable public seam is almost always a small set of plain C functions, with the C++ richness kept on the far side of that shim. Direct C++ interop through a tool like cxx is genuinely good when you control and build both sides together, but reaching for raw C++ layout and exceptions as your stable contract is how integrations break on the next compiler upgrade.",
   },
   {
-    title: "Ownership must be flattened into buffers, handles, and free functions",
-    body: "Rust references, `String`, `Vec<T>`, `Result`, trait objects, and panics are great inside Rust. At the foreign edge, they usually become raw pointers, lengths, status codes, opaque handles, and explicit destruction functions.",
+    title: "Rust's expressive types stop at the edge and become pointers, lengths, and handles",
+    body: "References, String, Vec, Result, trait objects, generics, and panics are the vocabulary you use inside Rust, and you should keep using them right up to the wrapper. At the foreign edge they do not translate: a slice becomes a raw pointer plus a length, an owned string becomes a pointer paired with an explicit free function, an owned object becomes an opaque handle, and a Result becomes an integer status code. The skill is not avoiding the rich types; it is flattening them into address-shaped tokens exactly at the seam and rebuilding the rich model the instant control crosses back into safe Rust.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You already know RAII, object layout risk, and the pain of ABI drift across compiler settings. Rust helps by making the unsafe boundary explicit, but the calm design is still the same: keep the seam small, flatten ownership, and treat unwinding as radioactive at the boundary.",
+    body: "You already live with ABI drift across compiler flags, fragile vtable layouts, and the rule that exceptions must not cross a C boundary, so most of this chapter will feel familiar. The shift is that Rust makes the boundary itself a visible language feature: the unsafe blocks, the repr(C) annotations, and the extern declarations are where the contract is, and the compiler holds the safe Rust behind them honest. The calm design is the one you already know from your most disciplined C interfaces, just enforced rather than reviewed: small seam, flattened ownership, no unwinding across the line.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of automatic marshalling and more in terms of explicit contracts. Rust does not assume a managed runtime will rescue lifetime or exception mismatches. The wrapper layer must state them directly.",
+    body: "P/Invoke trained you to expect the runtime to marshal strings, pin buffers, and translate exceptions for you. Rust has no managed runtime standing by, so none of that marshalling is implicit. You decide explicitly when bytes are copied, who owns a buffer for how long, and how a failure becomes a status code, and the type system makes those decisions appear as ordinary parameters and return values rather than attributes on a DllImport. More ceremony up front, but the lifetime and exception assumptions are written down instead of trusted.",
   },
   {
     title: "Go background",
-    body: "The closest comparison is cgo discipline: the foreign edge wants explicit ownership and clear data movement. Rust goes further by making aliasing and panic rules part of the type and unsafe model.",
+    body: "The nearest reference point is cgo discipline: the foreign edge wants explicit ownership, clear data movement, and a hard stop on Go- isms leaking across. Rust pushes the same idea further by making aliasing and panic policy part of the type system and the unsafe model, not a convention you remember to follow. There is no garbage collector to keep a pointer alive across the boundary, so a value handed to foreign code must have its lifetime modelled deliberately as a handle or a copied buffer.",
+  },
+  {
+    title: "Python background",
+    body: "ctypes and cffi let you describe a C function in a few lines and call it from a dynamic, garbage-collected world, and the binding layer hides most of the lifetime and error mechanics. Rust removes that cushion: there is no interpreter owning object lifetime, so you state ownership and validity at the seam yourself. The upside is that the same explicitness which feels heavier than a cffi declaration is exactly what lets the Rust wrapper be a safe, ordinary library to the rest of your code instead of a thin layer of raw pointers you must remember to handle carefully.",
   },
 ]
 
 const ffiFundamentals = [
-  "Use `extern \"C\"` to pin the calling convention at the seam.",
-  "Use `#[repr(C)]` on shared structs whose layout must be understood by foreign code.",
-  "Keep the foreign edge `unsafe` from Rust's point of view, then rebuild a smaller safe wrapper on the Rust side.",
-  "Prefer fixed-width integers, raw pointers, lengths, and status codes at the ABI surface.",
+  {
+    title: "Pin the calling convention with extern \"C\"",
+    body: "Rust's default ABI is unspecified and free to change between compiler versions; foreign code cannot call into it reliably. Marking a function extern \"C\" pins it to the platform's stable C calling convention so another toolchain knows exactly how to pass arguments and read the return value. The same keyword on a declaration block tells Rust how to call out to a foreign symbol.",
+  },
+  {
+    title: "Pin layout with repr(C) on shared structs",
+    body: "Rust reserves the right to reorder, pad, and pack struct fields however it likes, which is fine until that struct's bytes have to be understood by C or C++. Annotating it #[repr(C)] forces the predictable C field order and padding so both sides agree on offsets. Without it, a struct that compiles cleanly on both sides can still disagree about where each field lives.",
+  },
+  {
+    title: "Keep the unsafe edge thin, then wrap it",
+    body: "Every foreign call and every raw-pointer dereference is unsafe from Rust's point of view, because the compiler can no longer prove the invariants. The discipline is to confine that unsafety to one small layer that states its assumptions, then expose a normal safe Rust API on top. The rest of the codebase should never touch the raw symbols directly.",
+  },
+  {
+    title: "Speak in plain machine types at the surface",
+    body: "The ABI surface should use fixed-width integers, raw pointers, explicit lengths, and integer status codes rather than clever language-level types. These have an unambiguous representation that any compiler agrees on, which is exactly what a contract between two languages needs. Save the expressive types for the safe layer just behind the seam.",
+  },
 ]
 
 const cAbiBoundaryRules = [
-  "Do not export Rust references like `&T`, `&mut T`, `&str`, or slices directly as a public C ABI contract.",
-  "Do not export `String`, `Vec<T>`, `Box<T>`, trait objects, generics, or `Result<T, E>` as foreign-facing ABI surface types.",
-  "For the most conservative status boundary, prefer integer status codes over Rust enums unless the exact layout contract is pinned and audited.",
-  "When the far side is C++, remember that raw C++ class ABI is not portable across all compilers and standard libraries. A C shim is often the calmer seam.",
+  "Do not export Rust references such as &T, &mut T, &str, or slices as a public C ABI contract. They encode aliasing and lifetime promises that have no C representation; flatten them to a raw pointer plus a length instead.",
+  "Do not export String, Vec, Box, trait objects, generics, or Result as foreign-facing types. Their layout is a Rust implementation detail, not a stable contract, and a fat pointer or an enum discriminant means nothing to another compiler.",
+  "Prefer integer status codes over Rust enums at the most conservative boundaries. An enum can cross the seam only if its repr and discriminant values are pinned and audited; an integer convention needs no such ceremony.",
+  "Remember that the raw C++ class ABI is not portable across compilers and standard libraries. Even when the far side is C++, a small C shim usually gives you a smaller, more stable contract than exposing C++ types directly.",
 ]
 
 const ownershipCards = [
   {
     title: "Borrowed input buffers",
-    body: "Use `*const T` plus `len` when the caller owns the memory and Rust only needs a temporary read-only view during the call.",
+    body: "Pass a const pointer plus a length when the caller owns the memory and Rust only needs a temporary read-only view for the duration of the call. Nothing is allocated or freed across the seam; Rust reconstructs a slice, reads it, and forgets the pointer when the call returns.",
   },
   {
     title: "Caller-allocated output buffers",
-    body: "Use `*mut T` plus capacity when the caller owns storage and Rust fills it. Return a status code and, if needed, a written-length out parameter.",
+    body: "Pass a mutable pointer plus a capacity when the caller owns the storage and Rust fills it. Return a status code, and where the amount written can vary, a written-length out parameter so the caller knows how much of its buffer is valid.",
   },
   {
     title: "Callee-owned opaque handles",
-    body: "Use `*mut OpaqueType` plus explicit `new` and `free` functions when Rust should own an object across calls. Treat the pointer as an opaque token on the foreign side.",
+    body: "Hand back a pointer to an opaque type paired with explicit new and free functions when Rust should own an object across several calls. The foreign side treats the pointer as a token it passes back in and never dereferences, which lets you change the internals freely.",
   },
   {
     title: "Owned strings across the seam",
-    body: "If Rust allocates a string for foreign code, pair the returned pointer with one explicit free function. If the foreign side provides a string, accept a C string pointer or explicit bytes plus length and validate at the edge.",
+    body: "If Rust allocates a string for foreign code, return the pointer together with exactly one free function so the same allocator releases it. If the foreign side supplies a string, accept a C string pointer or explicit bytes plus length and validate it at the edge before trusting it.",
   },
 ]
 
 const errorHandlingCards = [
   {
     title: "Status codes",
-    body: "The most portable pattern is `0 = ok, nonzero = failure` with documented meanings. This is boring, and boring is good at ABI boundaries.",
+    body: "The most portable pattern is zero for success and a distinct nonzero value per failure mode, each with a documented meaning. It is boring, and boring is exactly what you want for a contract two compilers have to agree on for years.",
   },
   {
     title: "Out parameters",
-    body: "Return complex success data through caller-provided output pointers or buffers after validating nullability and capacity.",
+    body: "Deliver the successful payload through caller-provided output pointers or buffers, written only after you have validated nullability and capacity. The return value stays reserved for the status, and the data travels through storage the caller already owns.",
   },
   {
     title: "Structured error payloads",
-    body: "When an integration needs richer diagnostics, return a status plus an error buffer, or expose a separate function to inspect the last error on an opaque handle.",
+    body: "When an integration needs richer diagnostics than a single integer, return a status plus an error buffer the caller can read, or expose a separate function that reports the last error recorded on an opaque handle.",
   },
   {
-    title: "No `Result` across FFI",
-    body: "Keep `Result<T, E>` inside Rust. Translate it at the seam into a C-facing status contract another compiler can understand.",
+    title: "No Result across the seam",
+    body: "Keep Result inside Rust, where it is checked and ergonomic. At the boundary, collapse it into the C-facing status contract, and reconstruct a Result on the other side the moment a foreign status is read back into safe Rust.",
   },
 ]
 
 const unwindRules = [
-  "Do not let a Rust panic unwind into C or C++ code.",
-  "Do not let a C++ exception enter Rust frames unless you have a deliberately designed specialized boundary and a toolchain contract that supports it.",
-  "The conservative production rule is simpler: normalize both sides to no cross-language unwinding at all.",
-  "If the Rust side must survive panics, catch at the outer exported function and translate to a status code or abort policy explicitly.",
+  "Never let a Rust panic unwind into C or C++ frames. Unwinding past a frame the other language does not know how to clean up is undefined behavior, and the crash will usually surface far from the line that caused it.",
+  "Do not let a C++ exception propagate into Rust frames either, unless you have a deliberately designed specialized boundary and a toolchain contract that supports it. A foreign exception tearing through Rust stack frames has the same undefined character in reverse.",
+  "The conservative production rule is the simplest one to operate: allow no cross-language unwinding at all. Each side absorbs its own failures and the boundary only ever carries values, never an in-flight unwind.",
+  "If the Rust side can panic, catch it at the outer exported function with catch_unwind and translate the result into a status code or a deliberate abort. A panic policy that lives only in a comment is not a policy.",
 ]
 
 const ecosystemCards = [
   {
     title: "bindgen",
-    body: "Use `bindgen` when headers already exist and the primary job is to generate Rust declarations from a C or C-like surface. Then wrap the raw layer in narrower Rust APIs.",
+    body: "Reach for bindgen when headers already exist and the job is to generate Rust declarations from a C or C-like surface. It reads the header and emits the raw extern declarations; you then wrap that raw layer in narrower, safe Rust APIs rather than exposing it as your library's interface.",
   },
   {
     title: "cxx",
-    body: "Use `cxx` when you control both sides and want a more curated Rust/C++ bridge with supported types and an explicit shared bridge module instead of a raw universal header dump.",
+    body: "Reach for cxx when you control both sides and want a curated Rust/C++ bridge rather than a raw header dump. You declare a shared bridge module listing exactly the types and functions that cross, and cxx generates matching glue for both languages with a supported, checked set of types.",
   },
   {
     title: "autocxx",
-    body: "Use `autocxx` when the C++ surface is larger and you want more automation on top of generated bindings. Keep auditing discipline; generated surface area is still surface area.",
+    body: "Reach for autocxx when the C++ surface is large enough that hand-writing a cxx bridge is impractical and you want more automation on top of generated bindings. The automation helps, but generated surface area is still surface area you have promised to keep working, so the auditing discipline does not go away.",
   },
 ]
 
 const abiStabilityRules = [
-  "Rust's native ABI is not the thing you publish to C or C++ callers.",
-  "Pin layout with `#[repr(C)]` where shared structs cross the seam.",
-  "Prefer fixed-width integer types and explicit pointer-plus-length contracts over clever language-level types.",
-  "Version functions, structs, or envelopes when the contract evolves. Do not redefine field meaning in place and hope mixed deployments stay kind.",
-  "Hide internal Rust data structures behind opaque handles when you want freedom to change internals later.",
+  "Rust's native ABI is not the thing you publish. What callers depend on is the C ABI you deliberately expose, so the stability conversation is about that surface, not about Rust's internal representation choices.",
+  "Pin layout with #[repr(C)] everywhere a shared struct crosses the seam, and treat any change to field order, type, or size as a breaking change to a binary contract.",
+  "Prefer fixed-width integer types and explicit pointer-plus-length contracts over clever language-level types, because the boring representation is the one that stays valid across compilers and versions.",
+  "Version functions, structs, or envelopes when the contract evolves. Add a new symbol or a versioned struct rather than redefining a field in place and hoping mixed-version deployments stay kind.",
+  "Hide internal Rust data structures behind opaque handles when you want freedom to change internals later. If callers only ever hold an address-shaped token, you can rewrite everything behind it without touching the ABI.",
 ]
 
 const testingChecklist = [
-  "Unit test the safe Rust wrapper separately from the raw ABI layer.",
-  "Add at least one direct foreign-caller integration test or harness in CI for exported symbols.",
-  "Test null pointers, zero lengths, oversized lengths, and free-after-free or double-free defenses where the contract requires them.",
-  "Run sanitizers on the native boundary where possible: AddressSanitizer, UndefinedBehaviorSanitizer, and ThreadSanitizer are often worth the setup cost.",
-  "Use Miri for Rust-side undefined-behavior checks inside the wrapper logic, with the understanding that arbitrary foreign code is outside Miri's world.",
-  "Fuzz the boundary if the seam parses attacker-controlled bytes or strings.",
+  "Unit test the safe Rust wrapper separately from the raw ABI layer, so most of your logic is covered by ordinary fast tests that never touch a pointer.",
+  "Add at least one direct foreign-caller integration test or harness in CI for the exported symbols. The only proof that the C contract works is calling it the way a C caller will.",
+  "Exercise the hostile inputs the contract must survive: null pointers, zero lengths, oversized lengths, and double-free or use-after-free defenses where the ownership rules require them.",
+  "Run native sanitizers on the boundary where you can. AddressSanitizer, UndefinedBehaviorSanitizer, and ThreadSanitizer catch memory and data-race bugs that no amount of Rust-side review will surface.",
+  "Use Miri to check the Rust-side wrapper logic for undefined behavior, while remembering that arbitrary foreign code runs outside Miri's world and is not covered.",
+  "Fuzz the boundary whenever the seam parses attacker-controlled bytes or strings, because a parser at a trust boundary is exactly where a malformed input turns into memory corruption.",
 ]
 
 const productionPatterns = [
-  "Keep one tiny `extern \"C\"` surface over a larger safe Rust core. The more code lives outside the raw ABI edge, the easier it is to review and evolve.",
-  "Model ownership with handles, pointer-plus-length pairs, and explicit `free` functions rather than with wishful comments about who probably owns the memory.",
-  "Translate foreign-facing status codes into ordinary Rust `Result` values as soon as control re-enters safe Rust.",
-  "Choose a C shim or `cxx` bridge deliberately. Do not let raw C++ ABI assumptions leak all the way into the public contract by accident.",
-  "Log and test unwind policy explicitly. A panic or exception policy that lives only in tribal memory is not a policy.",
+  "Keep one tiny extern \"C\" surface over a larger safe Rust core. The more logic lives behind the raw ABI edge rather than on it, the easier the boundary is to review, test, and evolve.",
+  "Model ownership with handles, pointer-plus-length pairs, and explicit free functions rather than with wishful comments about who probably owns the memory. The contract should be readable from the signatures alone.",
+  "Translate foreign-facing status codes back into ordinary Rust Result values the instant control re-enters safe Rust, so the rest of the codebase never reasons about integer error conventions.",
+  "Choose a C shim or a cxx bridge deliberately, and write down which one you picked and why. Do not let raw C++ ABI assumptions leak into the public contract by accident.",
+  "Log and test the unwind policy explicitly. Whether the boundary catches panics or aborts on them is a real decision, and it should be visible in code and exercised in tests, not held in tribal memory.",
 ]
 
 const pitfalls = [
-  "Exporting `String`, `Vec<T>`, or references directly because they looked convenient in Rust. They are not a portable foreign contract.",
-  "Treating a raw pointer as proof of ownership or lifetime. A raw pointer is only an address-shaped token until the wrapper proves more.",
-  "Forgetting that a duplicated OS handle or opaque pointer changes semantics. It is not the same thing as borrowing.",
-  "Letting Rust panics or C++ exceptions cross the boundary because the happy path seemed fine in testing.",
-  "Publishing a wide generated binding surface as the real API instead of wrapping it in a narrower, stable interop layer.",
+  "Exporting String, Vec, or references directly because they looked convenient in Rust. Their layout is an implementation detail, so what compiles today is a contract that breaks on the next change.",
+  "Treating a raw pointer as proof of ownership or lifetime. A raw pointer is only an address-shaped token; it carries no promise about validity, aliasing, or who is responsible for freeing it until the wrapper states one.",
+  "Forgetting that a duplicated OS handle or opaque pointer changes ownership semantics. Handing out a copy is not the same as lending a borrow, and the two have very different cleanup rules.",
+  "Letting Rust panics or C++ exceptions cross the boundary because the happy path seemed fine in testing. The undefined behavior only shows up on the failure path, which is the path you tested least.",
+  "Publishing a wide generated binding surface as the real API instead of wrapping it in a narrower, stable interop layer. Generated surface area is still surface area you have to keep working.",
 ]
 
 export function PageCh28CppIntegration() {
@@ -182,8 +199,10 @@ export function PageCh28CppIntegration() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Native-library integration is a production boundary with ABI, ownership, memory layout, unwind, and error
-          translation requirements. This chapter defines Rust wrapper patterns for that boundary.
+          Linking Rust to a C or C++ library is not a syntax detail; it is a binary contract the compiler cannot check
+          for you. Calling convention, memory layout, who frees what, how long a pointer stays valid, and what happens on
+          failure all become things you state by hand. This chapter treats that boundary as a small, deliberate seam to
+          design rather than a library to call.
         </p>
       </div>
 
@@ -253,18 +272,35 @@ export function PageCh28CppIntegration() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Rust FFI fundamentals</h4>
-            <div className="grid gap-3 lg:grid-cols-2">
+            <h4 className="font-semibold text-foreground mb-3">The four FFI fundamentals</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Almost every Rust interop layer is built from the same four primitives. They are small, but together they
+              are what turns an internal Rust function into a symbol another language can call without guessing about
+              representation. The diagram shows how a single call splits into a thin unsafe edge over a larger safe core;
+              the cards below name each piece.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Foreign[C or C plus plus caller] -->|C calling convention| Edge[extern C symbol]\n  Edge -->|raw ptr len status| Unsafe[Thin unsafe wrapper]\n  Unsafe -->|owned Rust types| Safe[Safe Rust core]\n  Safe -->|Result| Unsafe\n  Unsafe -->|status code| Edge`}
+              caption="One narrow unsafe edge sits between the foreign caller and a large safe Rust core. Raw types live only on the edge; rich types live behind it."
+            />
+            <div className="grid gap-3 lg:grid-cols-2 mt-4">
               {ffiFundamentals.map((item) => (
-                <div key={item} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-sm text-muted-foreground leading-6">{item}</p>
+                <div key={item.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="font-medium text-foreground mb-2">{item.title}</div>
+                  <p className="text-sm text-muted-foreground leading-6">{item.body}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">C ABI boundaries</h4>
+            <h4 className="font-semibold text-foreground mb-3">What may and may not cross a C ABI boundary</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The single most useful filter when designing an interop layer is to sort every type into one of two
+              buckets: representations with a stable, agreed-upon shape that may cross the seam, and Rust-specific types
+              whose layout is an implementation detail that must stay behind it. The rules below are that filter spelled
+              out.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {cAbiBoundaryRules.map((rule) => (
                 <div key={rule} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -284,26 +320,52 @@ export function PageCh28CppIntegration() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Calling C from Rust</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              The Rust side declares foreign symbols with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code>,
-              then wraps the unsafe call in a smaller safe function if the contract is simple enough to justify that move.
-              In a real Cargo build, the native library is linked through build-system configuration. In this chapter's
-              runnable demo, the symbol is defined in Rust with the C ABI so the example stays self-contained.
+              When Rust is the caller, you describe the foreign function in an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code> declaration block,
+              which tells the compiler the symbol exists elsewhere and must be called with the C calling convention. The
+              call itself is unsafe, because Rust cannot verify that the foreign code honors the signature, so the
+              practice is to wrap that one call in a small safe function whose body documents why the call is sound. In a
+              real Cargo build the native library is linked through build-system configuration, typically a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">build.rs</code> that points the linker
+              at the artifact. In this chapter&apos;s runnable demo the symbol is defined in Rust with the C ABI so the
+              example stays self-contained while exercising the exact same declaration-and-wrap pattern.
             </p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Calling Rust from C and C++</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Export a deliberately tiny surface: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code>{" "}
-              functions, C-friendly layout for shared structs, raw buffers or opaque handles for ownership, and explicit
-              destroy functions for anything Rust allocates and foreign code later frees. The library artifact is usually
-              built as a C-facing static or dynamic library rather than as a Rust ABI artifact.
+              When Rust is the callee, the goal is to expose a deliberately tiny surface that another language can rely
+              on:{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code> functions marked so
+              their names are not mangled, C-friendly layout for any shared struct, raw buffers or opaque handles instead
+              of Rust ownership types, and an explicit destroy function for anything Rust allocates and foreign code later
+              frees. The crate is built as a C-facing static or dynamic library rather than as a Rust ABI artifact, and
+              the public header that describes these symbols becomes the real contract. Keeping that header small is the
+              whole discipline: every symbol on it is something you have promised to keep stable.
             </p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Ownership across FFI</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <h4 className="font-semibold text-foreground mb-3">Modelling ownership across the seam</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Ownership is the part of the contract that has no syntax in C, so you express it by choosing which of a few
+              fixed shapes each parameter takes. The decision is always the same question asked precisely: who allocated
+              this memory, who is allowed to read or write it, and who is responsible for freeing it. The diagram sorts
+              the four common answers; the cards below give the signature pattern for each.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q{Who owns the memory?} -->|Caller, read only| In[const ptr plus len]\n  Q -->|Caller, Rust writes| Out[mut ptr plus capacity]`}
+              caption="Caller-owned memory: a const pointer plus length for read-only views, or a mutable pointer plus capacity for buffers Rust fills."
+            />
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              When Rust owns the memory instead of the caller, the same question routes to the other two shapes:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q{Who owns the memory?} -->|Rust owns across calls| Handle[opaque handle plus new and free]\n  Q -->|Rust allocates a string| Str[returned ptr plus one free fn]`}
+              caption="Rust-owned memory: an opaque handle with explicit new and free functions, or a returned pointer paired with exactly one free function."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               {ownershipCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -313,15 +375,22 @@ export function PageCh28CppIntegration() {
             </div>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                Rust references make aliasing and lifetime promises the C or C++ side usually cannot honor directly. That
-                is why a senior FFI surface tends to flatten everything into raw pointers, lengths, handles, and explicit
-                ownership functions.
+                A Rust reference encodes aliasing and lifetime promises the C or C++ side cannot honor, which is why a
+                mature FFI surface flattens everything into these four shapes. The payoff is that ownership becomes
+                readable from the function signature instead of relying on a comment everyone has to remember.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Error handling across FFI</h4>
+            <h4 className="font-semibold text-foreground mb-3">Returning errors across the seam</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A Rust{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result&lt;T, E&gt;</code> has no C
+              representation, so failure has to be re-expressed in terms the foreign side can read. The conventional
+              answer is an integer status as the return value, with any successful payload delivered through caller-owned
+              out parameters. The richness of your error type stays inside Rust; only its outcome crosses the line.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {errorHandlingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -333,8 +402,19 @@ export function PageCh28CppIntegration() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Exceptions and panics</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <h4 className="font-semibold text-foreground mb-3">Keeping unwinding inside its own language</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The most dangerous thing that can cross an FFI boundary is not a bad value but an in-flight unwind. A Rust
+              panic or a C++ exception unwinding through frames the other language does not know how to clean up is
+              undefined behavior, and it tends to crash far from the cause. The operable policy is to stop every unwind at
+              the boundary: catch it, convert it to a status code, and let only ordinary return values cross. The diagram
+              shows that gate; the rules below state it precisely.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Body[Exported fn body] --> Catch{catch_unwind}\n  Catch -->|Ok value| Status[return status code]\n  Catch -->|panic caught| Err[return error status]\n  Status --> Foreign[Foreign caller]\n  Err --> Foreign\n  Body -.->|never| Leak[unwind into foreign frames]\n  Leak -.-> UB[undefined behavior]`}
+              caption="An exported function catches its own panic and returns a status. The dashed path, an unwind leaking into foreign frames, is the one you must make impossible."
+            />
+            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside mt-4">
               {unwindRules.map((rule) => (
                 <li key={rule}>{rule}</li>
               ))}
@@ -348,8 +428,18 @@ export function PageCh28CppIntegration() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">cxx, bindgen, and autocxx</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <h4 className="font-semibold text-foreground mb-3">Choosing a binding tool: bindgen, cxx, or autocxx</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              These tools do not change the contract you owe; they change how much of the boilerplate is written for you.
+              The choice mostly follows two questions: do you control both sides of the boundary, and how large is the C++
+              surface you need to reach. The decision tree below routes those questions to a default; the cards explain
+              what each tool is actually for.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start{Headers exist, C-like surface?} -->|Yes, generate from C| Bindgen[bindgen]\n  Start -->|No, control both sides| Both{How big is the C plus plus surface?}\n  Both -->|Small, curated| Cxx[cxx bridge]\n  Both -->|Large, want automation| Autocxx[autocxx]\n  Bindgen --> Wrap[Wrap raw output in narrow safe API]\n  Cxx --> Wrap\n  Autocxx --> Wrap`}
+              caption="The tool depends on whether headers already exist and how much C++ you must reach. Whatever the tool, the generated surface still gets wrapped in a narrow safe API."
+            />
+            <div className="grid gap-4 lg:grid-cols-3 mt-4">
               {ecosystemCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -381,16 +471,26 @@ export function PageCh28CppIntegration() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Most engineers reaching for FFI already carry a model from another ecosystem, and the useful question is which
+            part of that model transfers and which part will quietly mislead you. The shift is almost never about which
+            functions to call. It is about who is now responsible for ownership, lifetime, and failure once a boundary the
+            compiler cannot see sits between your code and the other language.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -462,6 +562,20 @@ export function PageCh28CppIntegration() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: there are three layers, and only the middle one is unsafe. The foreign symbol on the left
+              is reached through an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">extern "C"</code> declaration; the
+              one-line unsafe wrapper{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">safe_abs</code> performs the actual call
+              and documents why it is sound; and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">main</code> only ever sees a normal safe
+              function. Trace that one call left to right in the diagram, then read the same three layers in code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Main[main calls safe_abs] --> Wrap[safe_abs safe wrapper]\n  Wrap -->|unsafe block| Decl[extern C declaration]\n  Decl --> Sym[ffi_demo_abs C ABI symbol]\n  Sym -->|i32| Wrap\n  Wrap -->|i32| Main`}
+              caption="safe_abs is the only place the unsafe call lives; main and the rest of the program see a plain safe function."
+            />
             <RustCodeEditor
               code={codes.cpp_integration_calling_c_abi}
               onChange={(newCode) => updateCode("cpp_integration_calling_c_abi", newCode)}
@@ -517,6 +631,21 @@ export function PageCh28CppIntegration() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the function is a guard sequence before any real work happens. It validates the out
+              pointer, then the input pointer, returning a distinct nonzero status for each failure; only once both are
+              known non-null does it build a slice from{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ptr</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">len</code>, compute the sum, write it
+              through the out parameter, and return{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">0</code>. The caller owns both buffers;
+              Rust only borrows them for the call. Follow the branches in the diagram, then read them top to bottom in
+              code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Enter[sum_i32s entry] --> NullOut{out_total null?}\n  NullOut -->|yes| R1[return 1]\n  NullOut -->|no| NullPtr{ptr null?}\n  NullPtr -->|yes| R2[return 2]\n  NullPtr -->|no| Build[build slice from ptr and len]\n  Build --> Sum[sum into i64]\n  Sum --> Write[write through out_total]\n  Write --> Ok[return 0]`}
+              caption="Validate the out pointer, then the input pointer, each with its own status code, before any memory is read or written. Success returns 0."
+            />
             <RustCodeEditor
               code={codes.cpp_integration_export_rust_c_abi}
               onChange={(newCode) => updateCode("cpp_integration_export_rust_c_abi", newCode)}
@@ -545,7 +674,8 @@ export function PageCh28CppIntegration() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Errors</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  Status integers make the contract portable without leaking Rust&apos;s `Result` shape.
+                  Status integers make the contract portable without leaking Rust&apos;s{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code> shape.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -583,688 +713,25 @@ export function PageCh28CppIntegration() {
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            <li>FFI is a contract boundary. ABI, layout, ownership, and unwind policy must all be explicit.</li>
-            <li>A narrow C ABI seam is usually the most stable integration layer even when the far side is C++.</li>
-            <li>Rust references, `String`, `Vec<T>`, `Result`, and panics normally stop at the Rust side of the wrapper.</li>
-            <li>`bindgen`, `cxx`, and `autocxx` are ecosystem options, not excuses to skip wrapper design.</li>
-            <li>Testing the interop layer means more than “it linked once.” Include null, length, ownership, sanitizer, and harness coverage.</li>
+            <li>FFI is a binary contract the compiler cannot check for you. ABI, layout, ownership, and unwind policy must all be stated explicitly.</li>
+            <li>A narrow C ABI seam is usually the most stable integration layer even when the far side is C++, because C is the one calling convention every toolchain agrees on.</li>
+            <li>
+              Rust references,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;T&gt;</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code>, and panics normally stop
+              at the Rust side of the wrapper and are rebuilt the moment control returns to safe Rust.
+            </li>
+            <li>
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">bindgen</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cxx</code>, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">autocxx</code> reduce boilerplate but do
+              not remove the obligation to wrap their output in a narrow, stable interop layer.
+            </li>
+            <li>Testing the interop layer means more than “it linked once.” Include null, length, ownership, sanitizer, and foreign-caller harness coverage.</li>
           </ul>
         </section>
       </div>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch28-cpp-integration-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Flatten a rich API into a C ABI surface deliberately",
-    objective: "Practice turning Rust- or C++-friendly types into a boundary another compiler can actually trust.",
-    starterPrompt:
-      "A C++ caller wants to invoke Rust logic that currently looks like `fn classify(input: &str) -> Result<String, DomainError>`.",
-    prompts: [
-      "Which input shape is calmer at the ABI edge: C string, bytes plus length, or caller-owned output buffer?",
-      "How would you represent success and failure without exposing `Result`?",
-      "If Rust allocates an output string, which extra function must exist?",
-    ],
-    acceptanceCriteria: [
-      "You remove Rust references and `Result` from the foreign-facing surface.",
-      "You choose an explicit input and output ownership model.",
-      "You name at least one free or destroy function if the callee allocates returned data.",
-    ],
-    hints: [
-      "The question is not what is ergonomic in Rust. The question is what is explicit across the ABI seam.",
-      "Status code plus out parameter is often the calmest first answer.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Spot the non-ABI-safe types in one exported function",
-    objective: "Read an exported signature and explain exactly why it is not a production-grade foreign contract yet.",
-    starterPrompt:
-      "Review `pub extern \"C\" fn parse_order(input: &str) -> Result<String, ParseError>` and write a short review note.",
-    prompts: [
-      "Why is `&str` the wrong foreign contract here?",
-      "Why is `Result<String, ParseError>` the wrong foreign contract here?",
-      "Which concrete replacement types would you propose?",
-    ],
-    acceptanceCriteria: [
-      "You explain that Rust references and `Result` are Rust-side abstractions, not portable ABI surface types.",
-      "You propose a replacement such as pointer plus length, status code, out parameter, or opaque handle.",
-      "You describe the repair in ownership terms, not only in syntax terms.",
-    ],
-    hints: [
-      "If the far side is not Rust, act as if the type must survive a compiler translation audit.",
-      "The best review note names both the wrong type and the replacement contract.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Design a C ABI-safe wrapper around Rust code",
-    objective: "Implement a small exported function that translates a raw pointer contract into a safe Rust slice and a status code.",
-    starterPrompt:
-      "Implement `sum_i32s(ptr, len, out_total) -> i32` so null checks happen first, the slice is rebuilt once, and the total is written through the out parameter.",
-    prompts: [
-      "Use `*const i32`, `usize`, and `*mut i64` at the edge.",
-      "Return `0` on success and nonzero status codes for invalid pointers.",
-      "Keep the unsafe region small and auditable.",
-    ],
-    acceptanceCriteria: [
-      "The wrapper checks nullability before dereferencing raw pointers.",
-      "The wrapper rebuilds a slice only after the safety preconditions are true.",
-      "The wrapper writes the result through the out parameter and returns an explicit status code.",
-      "The runnable lab prints the expected status and total.",
-    ],
-    hints: [
-      "This is the core exported-function shape many FFI wrappers use.",
-      "The slice rebuild is the unsafe step; the contract checks should already be finished by then.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Map ownership across an opaque-handle API",
-    objective: "Repair a boundary where both sides believe they own the same allocation or returned string.",
-    starterPrompt:
-      "You inherit a handle API where Rust returns an owned parser handle and later returns an owned string pointer from `parser_format`, but the free path is missing or ambiguous.",
-    prompts: [
-      "Which side owns the parser after `parser_new` returns?",
-      "Which side owns the returned string after `parser_format` returns?",
-      "Which explicit destroy functions must exist, and what happens on null input?",
-    ],
-    acceptanceCriteria: [
-      "You describe ownership for both the handle and the returned string precisely.",
-      "You add or specify one destroy function per owned foreign-returned resource.",
-      "You explain what null means on each relevant path instead of leaving it implicit.",
-    ],
-    hints: [
-      "Opaque handles are great, but only when creation and destruction are equally explicit.",
-      "Two separate owned resource kinds often want two separate free functions.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Create an FFI safety checklist for one sample function",
-    objective: "Write the review checklist another engineer would use before approving the boundary.",
-    starterPrompt:
-      "Create a checklist for `sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> i32`.",
-    prompts: [
-      "What must be true about `ptr` before calling `from_raw_parts`, even when `len == 0`?",
-      "What must be true about `out_total` before writing?",
-      "What unwind rule should the wrapper follow?",
-      "What tests or sanitizer runs should exist?",
-    ],
-    acceptanceCriteria: [
-      "Your checklist covers nullability, readable and writable memory, length contract, and unwind policy.",
-      "Your checklist includes at least one testing item and one sanitizer item.",
-      "Your checklist is specific enough to review one real function, not only FFI in the abstract.",
-    ],
-    hints: [
-      "A good checklist sounds like a release gate, not like a slogan list.",
-      "The point is to make review mechanical where possible.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose C shim, bindgen, cxx, or autocxx for a legacy codebase",
-    objective: "Map one realistic C++ integration problem to the right interop strategy and testing plan.",
-    starterPrompt:
-      "You must integrate a large legacy C++ library with templates, exceptions, custom allocators, and a small stable subset of functions the Rust side actually needs.",
-    prompts: [
-      "Where would a narrow handwritten C shim be calmer than binding the whole C++ surface directly?",
-      "When would `bindgen` be enough, and when would `cxx` be a better fit?",
-      "When might `autocxx` save time, and what risk would still need audit coverage?",
-      "What harness, sanitizer, and compatibility tests would you require before rollout?",
-    ],
-    acceptanceCriteria: [
-      "You choose one primary interop strategy and justify it with surface shape and change risk.",
-      "You name at least one case where a narrower C ABI seam is calmer than wide direct C++ exposure.",
-      "You mention at least one testing layer and one sanitizer or native harness requirement.",
-      "You keep exception and ownership policy explicit in the design.",
-    ],
-    hints: [
-      "A big existing header surface is not automatically a good public surface for Rust.",
-      "The best answer narrows the contract to what the Rust side truly needs.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why is a narrow C ABI seam often calmer than a direct raw C++ ABI contract?",
-  "What is the practical difference between a borrowed input buffer and a returned opaque handle?",
-  "Why should `Result<T, E>` usually stop at the Rust side of the wrapper?",
-  "What rule should exported functions follow for panics and C++ exceptions?",
-  "When is generated binding surface still too wide to be your real API?",
-]
-
-const workingLoop = [
-  "Flatten the boundary into raw data, sizes, status codes, and explicit ownership.",
-  "Write the safety invariant before the unsafe block.",
-  "Keep one clear create/free path for each owned resource kind.",
-  "Ban cross-language unwinding and make that choice visible in code review.",
-  "Test nulls, lengths, free paths, and native harness behavior before rollout.",
-]
-
-const ffiChecklist = [
-  "Calling convention pinned with `extern \"C\"`.",
-  "Layout pinned with `#[repr(C)]` only where shared structs truly cross the seam.",
-  "Nullability rules documented for every pointer parameter.",
-  "Readable and writable memory promises stated for every pointer plus length pair.",
-  "Panic and exception policy explicit: no cross-language unwinding.",
-  "Destroy functions present for every foreign-observable owned resource.",
-]
-
-export function PageCh28CppIntegrationExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 55
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 28 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice C++ integration the way it survives production review: narrow ABI seams, explicit ownership, structured
-          error paths, and safety checklists that another engineer can actually use.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an interop review. The best answer does not say only “use FFI.” It says which ABI
-                surface is exposed, who owns memory on each side, how failure is represented, and which invariants must be
-                true before raw pointers become meaningful.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(54)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 28
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">FFI wrapper checklist</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {ffiChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  FFI design drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · C ABI-safe sum wrapper"
-          description={
-            <>
-              Repair the starter so the exported wrapper checks pointer contracts, rebuilds a slice safely, and writes the
-              computed total through the out parameter. The checker expects a successful status code and a total of{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">21</code>.
-            </>
-          }
-          filename="ffi_sum_wrapper_lab.rs"
-          runKey="ch28_ex_ffi_sum_wrapper"
-          expectedOutput={"status = 0\ntotal = 21"}
-          helperText={
-            <>
-              Tip: check <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">out_total</code> first, reject
-              a null <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ptr</code> unconditionally because{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">from_raw_parts</code> needs a non-null
-              pointer even for a zero-length slice, then rebuild the slice once and keep the unsafe region small.
-            </>
-          }
-          initialCode={`#[unsafe(no_mangle)]\npub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> i32 {\n    unsafe {\n        *out_total = 0;\n    }\n\n    0\n}\n\nfn main() {\n    let values = [4_i32, 7, 10];\n    let mut total = -1_i64;\n\n    let status = sum_i32s(values.as_ptr(), values.len(), &mut total);\n\n    println!(\"status = {}\", status);\n    println!(\"total = {}\", total);\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to design a narrow C ABI-safe wrapper around Rust code, map
-            ownership across a Rust/C++ seam without hand-waving, write a practical FFI review checklist, and choose a
-            direct bridge or a C shim from the real change surface and failure model rather than from ecosystem fashion.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch28_cpp_integration/calling_c_from_rust.rs`
-````
-mod c_shim {
-    #[unsafe(no_mangle)]
-    pub extern "C" fn ffi_demo_abs(input: i32) -> i32 {
-        input.wrapping_abs()
-    }
-}
-
-unsafe extern "C" {
-    fn ffi_demo_abs(input: i32) -> i32;
-}
-
-fn safe_abs(input: i32) -> i32 {
-    unsafe {
-        // SAFETY:
-        // - ffi_demo_abs uses the C ABI.
-        // - the function takes and returns plain integers.
-        // - this call has no cross-language ownership or lifetime transfer.
-        ffi_demo_abs(input)
-    }
-}
-
-fn main() {
-    let left = -7_i32;
-    let right = 11_i32;
-
-    println!("abs({}) = {}", left, safe_abs(left));
-    println!("abs({}) = {}", right, safe_abs(right));
-}
-````
-
-### File: `examples/ch28_cpp_integration/exporting_rust_c_abi.rs`
-````
-#[unsafe(no_mangle)]
-pub extern "C" fn sum_i32s(ptr: *const i32, len: usize, out_total: *mut i64) -> i32 {
-    if out_total.is_null() {
-        return 1;
-    }
-
-    if ptr.is_null() {
-        return 2;
-    }
-
-    let slice = unsafe {
-        // SAFETY:
-        // - ptr is non-null and the caller promises it is valid for len i32 values.
-        // - the caller retains ownership of the input buffer.
-        // - from_raw_parts requires a non-null, aligned pointer even when len == 0.
-        std::slice::from_raw_parts(ptr, len)
-    };
-
-    let total = slice.iter().map(|&value| value as i64).sum::<i64>();
-
-    unsafe {
-        // SAFETY:
-        // - out_total was checked for null above.
-        // - the caller promises this points to writable i64 storage.
-        *out_total = total;
-    }
-
-    0
-}
-
-fn main() {
-    let values = [3_i32, 4, 5];
-    let mut total = -1_i64;
-
-    let status = sum_i32s(values.as_ptr(), values.len(), &mut total);
-
-    println!("status = {}", status);
-    println!("total = {}", total);
-}
-````
-
-### File: `examples/ch28_cpp_integration/opaque_handle_api.rs`
-````
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use std::ptr;
-
-struct Formatter {
-    prefix: String,
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn formatter_new(prefix: *const c_char) -> *mut Formatter {
-    if prefix.is_null() {
-        return ptr::null_mut();
-    }
-
-    let prefix = unsafe {
-        // SAFETY:
-        // - prefix was checked for null above.
-        // - the caller promises a valid NUL-terminated string.
-        CStr::from_ptr(prefix)
-    };
-
-    let Ok(prefix_text) = prefix.to_str() else {
-        return ptr::null_mut();
-    };
-
-    Box::into_raw(Box::new(Formatter {
-        prefix: prefix_text.to_string(),
-    }))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn formatter_format(
-    formatter: *const Formatter,
-    value: *const c_char,
-) -> *mut c_char {
-    if formatter.is_null() || value.is_null() {
-        return ptr::null_mut();
-    }
-
-    let formatter = unsafe {
-        // SAFETY:
-        // - formatter was checked for null above.
-        // - the caller promises it points to a live Formatter from formatter_new.
-        &*formatter
-    };
-
-    let value = unsafe {
-        // SAFETY:
-        // - value was checked for null above.
-        // - the caller promises a valid NUL-terminated string.
-        CStr::from_ptr(value)
-    };
-
-    let Ok(value_text) = value.to_str() else {
-        return ptr::null_mut();
-    };
-
-    let rendered = format!("{}::{}", formatter.prefix, value_text);
-    match CString::new(rendered) {
-        Ok(text) => text.into_raw(),
-        Err(_) => ptr::null_mut(),
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn formatter_string_free(text: *mut c_char) {
-    if text.is_null() {
-        return;
-    }
-
-    unsafe {
-        // SAFETY:
-        // - text must come from CString::into_raw in formatter_format.
-        drop(CString::from_raw(text));
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn formatter_free(formatter: *mut Formatter) {
-    if formatter.is_null() {
-        return;
-    }
-
-    unsafe {
-        // SAFETY:
-        // - formatter must come from Box::into_raw in formatter_new.
-        drop(Box::from_raw(formatter));
-    }
-}
-
-fn main() {
-    let prefix = CString::new("svc").unwrap();
-    let value = CString::new("orders").unwrap();
-
-    let formatter = formatter_new(prefix.as_ptr());
-    let rendered = formatter_format(formatter, value.as_ptr());
-
-    let text = unsafe { CStr::from_ptr(rendered) }.to_str().unwrap();
-    println!("label = {}", text);
-
-    formatter_string_free(rendered);
-    formatter_free(formatter);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -52,3 +52,5 @@ export { PageCh25TokioExercises } from "./page-ch25-tokio-exercises"
- export { PageCh26TaskLibrariesAndParallelExecution } from "./page-ch26-task-libraries-and-parallel-execution"
- export { PageCh26TaskLibrariesAndParallelExecutionExercises } from "./page-ch26-task-libraries-and-parallel-execution-exercises"
- export { PageCh27IoTricksAndSystemsProgrammingPatterns } from "./page-ch27-io-tricks-and-systems-programming-patterns"
- export { PageCh27IoTricksAndSystemsProgrammingPatternsExercises } from "./page-ch27-io-tricks-and-systems-programming-patterns-exercises"
-+export { PageCh28CppIntegration } from "./page-ch28-cpp-integration"
-+export { PageCh28CppIntegrationExercises } from "./page-ch28-cpp-integration-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -63,6 +63,8 @@ import {
-   PageCh25TokioExercises,
-   PageCh26TaskLibrariesAndParallelExecution,
-   PageCh26TaskLibrariesAndParallelExecutionExercises,
-   PageCh27IoTricksAndSystemsProgrammingPatterns,
-   PageCh27IoTricksAndSystemsProgrammingPatternsExercises,
-+  PageCh28CppIntegration,
-+  PageCh28CppIntegrationExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -120,6 +122,8 @@ const PAGE_COMPONENTS = [
-   PageCh25TokioExercises,
-   PageCh26TaskLibrariesAndParallelExecution,
-   PageCh26TaskLibrariesAndParallelExecutionExercises,
-   PageCh27IoTricksAndSystemsProgrammingPatterns,
-   PageCh27IoTricksAndSystemsProgrammingPatternsExercises,
-+  PageCh28CppIntegration,
-+  PageCh28CppIntegrationExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh28Output } from "./rust-simulator-ch28"
- import { simulateCh27Output } from "./rust-simulator-ch27"
- import { simulateCh26Output } from "./rust-simulator-ch26"
- import { simulateCh25Output } from "./rust-simulator-ch25"
-@@ -1005,6 +1006,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch28Output = simulateCh28Output(code, key)
-+  if (ch28Output !== null) return ch28Output
- 
-   const ch27Output = simulateCh27Output(code, key)
-   if (ch27Output !== null) return ch27Output
-@@ -1422,5 +1426,18 @@ export function simulateRustExecution(code: string, key?: string, filename = "ma
- 
-     return "short = Ok(())\nvalue = Ok(())\nbuf = RST!"
-   }
- 
-+  if (key === "ch28_ex_ffi_sum_wrapper") {
-+    const values = Array.from(code.matchAll(/let\s+values\s*=\s*\[([^\]]+)\]/g), (match) => match[1])[0]
-+      ?.split(",")
-+      .map((part) => Number(part.trim().replace(/_/g, "").replace(/(?:i|u)(?:8|16|32|64|128|size)$/i, "")))
-+      .filter((value) => !Number.isNaN(value)) ?? [4, 7, 10]
-+    const safeWrapper =
-+      /out_total\.is_null\(\)/.test(code) &&
-+      /ptr\.is_null\(\)\s*&&\s*len\s*!=\s*0/.test(code) &&
-+      /from_raw_parts\(\s*ptr\s*,\s*len\s*\)/.test(code) &&
-+      /sum::<i64>\(\)/.test(code) &&
-+      /\*\s*out_total\s*=\s*total/.test(code)
-+    return `status = ${safeWrapper ? 0 : 1}\ntotal = ${safeWrapper ? values.reduce((acc, value) => acc + value, 0) : -1}`
-+  }
-+
-   const printlnRegex = /println!\s*\(\s*"([^"]*)"(?:\s*,\s*([^)]+))?\s*\)/g
-   const outputs: string[] = []
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -17,6 +17,7 @@ import { DEFAULT_CODES_CH24 } from "./default-codes-ch24"
- import { DEFAULT_CODES_CH25 } from "./default-codes-ch25"
- import { DEFAULT_CODES_CH26 } from "./default-codes-ch26"
- import { DEFAULT_CODES_CH27 } from "./default-codes-ch27"
-+import { DEFAULT_CODES_CH28 } from "./default-codes-ch28"
- 
- export interface PageConfig {
-   id: string
-@@ -684,6 +685,29 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Compare buffered and unbuffered reads, design a backpressure-aware IO pipeline, and reason clearly about descriptor ownership",
-         icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch28-cpp-integration",
-+    title: "Chapter 28 · C++ Integration",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch28-cpp-integration",
-+        title: "C++ Integration",
-+        shortTitle: "C++ Integration",
-+        description:
-+          "Rust FFI fundamentals, C ABI seams, calling C from Rust, exporting Rust to C and C++, ownership, error handling, unwind policy, ABI stability, and FFI testing",
-+        icon: "book",
-+        codeKeys: ["cpp_integration_calling_c_abi", "cpp_integration_export_rust_c_abi"],
-+      },
-+      {
-+        id: "ch28-cpp-integration-exercises",
-+        title: "Chapter 28 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Design a C ABI-safe wrapper, map ownership across the seam, create an FFI safety checklist, and choose the right interop strategy",
-+        icon: "trophy",
-       },
-     ],
-   },
-@@ -1128,5 +1152,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH25,
-   ...DEFAULT_CODES_CH26,
-   ...DEFAULT_CODES_CH27,
-+  ...DEFAULT_CODES_CH28,
- }
- 
- export interface BookState {
-````

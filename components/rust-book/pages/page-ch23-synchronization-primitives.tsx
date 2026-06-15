@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -26,15 +27,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "The primitives will feel familiar, but Rust keeps aliasing and ownership explicit around them. A `Mutex<T>` is not only a lock. It is also the place where exclusive access to `T` is re-established safely.",
+    body: "You are used to a mutex and the data it protects being two separate variables held together by convention, where forgetting to take the lock compiles fine and fails in production. In Rust the data lives inside the lock, so you cannot reach the value without first acquiring the guard, and the guard's lifetime is when your access is valid. The shift is that 'who is allowed to touch this right now' moves from review discipline into the type system.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of monitor folklore and more in terms of data ownership. Rust makes the shared state boundary visible in the type system, and message passing often replaces broad shared mutation.",
+    body: "Forget the ambient monitor model where any object can be a lock target and Pulse/Wait float free of the state they guard. Rust binds the wait condition to a specific mutex and forces you to name the predicate. The bigger change is cultural: instead of reaching for a shared object plus lock by default, you ask whether the state should be shared at all, since message passing often removes the lock entirely.",
   },
   {
     title: "Go background",
-    body: "Go's slogan prefers channels over mutexes. Rust is more literal: use channels when ownership transfer is the model, use locks when the state is truly shared, and use atomics only when the invariant really fits.",
+    body: "Go's advice to favor channels over shared memory is a style preference; Rust makes it a typed decision. Channels here mean ownership actually moves to the receiver, so the sender can no longer touch what it sent, which is a stronger guarantee than a Go channel of pointers. Use a channel when the model is handoff, a lock when the state is genuinely co-owned, and an atomic only when the whole invariant fits in one word.",
+  },
+  {
+    title: "Python background",
+    body: "There is no GIL here, so two threads really do run your code at the same time on different cores, and a data race is a compile error rather than a corrupted dict you discover later. Coming from threading.Lock or asyncio, the new habit is that the compiler will not let a non-thread-safe value cross a thread boundary at all. That up-front friction replaces a whole class of heisenbugs you would otherwise chase at runtime.",
   },
 ]
 
@@ -225,13 +230,29 @@ export function PageCh23SynchronizationPrimitives() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A retry service has one shared table, one read-mostly configuration snapshot, and one worker queue that should
-            be owned by a single consumer. The business requirement is to select synchronization primitives from state
-            ownership: mutexes for short shared mutation, read-write locks for read-heavy snapshots, atomics for narrow
-            flags, condvars for predicates, and channels for ownership transfer.
+            Picture a small retry service running several worker threads. It holds three pieces of state with three very
+            different access patterns: a table of in-flight requests that workers mutate constantly, a configuration
+            snapshot that is read on every request and rewritten only when an operator pushes a change, and a queue of
+            jobs that really wants a single consumer draining it. Each piece is a different concurrency problem, and the
+            mistake that causes the most pain is reaching for the same primitive for all three.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The discipline this chapter teaches is to derive the primitive from the access pattern rather than from
+            habit. A short, contended mutation wants a mutex. A read-mostly snapshot wants a read-write lock. A
+            single-word flag or counter wants an atomic. A thread that must wait for state to change wants a condvar tied
+            to that state. And a job stream with one owner wants a channel, because the real model is ownership transfer,
+            not sharing. Naming the access pattern first turns primitive selection from a guessing game into a lookup.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful decision order</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the diagram top to bottom: the first fork is the most important one, because deciding whether state is
+              shared at all often eliminates locks entirely in favor of message passing.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Two threads need this state] --> Shared{Truly shared, or handoff?}\n  Shared -->|handoff| Chan[Channel: move ownership]\n  Shared -->|shared| Shape{What shape is the access?}\n  Shape -->|one word flag or counter| Atom[Atomic]\n  Shape -->|read mostly, rare writes| Rw[RwLock]\n  Shape -->|short mixed mutation| Mtx[Mutex]\n  Mtx --> Wait{Must a thread wait for a change?}\n  Wait -->|yes| Cv[Mutex plus Condvar]\n  Wait -->|no| Done[Plain Mutex]`}
+              caption="The decision order: rule out handoff first, then pick by access shape, and only add a condvar when a thread genuinely needs to wait on a predicate."
+            />
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Decide whether the state is actually shared or whether ownership transfer is the cleaner model.</li>
               <li>If the state is shared, decide whether it is write-heavy, read-mostly, or just one-word atomic state.</li>
@@ -256,6 +277,27 @@ export function PageCh23SynchronizationPrimitives() {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Every reader brings a synchronization model from another language. Most of the friction in Rust comes not
+            from the primitives, which look familiar, but from where Rust moves the safety boundary. The shift to
+            internalize is the same in each case: things that were team discipline or runtime conveniences elsewhere
+            become facts the compiler checks here.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
@@ -264,6 +306,31 @@ export function PageCh23SynchronizationPrimitives() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Mutex and RwLock</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The structural idea that distinguishes Rust here is that the lock <em>owns</em> the data. A
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">{"Mutex<T>"}</code>
+              wraps the value of type <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T</code>, and the
+              only way to reach the value is to call <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">lock</code>,
+              which hands back a guard. While you hold the guard you have exclusive access; when the guard is dropped, the
+              lock is released. There is no path to the data that skips the lock, which is why a forgotten lock is not a
+              category of bug that exists in safe Rust.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Look at the relationship below before the listings: the guard is a borrow with a lifetime, and releasing the
+              lock is simply that borrow ending. The diagram shows the single path data takes through a mutex versus the
+              two paths a read-write lock allows.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  M[Mutex of T] -->|lock returns guard| G[MutexGuard derefs to T]\n  G -->|guard dropped| M`}
+              caption="A mutex offers a single exclusive path to the value. The guard's lifetime is the critical section; dropping it releases the lock."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              An RwLock splits that single path into two guard kinds:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  R[RwLock of T] -->|read: shared| RG[many read guards at once]\n  R -->|write: exclusive| WG[one write guard, blocks readers]`}
+              caption="An RwLock offers many shared read guards or one exclusive write guard, so reads can overlap while a write still excludes everyone."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {lockCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -279,14 +346,25 @@ export function PageCh23SynchronizationPrimitives() {
               <p className="text-sm text-muted-foreground leading-6">
                 A common misconception is worth correcting: an
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">RwLock</code>
-                is not “a faster mutex.” It is a different fairness and contention trade. If writes are frequent or the read
-                section is tiny, a plain mutex is often the simpler answer.
+                is not “a faster mutex.” It is a different fairness and contention trade. Multiple readers can hold the
+                lock at once, but a writer must wait for all of them to leave and then excludes everyone, so under
+                frequent writes or tiny read sections the bookkeeping can cost more than a plain mutex would. Reach for it
+                only when you can show the workload is genuinely read-mostly.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Condvar</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              A condition variable solves a specific problem: a thread needs to wait until some shared state changes, and
+              busy-spinning on the mutex would waste a core. The condvar lets the waiter atomically release the mutex and
+              sleep, then re-acquire the mutex when it is woken. The crucial detail is that a wakeup is only a hint to
+              re-check; it is not a promise that the predicate is now true, because of spurious wakeups and because
+              another thread may have consumed the state first. That is why the wait always sits inside a
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">while</code>
+              loop that tests the predicate.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {condvarPoints.map((point) => (
                 <li key={point}>{point}</li>
@@ -302,6 +380,14 @@ export function PageCh23SynchronizationPrimitives() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Atomics and memory ordering</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              An atomic operation is indivisible: no other thread can observe it half-done. That alone covers counters and
+              flags. The harder concept is <em>memory ordering</em>, which controls whether the other writes a thread made
+              before an atomic store become visible to a thread that observes that store. Modern CPUs and compilers
+              reorder ordinary memory accesses freely, so without an ordering constraint a reader can see the flag flip to
+              true while the data it was supposed to publish is still stale. The ordering you choose is a contract about
+              that visibility, not about the atomic value itself.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {orderingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -361,6 +447,24 @@ export function PageCh23SynchronizationPrimitives() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Deadlock prevention</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Almost every classic deadlock is a cycle: thread A holds lock 1 and wants lock 2 while thread B holds lock 2
+              and wants lock 1, and neither will ever yield. The diagram contrasts that cycle with the fix, which is to
+              impose one global order on locks so every thread always acquires them in the same sequence. With a total
+              order there is no cycle to form. Most of deadlock prevention is this kind of design discipline rather than
+              any special primitive.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A[Thread A holds L1] -->|wants L2| B[Thread B holds L2]\n  B -->|wants L1| A`}
+              caption="The deadlock: a wait cycle. A holds L1 and wants L2 while B holds L2 and wants L1, so neither can proceed."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The fix is a single global lock ordering that both threads obey:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  T1[Thread A: lock L1 then L2] --> Order[Global order: L1 before L2]\n  T2[Thread B: lock L1 then L2] --> Order`}
+              caption="With one global order, every thread takes L1 before L2, so no cycle can form and the deadlock disappears."
+            />
             <div className="grid gap-3 lg:grid-cols-2">
               {deadlockRules.map((rule) => (
                 <div key={rule} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -383,17 +487,6 @@ export function PageCh23SynchronizationPrimitives() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparing C++, C#, and Go</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
         <section className="space-y-4">
@@ -458,6 +551,16 @@ export function PageCh23SynchronizationPrimitives() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the worker holds the lock, then loops on{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">while jobs.is_empty() &amp;&amp; !closed</code>,
+              calling <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">wait</code> inside the loop.
+              Follow that loop in the diagram before reading the code.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Locked: lock the mutex\n  Locked --> CheckPredicate: jobs empty and not closed?\n  CheckPredicate --> Wait: yes\n  Wait --> CheckPredicate: woken, re-check\n  CheckPredicate --> Drain: no, job available\n  CheckPredicate --> Exit: no, closed and empty\n  Drain --> CheckPredicate: pop one, loop\n  Exit --> [*]: return processed count`}
+              caption="The worker re-checks the mutex-protected predicate every wakeup. The condvar only says re-check now; the queue state is the source of truth."
+            />
             <RustCodeEditor
               code={codes.synchronization_mutex_condvar_queue}
               onChange={(newCode) => updateCode("synchronization_mutex_condvar_queue", newCode)}
@@ -511,6 +614,15 @@ export function PageCh23SynchronizationPrimitives() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the write to the config happens before the main thread reaches{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">start.wait()</code>, so when the barrier
+              releases all three threads, both readers see the same updated snapshot. The timeline below shows that gate.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant M as Main thread\n  participant R1 as Reader 1\n  participant R2 as Reader 2\n  participant B as Barrier (3)\n  R1->>B: wait()\n  R2->>B: wait()\n  M->>M: write lock, set version=2, mode=burst\n  M->>B: wait() (third arrival)\n  B-->>R1: release all\n  B-->>R2: release all\n  R1->>R1: read lock, see version 2\n  R2->>R2: read lock, see version 2`}
+              caption="Readers park at the barrier; the writer updates the snapshot and then arrives third. The barrier releasing is the phase gate that makes the write visible to both readers."
+            />
             <RustCodeEditor
               code={codes.synchronization_rwlock_barrier}
               onChange={(newCode) => updateCode("synchronization_rwlock_barrier", newCode)}
@@ -564,6 +676,16 @@ export function PageCh23SynchronizationPrimitives() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the value is stored with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Relaxed</code>,
+              but the flag is stored with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Release</code>
+              and loaded with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Acquire</code>. That one
+              pairing is the synchronization edge. Trace it in the diagram first.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph Writer\n    W1[store value = 42, Relaxed] --> W2[store ready = true, Release]\n  end\n  subgraph Reader\n    R1[load ready, Acquire] -->|false, spin| R1\n    R1 -->|true| R2[load value, Relaxed]\n  end\n  W2 -.happens-before.-> R1\n  W1 -.now visible.-> R2`}
+              caption="The Release store paired with the Acquire load forms a happens-before edge. Crossing it makes the earlier Relaxed write to value visible, so the reader is guaranteed to see 42."
+            />
             <RustCodeEditor
               code={codes.synchronization_atomics_ordering}
               onChange={(newCode) => updateCode("synchronization_atomics_ordering", newCode)}

@@ -15,6 +15,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -216,15 +217,19 @@ const transportChoiceCards = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "The socket mechanics may look familiar, but Rust pushes you away from broad shared sink mutation and toward one-owner task boundaries. That usually makes reconnect, shutdown, and replay calmer to review.",
+    body: "The raw socket mechanics will feel familiar, but the instinct to share one write end behind a mutex and let any thread touch it is exactly what Rust pushes back on. Model the connection as one owner per direction instead, and the borrow checker turns close-ordering and error-propagation races into compile-time questions rather than 3 a.m. ones.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of one SignalR-style ambient connection object and more in terms of explicit transport, app loop, and outbound queue ownership. Rust rewards that split with clearer cancellation and test seams.",
+    body: "Stop reaching for a single SignalR-style ambient connection object that hides the reader, writer, and dispatcher behind one facade. In Rust the three responsibilities become three explicit owners joined by bounded channels, and cancellation stops being a CancellationToken you remember to thread through and becomes the shape of the code.",
   },
   {
     title: "Go background",
-    body: "It is tempting to map each connection to a goroutine trio and call it done. Rust wants a bit more explicitness: owned payloads, bounded channels, and clear shutdown instead of ambient shared memory and unbounded fan-out.",
+    body: "The goroutine-per-direction reflex is right; the unstated parts are the trap. Go lets you spawn a writer and feed it from an unbounded channel without thinking about it. Rust makes you name the channel bound, the owned payload type, and the shutdown signal up front, so a slow client surfaces as backpressure instead of a quietly growing heap.",
+  },
+  {
+    title: "Python background",
+    body: "Coming from asyncio or FastAPI, the temptation is to await ws.send() from many coroutines and trust the event loop to interleave them. Rust will not let two tasks hold the write half at once, so you serialize sends through one writer task on purpose. The payoff is that backpressure and ordering are decisions you can see, not behavior you discover under load.",
   },
 ]
 
@@ -301,8 +306,11 @@ export function PageCh48WebsocketsLongLivedConnections() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Long-lived connections need controlled lifecycle, per-connection task ownership, flow control, heartbeat policy,
-          and shutdown behavior. This chapter covers WebSocket services as operational state machines.
+          A request handler lives for milliseconds; a WebSocket lives for hours. That single change of timescale is what
+          this chapter is really about. Once a connection sticks around, it acquires a lifecycle, its own memory and tasks,
+          a pace it can be pushed faster than, and a way it has to shut down. We treat each connection as a small
+          long-lived subsystem and work through who owns what, how to keep slow clients from sinking the server, and how
+          to retire a socket cleanly.
         </p>
       </div>
 
@@ -349,9 +357,18 @@ export function PageCh48WebsocketsLongLivedConnections() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            An admin console needs live task progress and operator notifications over long-lived connections. The business
-            requirement is a connection model that survives many tabs, reconnect storms, slow consumers, bounded fan-out,
-            protocol versioning, and graceful shutdown.
+            An operations team runs an admin console that shows live task progress and pushes operator notifications. The
+            naive version is an afternoon of work: open a socket, loop over events, write them out. It demos beautifully.
+            Then real usage arrives. Operators leave the console open in five tabs across two monitors. A deploy bounces
+            the load balancer and every browser reconnects in the same second. One operator is on hotel Wi-Fi and reads
+            messages slower than the server produces them. A new release adds a field to an event and older tabs start
+            choking on it.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            None of those are exotic failures. They are the ordinary weather of long-lived connections, and the afternoon
+            prototype has no answer for any of them. What the team actually needs is a connection model that survives many
+            tabs, reconnect storms, slow consumers, bounded fan-out, protocol versioning, and graceful shutdown. The rest
+            of this chapter builds that model one decision at a time.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful design order</h4>
@@ -369,6 +386,18 @@ export function PageCh48WebsocketsLongLivedConnections() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Before the details, fix the picture. A WebSocket connection is not a function that returns; it is a small
+            running machine with three internal jobs. One job reads inbound frames off the wire. One job writes outbound
+            frames to the wire. A third job in the middle holds the application state and decides what to send. The two
+            transport jobs are the only code that ever touches the socket, and they talk to the application through bounded
+            channels rather than shared locks. Keep that shape in mind; almost every recommendation in this chapter is a
+            consequence of it.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Net((network)) -->|frames in| Reader[reader task]\n  Reader -->|owned messages| App[app task: protocol state]\n  App -->|outbound queue| Writer[writer task]\n  Writer -->|frames out| Net\n  App -.->|subscribes to| Hub[(broadcast hub)]`}
+            caption="One reader, one application owner, one writer. Only the reader and writer touch the socket; everything else flows through owned messages on bounded channels."
+          />
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -384,12 +413,30 @@ export function PageCh48WebsocketsLongLivedConnections() {
             <Gauge className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The work divides into five recurring concerns: the lifecycle the connection moves through, who owns which part
+            of it, how the server protects itself when a client falls behind, how the message protocol survives being
+            changed under live traffic, and how to authenticate and shut down without leaving sockets dangling. We take
+            them in that order, because each one assumes the previous one is already settled.
+          </p>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              WebSocket lifecycle: upgrade, split read/write halves, ping/pong, close frames, and reconnects
+              The connection lifecycle: upgrade, split, heartbeat, close, reconnect
             </h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A connection moves through a small set of phases, and each phase has different rules about what is allowed.
+              The thing to watch in the diagram below is where ordinary HTTP discipline ends and long-lived state begins:
+              everything to the left of the split, authentication, origin checks, headers, rate limits, is normal request
+              handling, and it must finish before the socket starts carrying application traffic. After the split, you are
+              in a steady state that only two events can leave: an explicit close handshake, or a drop that the client
+              answers with a reconnect.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> HttpUpgrade\n  HttpUpgrade --> Open: auth and origin ok\n  HttpUpgrade --> [*]: rejected\n  Open --> Open: ping / pong / messages\n  Open --> Closing: close frame sent\n  Closing --> [*]: close handshake done\n  Open --> Dropped: network failure\n  Dropped --> HttpUpgrade: client reconnects`}
+              caption="The upgrade is the last moment normal HTTP auth applies. Once Open, only a close handshake or a drop-then-reconnect leaves the steady state."
+            />
+            <div className="grid gap-4 lg:grid-cols-3 mt-4">
               {lifecycleCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -408,8 +455,17 @@ export function PageCh48WebsocketsLongLivedConnections() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Connection ownership and task boundaries in async Rust
+              Who owns the read side, the write side, and the protocol state
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              In most async Rust WebSocket stacks the first thing you do after the upgrade is split the connection into a
+              read half and a write half. That split is not an implementation detail; it is the ownership boundary the rest
+              of the design hangs on. The read half goes to exactly one task, the write half goes to exactly one task, and
+              any application logic that needs to react to messages or push updates sits in a third owner that never touches
+              the socket directly. The cards below assign each responsibility to a single owner; the reason this matters is
+              that the alternative, many tasks sharing the write half behind a lock, makes ordering, close, and error
+              handling into a race that Rust would rather you not write in the first place.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {ownershipCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -425,9 +481,18 @@ export function PageCh48WebsocketsLongLivedConnections() {
                 A broad shared writer lock often looks simpler at first and becomes harder to cancel, order, and test later.
               </p>
             </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          </article>
+
+          <article className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+            <h4 className="font-semibold text-foreground mb-2">How this lands if you come from another language</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The one-reader, one-writer, one-application-owner shape is the same in any language. What differs is the
+              habit you arrive with, and which of those habits Rust quietly refuses to let you keep. Each card below is the
+              mental-model shift, not an API mapping.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
                   <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
                 </div>
@@ -437,9 +502,28 @@ export function PageCh48WebsocketsLongLivedConnections() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Backpressure, bounded queues, fan-out, and slow consumer handling
+              Keeping a slow client from sinking the server
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Backpressure is the question of what happens when you produce messages faster than a client can read them.
+              The honest framing is that you are always answering it, even when you never wrote the answer down: an
+              unbounded queue is a policy that says grow memory until the process dies. The diagram traces the decision
+              every push makes. The fork that matters is the one in the middle, when the per-connection queue is full,
+              you are forced to choose between dropping data, coalescing it, or dropping the client, and that choice is a
+              product decision, not a transport detail.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Push[new outbound message] --> Q{queue full?}\n  Q -->|no| Enqueue[enqueue, writer drains]\n  Q -->|yes| Policy[slow-consumer policy<br/>continues below]`}
+              caption="The entry fork: with room in the queue, enqueue and the writer drains it. When the queue is full, control passes to the slow-consumer policy."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              When the queue is full, the policy you chose ahead of time decides which of four things to sacrifice:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Policy{slow-consumer policy}\n  Policy -->|drop newest| DropNew[discard this message]\n  Policy -->|drop oldest| DropOld[evict head, enqueue]\n  Policy -->|coalesce| Snap[replace with latest snapshot]\n  Policy -->|disconnect| Evict[close the connection]`}
+              caption="The four slow-consumer outcomes. Each one sacrifices something different: the new data, the old data, freshness across updates, or the client itself."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               {backpressureCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -465,12 +549,22 @@ export function PageCh48WebsocketsLongLivedConnections() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Message schemas, serialization, versioning, and protocol evolution
+              Designing a message protocol that survives being changed
             </h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
-              Long-lived protocols drift the same way HTTP APIs and broker envelopes drift. Keep the protocol version,
-              message kind, and stable identity visible in the message envelope, then keep transport message types separate
-              from domain events or commands.
+              A WebSocket protocol drifts exactly the way an HTTP API or a broker envelope drifts, and for the same reason:
+              old clients and new servers run side by side for as long as someone keeps a tab open. The defense is to make
+              the contract explicit in the envelope rather than implicit in the deploy. Two ideas carry most of the weight.
+              First, every message carries a version, a kind, and a stable identity, so a mixed fleet stays debuggable.
+              Second, transport-level messages, ping, pong, close, subscribe, ack, are a different layer from domain events
+              like <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">invoice_created</code>, and keeping
+              them separate in the type system keeps them separate in your head.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              In the sketch below, look at the two derives. The <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">#[serde(tag = &quot;type&quot;)]</code>{" "}
+              on the client message turns the enum into a tagged union on the wire, so adding a new variant is additive and
+              old clients simply never send it. The generic <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Envelope&lt;T&gt;</code>{" "}
+              wraps any payload with the version and trace fields so routing and logging never have to parse the body first.
             </p>
             <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{messageEnvelopeSnippet}</code>
@@ -489,6 +583,14 @@ export function PageCh48WebsocketsLongLivedConnections() {
             <h4 className="font-semibold text-foreground mb-3">
               Authentication, authorization, origin checks, and rate limiting
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The dangerous assumption with a long-lived connection is that proving who you are once, at the upgrade, also
+              settles what you are allowed to do for the next several hours. It does not. Authentication happens at the
+              handshake, where you still have ordinary HTTP cookies, headers, and origin to work with. Authorization
+              happens on every message, because a connection can be perfectly authenticated and still have no business
+              subscribing to a particular stream or issuing a particular command. Keep those two as separate checks, and
+              remember that flooding handshakes and flooding messages are different attacks that need separate rate limits.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {securityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -500,8 +602,20 @@ export function PageCh48WebsocketsLongLivedConnections() {
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Graceful shutdown for long-lived tasks</h4>
-            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+            <h4 className="font-semibold text-foreground mb-3">Shutting down without dropping sockets on the floor</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Graceful shutdown is an ordering problem, and the order is the same one TCP services and brokers use: stop
+              admitting new work, drain what is already in flight, then cancel the rest with a deadline. The sequence below
+              shows why the order is not negotiable. If you cancel the connection tasks first, the close frames never go
+              out and clients see an abrupt drop; the entire close policy you wrote simply did not run. The signal flows
+              from a supervisor through a watch or cancellation channel that the writer and application loop are already
+              watching, so shutdown is something they observe rather than something done to them.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant S as Supervisor\n  participant L as Listener\n  participant A as App loop\n  participant W as Writer\n  S->>L: stop accepting upgrades\n  S->>A: mark draining\n  A->>W: enqueue close frames\n  W-->>S: drained or timeout\n  S->>A: cancel remaining tasks`}
+              caption="Stop admission, drain through the writer, then cancel with a timeout. Cancelling first would skip the close frames entirely."
+            />
+            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside mt-4">
               {shutdownSteps.map((step) => (
                 <li key={step}>{step}</li>
               ))}
@@ -537,8 +651,16 @@ export function PageCh48WebsocketsLongLivedConnections() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Choosing WebSockets vs SSE, polling, gRPC streaming, or message brokers
+              When to reach for something other than a WebSocket
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Everything above is the cost of running a WebSocket well, which is the best argument for checking whether you
+              need one. The deciding question is almost always direction. If the client only ever listens, a
+              server-sent-events stream gives you push over plain HTTP with none of the bidirectional ceremony. If updates
+              are rare, polling is genuinely simpler infrastructure. gRPC streaming wins for typed service-to-service
+              traffic, and a message broker wins when producers and consumers should be decoupled in time. Pick a
+              WebSocket when both sides truly need to talk over one long-lived session, not by reflex.
+            </p>
             <div className="grid gap-4 lg:grid-cols-5">
               {transportChoiceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -609,9 +731,11 @@ export function PageCh48WebsocketsLongLivedConnections() {
                   Example 1: separate reader, writer, and application logic with channels
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The example uses Tokio channels and a watch shutdown signal to model one reader task, one app task, and
-                  one writer task. Real WebSocket crates usually provide the transport halves; the ownership shape is the
-                  lesson that matters.
+                  This example models the whole connection with Tokio channels and a watch shutdown signal: one reader
+                  task, one app task, one writer task. A real WebSocket crate hands you the transport halves instead of
+                  channels, but the ownership shape is identical, and the shape is the lesson. As you read it, watch the
+                  direction of data: nothing ever reaches the writer except by way of the app task, and the reader never
+                  writes. Follow one inbound message through the diagram first, then find the same hops in the code.
                 </p>
               </div>
               {codes.websocket_connection_io_split !== DEFAULT_CODES.websocket_connection_io_split && (
@@ -625,6 +749,11 @@ export function PageCh48WebsocketsLongLivedConnections() {
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant R as Reader\n  participant A as App\n  participant W as Writer\n  R->>A: inbound message (owned)\n  A->>A: update protocol state\n  A->>W: outbound message (owned)\n  W->>W: drain queue, write frame\n  Note over R,W: shutdown signal closes channels, writer finishes last`}
+              caption="Inbound flows reader to app to writer; outbound never skips the app. On shutdown the channels close in order so the writer drains before the connection ends."
+            />
+            <div className="mt-4">
             <RustCodeEditor
               code={codes.websocket_connection_io_split}
               onChange={(newCode) => updateCode("websocket_connection_io_split", newCode)}
@@ -637,6 +766,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
               originalCode={DEFAULT_CODES.websocket_connection_io_split}
               onRevert={() => resetCode("websocket_connection_io_split")}
             />
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Read ownership</div>
@@ -666,9 +796,14 @@ export function PageCh48WebsocketsLongLivedConnections() {
                   Example 2: bounded fan-out with slow-consumer eviction
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The example keeps the queue logic crate-light with
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">VecDeque</code>, but the policy
-                  is the same one you would implement with a bounded channel per connection in a real async service.
+                  This is the slow-consumer policy from the diagram above, made concrete and runnable. It keeps the queue
+                  logic crate-light with a{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">VecDeque</code> per client, but the
+                  decision is the same one a bounded channel makes in a real async service. The line to focus on is the
+                  capacity check before each enqueue: the broadcast walks every subscriber, and any client already at its
+                  bound is evicted rather than allowed to grow memory. The diagram shows that fork from the broadcast's
+                  point of view; in the run, client <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">beta</code>{" "}
+                  is the one over its limit, so it is the one that disappears.
                 </p>
               </div>
               {codes.websocket_bounded_fanout_slow_consumers !== DEFAULT_CODES.websocket_bounded_fanout_slow_consumers && (
@@ -682,6 +817,11 @@ export function PageCh48WebsocketsLongLivedConnections() {
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Bcast[broadcast event] --> Loop{for each subscriber}\n  Loop --> Cap{at queue bound?}\n  Cap -->|no| Deliver[enqueue, delivered++]\n  Cap -->|yes| Evict[evict subscriber]\n  Deliver --> Loop\n  Evict --> Loop\n  Loop -->|done| Out[active and evicted counts]`}
+              caption="One broadcast visits every subscriber. Those with room receive the event; those already at the bound are evicted, which is why the run reports active = 2 and evicted = beta."
+            />
+            <div className="mt-4">
             <RustCodeEditor
               code={codes.websocket_bounded_fanout_slow_consumers}
               onChange={(newCode) => updateCode("websocket_bounded_fanout_slow_consumers", newCode)}
@@ -694,6 +834,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
               originalCode={DEFAULT_CODES.websocket_bounded_fanout_slow_consumers}
               onRevert={() => resetCode("websocket_bounded_fanout_slow_consumers")}
             />
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Bound</div>

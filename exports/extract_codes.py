@@ -10,10 +10,10 @@ import json, os, re, glob
 HERE = os.path.dirname(os.path.abspath(__file__))
 RB = os.path.join(HERE, "..", "components", "rust-book")
 
-# `key: \`...rust...\`,` — Rust source contains no backticks, so the first ` after the
-# colon opens and the next ` closes. We anchor on a colon to avoid false hits inside
-# imports/comments.
-ENTRY = re.compile(r"(\b\w+)\s*:\s*`([^`]*)`", re.DOTALL)
+# `key: \`...rust...\`,` — Rust source CAN contain escaped backticks inside doc
+# comments (the source uses \` and \$ to escape inside JS template literals), so
+# we match any character that isn't a backtick OR a backslash-escape pair.
+ENTRY = re.compile(r"(\b\w+)\s*:\s*`((?:[^`\\]|\\.)*)`", re.DOTALL)
 
 codes = {}
 
@@ -42,6 +42,8 @@ def harvest(path):
     for blk in blocks:
         for mm in ENTRY.finditer(blk):
             k, v = mm.group(1), mm.group(2)
+            # JS template-literal escapes: \` and \$ become literal ` and $.
+            v = v.replace("\\`", "`").replace("\\$", "$")
             if k in codes and codes[k] != v:
                 # collision — keep first definition; warn
                 continue

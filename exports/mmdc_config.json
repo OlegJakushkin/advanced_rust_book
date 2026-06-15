@@ -1,0 +1,18 @@
+{
+  "theme": "default",
+  "themeVariables": {
+    "fontFamily": "Georgia, serif",
+    "fontSize": "14px",
+    "primaryColor": "#fff5ee",
+    "primaryBorderColor": "#CE412B",
+    "primaryTextColor": "#1a1a1a",
+    "lineColor": "#666",
+    "secondaryColor": "#f4f4f5",
+    "tertiaryColor": "#fafafa"
+  },
+  "flowchart": {
+    "curve": "linear",
+    "useMaxWidth": false,
+    "htmlLabels": false
+  }
+}

@@ -1,0 +1,222 @@
+{
+ "chapterKey": "ch42",
+ "num": 42,
+ "title": "Testing Advanced Rust Systems",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose unit, integration, property, fuzz, snapshot, or benchmark from the claim",
+   "objective": "Practice selecting the cheapest test layer that can prove the real behavior instead of defaulting to one broad test shape.",
+   "starterPrompt": "Classify five needs: a state-machine invariant, a public HTTP contract, a hostile binary parser input space, a large human-reviewable error report, and a latency budget for one hot batch encoder.",
+   "prompts": [
+    "Which need is best served by a unit test first?",
+    "Which need wants a true integration test against a public boundary?",
+    "Which need wants property testing because one invariant should hold across many generated cases?",
+    "Which need wants fuzzing because the input space is adversarial or malformed by nature?",
+    "Which need wants snapshot or golden review, and which one wants a benchmark budget instead?"
+   ],
+   "acceptanceCriteria": [
+    "You map each claim to a plausible primary test layer and justify it with cost and confidence.",
+    "You distinguish snapshot or golden review from semantic assertions clearly.",
+    "You keep performance budgets separate from functional correctness tests."
+   ],
+   "hints": [
+    "Start with the claim, not with the tool you already know best.",
+    "A good answer minimizes cost while preserving the right kind of evidence."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the missing layers in one test suite",
+   "objective": "Read a realistic but incomplete suite and explain which claims are still unproven.",
+   "starterPrompt": "A crate has only slow API integration tests. The domain model has no direct tests, the binary parser has no fuzz target, the async worker has sleep-based tests, and snapshot updates are accepted blindly.",
+   "prompts": [
+    "Which invariants should move into unit or property tests?",
+    "Which parser boundary wants fuzzing instead of only end-to-end fixtures?",
+    "Why are sleep-based async tests brittle here?",
+    "Which snapshot practice is too trusting for a production-facing report format?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one missing unit or property layer, one missing fuzz layer, and one async determinism problem.",
+    "You propose at least one replacement or repair for each gap.",
+    "You explain why the current suite is expensive and still incomplete."
+   ],
+   "hints": [
+    "The goal is not 'more tests'. The goal is the right missing tests.",
+    "If the suite is slow and still vague, the layering is probably wrong."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Write property tests for a domain invariant",
+   "objective": "Design a property test around one real state invariant instead of only enumerating a few hand-picked examples.",
+   "starterPrompt": "Take a small domain type such as a quota window, account ledger, or reservation tracker and write a property asserting the state never exceeds its declared limit after any generated sequence of operations.",
+   "prompts": [
+    "State the invariant before you state the generator.",
+    "Use generated operations, not only a couple of example sequences.",
+    "Keep a deterministic reference rule if that helps explain the expectation.",
+    "Say what should shrink when the invariant fails."
+   ],
+   "acceptanceCriteria": [
+    "You express one real invariant in clear Rust-domain terms.",
+    "You generate a sequence or batch of inputs rather than a single fixed example.",
+    "You explain how a failing case becomes smaller or easier to diagnose under shrinking."
+   ],
+   "hints": [
+    "A good property reads like a rule the business or subsystem actually cares about.",
+    "The generator serves the invariant, not the other way around."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Plan fuzz targets for unsafe parsing code",
+   "objective": "Choose the right harness boundary and corpus strategy for an unsafe or FFI-adjacent parser.",
+   "starterPrompt": "You inherit a framed binary parser with one small unsafe fast path that reconstructs headers from bytes and then walks a payload cursor.",
+   "prompts": [
+    "Which function should be the fuzz boundary: raw bytes to parse result, or a much larger transport stack?",
+    "Which seed corpus cases should exist on day one: empty, truncated, exact header, oversized length, duplicated frame, malformed footer?",
+    "How will you compare the unsafe fast path against a safer reference parser or structural invariant?",
+    "What crash or sanitizer signals should fail the fuzz lane immediately?"
+   ],
+   "acceptanceCriteria": [
+    "You pick a small direct fuzz boundary and justify it.",
+    "You define at least five useful seed inputs or input classes.",
+    "You mention either a reference implementation or explicit unsafe invariants to check.",
+    "You include at least one tool signal such as sanitizer failure, panic, or UB detection."
+   ],
+   "hints": [
+    "The best fuzz target is usually smaller than the whole service.",
+    "Keep the harness close enough to the parser that the crashing bytes still mean something."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design async integration tests for a service boundary",
+   "objective": "Make time, retries, task joins, and durable side effects explicit in an async test plan.",
+   "starterPrompt": "You are testing `HTTP request -> async worker -> database write -> queue publish`, and the retry path must stay idempotent under duplicate delivery or cancellation.",
+   "prompts": [
+    "Which boundaries deserve fake time or a paused runtime?",
+    "Which durable side effects should be asserted before the handler considers the work complete?",
+    "How will the test distinguish join failure, inner failure, and cancellation?",
+    "Which IDs should appear in the assertions so the failure stays attributable later?"
+   ],
+   "acceptanceCriteria": [
+    "You include at least one deterministic time-control technique.",
+    "You define one idempotency or duplicate-suppression assertion at the durable boundary.",
+    "You separate task-join behavior from inner operation behavior.",
+    "You mention at least one request, task, or message identity field in the assertions."
+   ],
+   "hints": [
+    "If the plan still depends on `sleep`, it probably is not deterministic enough.",
+    "The right assertion is often at the database or outbox boundary, not only at the HTTP status code."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Build a production test matrix for a distributed Rust subsystem",
+   "objective": "Combine correctness, fuzzing, snapshots, golden files, and performance budgets into one reviewable plan.",
+   "starterPrompt": "Create a test matrix for a service that parses binary frames, enriches them asynchronously, writes an outbox entry, renders operator-facing reports, and exposes one FFI plugin boundary.",
+   "prompts": [
+    "Which claims stay in unit or property tests?",
+    "Which boundaries want fuzz targets or unsafe invariant tests?",
+    "Which output wants a golden file and which wants a snapshot?",
+    "Which benchmark budget or regression lane belongs in CI, and which one belongs in a separate performance lane?",
+    "What is the minimum end-to-end suite that still proves the transport reality without turning CI into a random-timing lottery?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least four distinct layers or lanes in the matrix.",
+    "You include one property or invariant layer, one fuzz or unsafe layer, one output-review layer, and one performance-regression layer.",
+    "You justify why each layer exists and what claim it proves.",
+    "You keep the end-to-end layer narrow enough to stay maintainable."
+   ],
+   "hints": [
+    "The cleanest matrix proves different claims at different costs.",
+    "If every claim is left to end-to-end tests, the suite will usually be slow and still incomplete."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is a property test often a better fit than several ad hoc example tests for one invariant?",
+  "What does fuzzing prove that a curated integration fixture set usually does not prove?",
+  "Why are sleep-based async tests brittle even when they 'usually pass' locally?",
+  "What is the practical difference between golden files and snapshot tests?",
+  "Why should benchmark regression budgets be looser and more isolated than ordinary correctness assertions?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Deterministic property-style invariant harness",
+  "filename": "property_invariant_lab.rs",
+  "runKey": "ch42_ex_property_invariant",
+  "expectedOutput": "cases = 5\nall valid = true\nviolations = 0",
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Quota {\n    limit: u32,\n    used: u32,\n}\n\nimpl Quota {\n    fn reserve(&mut self, qty: u32) -> bool {\n        self.used += qty;\n        true\n    }\n}\n\nfn invariant_holds(limit: u32, ops: &[u32]) -> bool {\n    let mut quota = Quota { limit, used: 0 };\n\n    for &qty in ops {\n        let _accepted = quota.reserve(qty);\n        if quota.used > quota.limit {\n            return false;\n        }\n    }\n\n    true\n}\n\nfn main() {\n    let scenarios: &[&[u32]] = &[\n        &[1_u32, 1, 1],\n        &[4_u32, 4],\n        &[5_u32, 4],\n        &[2_u32, 2, 2, 2],\n        &[8_u32],\n    ];\n\n    let all_valid = scenarios.iter().all(|ops| invariant_holds(8, ops));\n    let violations = scenarios.iter().filter(|ops| !invariant_holds(8, ops)).count();\n\n    println!(\"cases = {}\", scenarios.len());\n    println!(\"all valid = {}\", all_valid);\n    println!(\"violations = {}\", violations);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 08, 19, 24, 25, 31, and 41",
+  "Opening scenario",
+  "At a glance",
+  "Proof questions for the suite",
+  "Mental model",
+  "Core concepts",
+  "The shape of a layered suite",
+  "Unit tests",
+  "Integration tests",
+  "Property-based testing",
+  "Fuzzing",
+  "Testing unsafe code",
+  "Testing async code",
+  "Testing distributed systems",
+  "Golden files",
+  "Snapshot testing",
+  "Benchmark regression tests",
+  "How testing thinking shifts by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: deterministic invariant harness you can later lift into a property test",
+  "Example 2: deterministic async idempotency harness for a service boundary",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Testing an advanced Rust system is less about test count and more about defending the right invariants at the cheapest layer that can still prove them — across parsers, concurrency, IO, time, and failure. This chapter organizes a test suite around production risk and determinism ",
+  "Chapter 08 covered unsafe invariants and FFI boundaries. Chapter 19 covered stable wire contracts and fixture-friendly DTOs. Chapters 24 and 25 covered async and Tokio. Chapter 31 covered replay, leases, and distributed work. Chapter 41 separated domain, infrastructure, and trans",
+  "Picture one service that has accumulated every hard-to-test ingredient at once. It has an unsafe parser fast path that walks raw bytes, async workers that process those frames, distributed replay where the same message can arrive twice, generated reports that another team reviews",
+  "The job for the rest of this chapter is to take that one tangled service and break its risks apart into separate, mostly deterministic claims — local invariants, hostile-input handling, retry safety, output stability, and performance budgets — and then prove each claim at the che",
+  "The same mapping continues for output stability and performance:",
+  "In a real Cargo repository this layering is not abstract — it shows up as concrete files and crates: ordinary unit-test modules next to the code, an tests/ directory for integration suites, a property-testing crate such as proptest, fuzz targets driven by cargo-fuzz, snapshot too",
+  "Three ideas carry most of the weight in this chapter. Name the claim each test defends, prove it at the cheapest layer that can, and engineer determinism instead of hoping for it. Everything else — which crate, which macro, which directory — is downstream of getting these three r",
+  "The familiar “test pyramid” is really a statement about cost and stability. Cheap, fast, deterministic tests live at the bottom and there are many of them; expensive, slower, more fragile tests live at the top and there are few. Property tests and fuzzing sit off to the side: the",
+  "Unit tests are the right layer for local invariants, pure helpers, edge conditions, and typed domain rules. They should prove things like “quota never exceeds limit,” “state transition rejects duplicate submission,” or “parser header length is checked before decoding.” This is us",
+  "In the snippet below, look at the two assertions on the same ID. The first insert must succeed and the second must fail — that pair is the entire contract of a duplicate-rejecting index, stated without booting anything around it.",
+  "Integration tests should exercise public seams the way another crate or another deployment unit does: HTTP handlers driven through a test app, an adapter and its store doing a real round-trip, or a queue-consumer shell wrapped around an owned envelope. The discipline that keeps t",
+  "In the example, the interesting lines are the two assertions after the request. The status code proves the public HTTP contract; the outbox_contains check proves the side effect crossed the seam. Everything before them is just enough setup to make those two claims meaningful.",
+  "A property test inverts how you normally write assertions. Instead of supplying a specific input and checking a specific output, you state a rule that must hold for every input in some range, and the framework generates hundreds of cases trying to break it. Properties shine when ",
+  "The random data is not the valuable part on its own — thirty random runs that all pass prove little. The valuable part is shrinking: when a property fails, proptest automatically reduces the failing case to a minimal counterexample, so you get the smallest input that violates the",
+  "Fuzzing is property testing pointed at openly hostile input. It is the right tool for parsers, decoders, compression wrappers, protocol frames, unsafe byte walkers, and FFI boundaries — anywhere arbitrary bytes from outside cross into your code. A coverage-guided fuzzer such as c",
+  "Two habits make fuzzing pay off. Target the smallest boundary that still reproduces the failure, so a crash points at one parser rather than the whole service. And save crashing inputs into a corpus so each fix comes with a permanent regression case. The harness below is delibera",
+  "Unsafe code is different because the bug you fear may not be observable from a passing test. A use of an invalid pointer or a violated aliasing rule is undefined behavior: the program might return the right answer today and corrupt memory next week after the optimizer makes a dif",
+  "Unsafe code is not “well tested” because one happy-path integration test passed. It is well tested only when the test suite covers the invariant edges where UB risk actually lives.",
+  "The recurring temptation in async tests is to express “after some time, X should happen” with a real sleep. That makes the test slow and, worse, makes it depend on scheduler luck, so it passes on a fast laptop and flakes in CI. The fix is to take time out of the operating system’",
+  "The test below exercises a lease that should expire and let the task be reclaimed. The behavior under test is a small state machine, so it is worth seeing the states before the code. Watch how the test never sleeps for real: it claims the task, advances the fake clock past the le",
+  "In a distributed system the connection opening is the boring part. What actually keeps you up at night is everything that happens because most brokers deliver at least once: the same message can arrive twice, a lease can expire and redeliver mid-flight, a retry can re-run work th",
+  "The single most important property is usually idempotency under duplicate delivery. The sequence below is the one your test should drive directly: the same message ID is delivered twice, but the durable effect happens exactly once because the worker checks a completion record bef",
+  "A golden-file test compares the program’s output against a known-good artifact checked into the repository. It shines when the output is an external contract someone actually cares about byte-for-byte: a protocol frame, a normalized CLI dump, compiler-style diagnostics, or a rend",
+  "The snippet is the whole pattern in three lines: render the artifact, read the committed golden bytes, compare. The only subtlety lives in what you render — anything nondeterministic (timestamps, UUIDs, paths) must be normalized before the comparison, or the test becomes noise th",
+  "Snapshot testing is the ergonomic cousin of golden files. A crate such as insta captures the output on the first run, stores it next to the test, and on later runs shows you a diff and lets you accept or reject the change with a review command. It is the right tool when the outpu",
+  "The one-line call in the snippet hides the workflow, not the risk. A snapshot proves “the output looks like this,” which is weaker than “the output is correct.” Treat it as a review aid for shape and pair it with a real semantic assertion for any load-bearing invariant — acceptin",
+  "Benchmark regressions belong in their own lane. They are less deterministic than correctness tests, more sensitive to hardware and build profile, and only useful when the budget itself is meaningful to the product. Keep them coarse, stable, and obviously tied to one service budge",
+  "In the snippet, the two things to notice are the #[ignore] attribute that keeps this out of the normal correctness run, and the comparison against a single coarse budget (p95_us <= 250) rather than an exact timing. That looseness is intentional: it is a guard against regressions ",
+  "The hardest part of testing advanced Rust is rarely the syntax of #[test] — it is unlearning the substitution and isolation habits your previous language made cheap. Each card below names the mental-model shift, not a crate-for-library mapping.",
+  "The most expensive advanced-testing mistake is usually not “too few tests.” It is too much of the wrong test layer and too little control over time, replay, unsafe invariants, and output stability."
+ ],
+ "codeSamples": {
+  "testing_property_invariant_harness": "#[derive(Debug, Clone, Copy)]\nstruct Quota {\n    limit: u32,\n    used: u32,\n}\n\nimpl Quota {\n    fn try_reserve(&mut self, qty: u32) -> bool {\n        if self.used + qty > self.limit {\n            return false;\n        }\n\n        self.used += qty;\n        true\n    }\n}\n\nfn invariant_holds(limit: u32, ops: &[u32]) -> bool {\n    let mut quota = Quota { limit, used: 0 };\n\n    for &qty in ops {\n        let _accepted = quota.try_reserve(qty);\n        if quota.used > quota.limit {\n            return false;\n        }\n    }\n\n    true\n}\n\nfn main() {\n    let limit = 8_u32;\n    let scenarios: &[&[u32]] = &[\n        &[1_u32, 1, 1],\n        &[4_u32, 4],\n        &[5_u32, 4],\n        &[2_u32, 2, 2, 2],\n        &[8_u32],\n    ];\n\n    let all_valid = scenarios\n        .iter()\n        .all(|ops| invariant_holds(limit, ops));\n\n    println!(\"cases = {}\", scenarios.len());\n    println!(\"all valid = {}\", all_valid);\n    println!(\"limit = {}\", limit);\n}",
+  "testing_async_idempotent_delivery_harness": "use std::collections::HashSet;\nuse std::sync::Arc;\n\nuse tokio::sync::Mutex;\n\n#[derive(Default)]\nstruct FakeStore {\n    applied: Mutex<HashSet<&'static str>>,\n    duplicate_count: Mutex<usize>,\n}\n\nimpl FakeStore {\n    async fn apply_once(&self, event_id: &'static str) -> bool {\n        let mut applied = self.applied.lock().await;\n        if !applied.insert(event_id) {\n            drop(applied);\n            let mut duplicates = self.duplicate_count.lock().await;\n            *duplicates += 1;\n            return false;\n        }\n\n        true\n    }\n\n    async fn processed(&self) -> usize {\n        self.applied.lock().await.len()\n    }\n\n    async fn duplicates(&self) -> usize {\n        *self.duplicate_count.lock().await\n    }\n}\n\n#[tokio::main]\nasync fn main() {\n    let store = Arc::new(FakeStore::default());\n\n    for event_id in [\"evt-1\", \"evt-1\", \"evt-2\"] {\n        let _ = store.apply_once(event_id).await;\n    }\n\n    println!(\"processed = {}\", store.processed().await);\n    println!(\"duplicates = {}\", store.duplicates().await);\n    println!(\"deliveries = {}\", 3);\n}"
+ },
+ "labReferenceSolution": null
+}

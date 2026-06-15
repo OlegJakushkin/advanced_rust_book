@@ -210,4 +210,4 @@ export const PageCh50Libp2pPeerToPeerRustSystemsExercises = makeExercisePage("ch
 export const PageCh51ZeroKnowledgeProofsRustEngineersExercises = makeExercisePage("ch51-zero-knowledge-proofs-rust-engineers-exercises")
 export const PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises = makeExercisePage("ch52-zokrates-workflows-ethereum-verifiers-exercises")
 export const PageCh53EzklVerifiableLlmInferenceGpuZkmlExercises = makeExercisePage("ch53-ezkl-verifiable-llm-inference-gpu-zkml-exercises")
-export const PageCh54NoStdRustConstrainedRuntimeDerivativesExercises = makeExercisePage("ch54-no-std-rust-constrained-runtime-derivatives-exercises")
+export const PageCh56NoStdRustConstrainedRuntimeDerivativesExercises = makeExercisePage("ch56-no-std-rust-constrained-runtime-derivatives-exercises")

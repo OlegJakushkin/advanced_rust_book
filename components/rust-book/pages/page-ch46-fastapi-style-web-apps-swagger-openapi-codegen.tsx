@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
@@ -179,28 +180,22 @@ const driftPreventionCards = [
 
 const comparisonCallouts = [
   {
-    title: "Python FastAPI background",
-    body: "The handler shape feels familiar: typed extractors, request and response models, generated OpenAPI. The Rust difference is that ownership, Send or Sync bounds, and cancellation stay visible instead of being smoothed over by runtime reflection.",
+    title: "Python background",
+    body: "FastAPI is the closest analogue, so the handler shape feels familiar at first glance: typed extractors, request and response models, generated OpenAPI from those models. The mental shift is that none of it is reflection at runtime. The compiler resolves your extractors and schemas before the server starts, so a claim that exists in the type only exists because you proved it, and a value moved into a spawned task is genuinely gone from the handler. The trap is reaching for an ambient request object or a global app state the way Python lets you; Rust wants those passed as typed inputs.",
   },
   {
-    title: "C# ASP.NET Core background",
-    body: "Routing, model binding, and middleware concepts transfer well. The Rust difference is that the application service boundary should stay free of framework request types so domain logic survives transport rewrites without leaning on attribute-based plumbing.",
+    title: "C# background",
+    body: "ASP.NET Core routing, model binding, and middleware concepts transfer almost one for one, and attribute-driven Swagger feels like the derive macros you will use here. The shift is that there is no DI container resolving services by interface at request time. State is one owned value you thread through explicitly, and the application service boundary should never take a framework request type. Keep that seam clean and a transport rewrite becomes an adapter change, not a domain rewrite.",
   },
   {
-    title: "Go net/http or chi background",
-    body: "Explicit handlers, simple middleware chains, and small structs translate naturally. The Rust difference is that extractors and typed state replace per-handler request parsing, and OpenAPI generation usually leans on derive macros rather than struct tags.",
+    title: "Go background",
+    body: "Explicit handlers, small structs, and short middleware chains all translate naturally, and you will feel at home keeping the transport edge thin. The shift is that per-handler request digging is replaced by typed extractors that fail at the boundary, and OpenAPI usually comes from derive macros on your DTOs rather than from struct tags you read by hand. The trap is treating an extractor like a free conversion; it is the place where bad input is rejected, so design it as a real validation gate.",
   },
   {
-    title: "C++ web framework background",
-    body: "If the previous stack pieced together HTTP parsing, JSON, and OpenAPI manually, Rust shifts those concerns into typed extractors, derive-based schemas, and one declared codegen workflow. The polyglot benefit is one reviewable contract instead of several drifting integrations.",
+    title: "C++ background",
+    body: "If your previous HTTP stack stitched together a parser, a JSON library, and a hand-maintained OpenAPI file, the big change is consolidation: typed extractors, derive-based schemas, and one declared codegen workflow replace several integrations that drifted independently. RAII intuition helps because connection pools, request bodies, and spawned tasks all have clear owners. The shift is to let one generated contract be the source of truth instead of keeping the spec and the server in sync by review.",
   },
 ]
-
-const transportPipelineSnippet = `HTTP extractor DTO
-    -> application command or query
-    -> service trait or concrete app service
-    -> domain result
-    -> response DTO`
 
 const ecosystemNote = `In a real Cargo project, common ecosystem options include framework layers such as axum, actix-web, poem, or salvo, plus OpenAPI tooling such as code-first schema generators, spec-first code generators, or mixed workflows. The browser examples stay self-contained so the transferable boundary design is visible without framework-version noise.`
 
@@ -276,8 +271,9 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Web API delivery needs typed handlers, documented contracts, generated transport code, and domain services
-          isolated from HTTP concerns. This chapter builds that production boundary in Rust.
+          A FastAPI-style developer experience in Rust comes from typed handlers, a documented OpenAPI contract,
+          generated transport code, and domain services kept clear of HTTP concerns. This chapter shows where each of
+          those boundaries belongs and how to keep the contract from drifting away from the code.
         </p>
       </div>
 
@@ -321,16 +317,30 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            An API prototype is being moved to Rust for tighter latency, concurrency, and failure-control requirements
-            while preserving typed handlers and usable documentation. The business requirement is to keep HTTP DTOs,
-            generated OpenAPI artifacts, and framework extractors at the transport edge while domain services remain
-            independent and testable.
+            A team has a working API prototype, written in something that made it easy to ship, and now needs to move it
+            to Rust. The motivation is the usual set of production pressures: tighter and more predictable latency, real
+            control over concurrency, and explicit handling of the failure cases that kept paging the on-call engineer.
+            What the team does not want to lose is the part of the prototype that made it pleasant to build, namely typed
+            handlers and documentation that other teams can actually read.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The requirement, stated plainly, is a single boundary rule. HTTP DTOs, the generated OpenAPI artifact, and
+            the framework extractors all live at the transport edge. The domain services behind that edge stay
+            independent of HTTP, so they remain easy to test, easy to reuse from a non-HTTP caller, and able to survive a
+            framework change. Most of this chapter is about where to draw that line and how to keep it from eroding.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="font-medium text-foreground mb-2">Transport-to-domain pipeline</div>
-            <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{transportPipelineSnippet}</code>
-            </pre>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The shape to hold in your head is a one-way flow that crosses one boundary exactly once. A request enters
+              as transport bytes, is decoded into an HTTP-facing DTO, is converted into a single application command or
+              query, and only then reaches the service. The result travels back out the same way. The conversion happens
+              at the handler and nowhere deeper, which is what keeps the service free of transport types.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  In[HTTP request] --> Ext[Typed extractor DTO]\n  Ext --> Cmd[Application command or query]\n  Cmd --> Svc[Domain or app service]\n  Svc --> Res[Domain result]\n  Res --> Out[Response DTO]\n  Out --> HTTP[HTTP response]\n  subgraph edge[Transport edge]\n    Ext\n    Out\n  end\n  subgraph core[HTTP-free core]\n    Cmd\n    Svc\n    Res\n  end`}
+              caption="Transport types live only at the edge; the command, the service, and the result never see HTTP."
+            />
           </div>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm text-muted-foreground leading-6">{ecosystemNote}</p>
@@ -342,6 +352,13 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Three ideas carry most of the weight in this chapter, and they are easier to hold onto if you state them
+            before reaching for any framework. HTTP is a translation boundary rather than your domain model. The
+            FastAPI-style feel you want comes from types and seams, not from runtime magic. And OpenAPI is an artifact
+            you own and review, not a screenshot the build happens to produce. The three cards below say each of these
+            more precisely; the rest of the chapter is mostly consequences of them.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -360,8 +377,16 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              FastAPI-like developer experience in Rust: routers, extractors, typed state, middleware, and dependency boundaries
+              What gives Rust a FastAPI-like feel: routers, extractors, typed state, middleware, and dependency boundaries
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The productivity of a FastAPI-style stack is not one feature; it is five small pieces that line up. The
+              router maps an HTTP method and path to one handler and nothing more. Extractors turn the messy parts of a
+              request, such as the path, the query string, the JSON body, and the auth header, into ordinary typed
+              function arguments. Typed state hands the handler its dependencies. Middleware runs the cross-cutting work
+              that every route needs. And the dependency boundary is the single conversion from transport DTOs into an
+              application call. The five cards below take each piece in turn.
+            </p>
             <div className="grid gap-4 lg:grid-cols-5">
               {fastApiExperienceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -373,11 +398,24 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
                 </div>
               ))}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-4">
+              Those pieces compose into a request lifecycle with a fixed order. Middleware runs first and outermost,
+              wrapping the handler so that a request ID and a tracing span exist before authentication runs, the timeout
+              policy is in force before the handler starts real work, and an early rejection, such as a failed auth
+              check, short-circuits before the body is ever decoded. Only when the cross-cutting layers pass does the
+              router reach the handler, where extractors decode the typed inputs and the one conversion into an
+              application call happens.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Req[Incoming request] --> RID[Request ID]\n  RID --> Trace[Tracing span]\n  Trace --> Auth[Authenticate]\n  Auth -->|reject| Err[401 or 403]\n  Auth -->|pass| TO[Timeout policy]\n  TO --> H[Handler: extract and convert]\n  H --> Svc[Application service]\n  Svc --> Resp[Response DTO]`}
+              caption="Middleware wraps the handler in a fixed order, so an early rejection never reaches the body or the service."
+            />
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 The main difference from Python FastAPI is operational, not stylistic. Rust will not let you pretend a
                 spawned task still borrows request-local state or that an auth claim magically exists everywhere. The
-                signature is part of the ownership model.
+                signature is part of the ownership model: if a handler needs the caller&apos;s identity, it takes a typed
+                caller context as an argument, and if a background task needs request data, that data is moved into it.
               </p>
             </div>
           </article>
@@ -386,6 +424,14 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             <h4 className="font-semibold text-foreground mb-3">
               Choosing between Rust web frameworks without coupling the domain model to HTTP
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Framework choice in Rust attracts more debate than it deserves, because the decision matters far less when
+              the domain is properly insulated. The useful test is not which framework has the nicest extractor syntax;
+              it is how much code would change if you swapped frameworks next year. If the answer is &ldquo;a handful of
+              handler signatures and the router&rdquo;, the framework is doing its job as an outer shell. If the answer is
+              &ldquo;the service layer too&rdquo;, the transport edge has leaked inward and the framework now owns your
+              architecture. The cards below describe what to insist on regardless of which one you pick.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {frameworkChoiceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -398,7 +444,19 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">OpenAPI as a contract: code-first, spec-first, and mixed workflows</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The deciding question is which artifact is the source of truth, because every other thing, the docs, the
+              generated clients, and the server, is downstream of it. Code-first makes the Rust DTOs authoritative and
+              derives the spec from them, which keeps spec and server mechanically aligned but means the spec only exists
+              after you write code. Spec-first makes the OpenAPI document authoritative and generates server stubs and
+              client types from it, which lets several teams agree on the contract before any server exists. The diagram
+              shows the two directions of flow through the same OpenAPI document.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph cf[Code-first]\n    direction LR\n    DTO[Rust DTOs] --> Spec1[OpenAPI doc]\n  end\n  subgraph sf[Spec-first]\n    direction LR\n    Spec2[OpenAPI doc] --> Stub[Server stubs and client types]\n  end\n  Spec1 --> Out[Docs, generated clients, CI diff gate]\n  Spec2 --> Out`}
+              caption="Code-first derives the spec from DTOs; spec-first generates code from the spec. Either way, one document feeds docs, clients, and the CI gate."
+            />
+            <div className="grid gap-4 lg:grid-cols-3 mt-4">
               {openApiWorkflowCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -408,14 +466,24 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                The best workflow is the one that keeps drift reviewable. If client teams live off generated SDKs, the spec
-                probably deserves its own checked artifact and diff gate even when Rust DTOs still generate most of it.
+                The best workflow is the one that keeps drift reviewable, not the one that is purest in theory. If client
+                teams live off generated SDKs, the spec probably deserves its own checked-in artifact and a diff gate even
+                when Rust DTOs still generate most of it. The failure mode to design against is the same in every
+                workflow: a contract that quietly stops describing the server it claims to document.
               </p>
             </div>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Swagger UI integration and documentation ergonomics</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Swagger UI is worth treating as a real user interface, because for the teams consuming your API it is the
+              product. It is where another engineer figures out how to call you without reading your handlers, and it is
+              the first thing a new teammate opens. That framing changes what &ldquo;good docs&rdquo; means: realistic
+              example payloads, documented error responses, clearly marked auth requirements, and stable operation IDs
+              matter far more than prose descriptions. The cards below cover the parts that make the page trustworthy
+              rather than merely present.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {swaggerCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -428,6 +496,15 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Client and server code generation from OpenAPI</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Generated code is convenient precisely because it is mechanical, and that is also its risk. A generator
+              encodes its own opinions about naming, optionality, and error shape, and those opinions will not match your
+              domain&apos;s. The rule that keeps this healthy is to let generated types live in the transport layer and
+              never deeper. A generated client gets wrapped behind a small trait so the rest of the system depends on your
+              names, not the generator&apos;s; a generated server stub stays thin and hands off to one application service
+              quickly. Treated that way, regenerating after a spec change is a routine rebuild rather than a refactor that
+              ripples through the domain.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {codegenCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -442,7 +519,20 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             <h4 className="font-semibold text-foreground mb-3">
               Request validation, typed errors, authentication hooks, and response schemas
             </h4>
-            <div className="grid gap-4 lg:grid-cols-4">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              It helps to separate two questions that often get blurred. The first is whether the request is
+              well-formed: are the required fields present, is the page size within bounds, does the enum decode, did the
+              path parameter parse? That is transport validation, and it belongs at the edge in the extractor. The second
+              is whether the requested operation is allowed and consistent with domain rules, which can only be answered
+              by the domain itself. Authentication sits between the two: it produces one typed caller context that the
+              handler uses to authorize explicitly. The diagram traces a request through both checks and shows where each
+              failure becomes which status code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Req[Request bytes] --> V1{Well-formed?}\n  V1 -->|no| E422[400 or 422]\n  V1 -->|yes| Auth{Authenticated and authorized?}\n  Auth -->|no| E401[401 or 403]\n  Auth -->|yes| Dom{Domain invariants hold?}\n  Dom -->|no| E409[409 or domain error]\n  Dom -->|yes| OK[2xx response DTO]`}
+              caption="Transport validation, then auth, then domain invariants. Each gate maps to a distinct, reviewable status class."
+            />
+            <div className="grid gap-4 lg:grid-cols-4 mt-4">
               {validationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -454,6 +544,8 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 A common migration mistake is validating only at the HTTP layer and then pretending the domain can never
                 see bad state again. Transport validation and domain invariants are complementary, not interchangeable.
+                The edge keeps malformed input out; the domain keeps invalid operations out. A service that trusts the
+                edge to enforce business rules is one non-HTTP caller away from a bug.
               </p>
             </div>
           </article>
@@ -462,6 +554,15 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             <h4 className="font-semibold text-foreground mb-3">
               Production API concerns: versioning, pagination, idempotency, tracing, metrics, and graceful shutdown
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              These are the concerns that do not show up in the first demo and dominate the second year. Each is a
+              promise the contract makes to clients over time. Versioning is the promise that a field&apos;s meaning will
+              not change under them. Pagination is the promise that a large result set will not arrive as one unbounded
+              response. Idempotency is the promise that a retried create will not charge a customer twice. Tracing and
+              metrics are the promise that when something goes wrong you can see where, and graceful shutdown is the
+              promise that a deploy will not drop in-flight work. None of these are framework features you switch on; they
+              are design decisions that belong in the contract from the start.
+            </p>
             <div className="grid gap-4 lg:grid-cols-5">
               {productionConcernCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -474,6 +575,14 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Testing API contracts and preventing documentation drift</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Documentation drift is rarely a missing description. It is a handler and an OpenAPI document that slowly
+              stopped describing the same system, with no failing test to announce it. The fix is to make the contract
+              part of the build rather than part of code review. Generate the spec in CI and fail when the checked-in copy
+              drifts; rebuild and compile any published clients against the new contract; and run request and response
+              fixtures against the actual server boundary so serialization, auth hooks, and status mapping stay honest.
+              The four cards below are the layers of that safety net, from cheapest to most thorough.
+            </p>
             <div className="grid gap-4 lg:grid-cols-4">
               {driftPreventionCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -492,17 +601,28 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
             </div>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </article>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Most engineers arriving at Rust web work already know how to build an API somewhere else, so the useful
+            framing is not &ldquo;here is routing&rdquo; but &ldquo;here is what to unlearn.&rdquo; The patterns below
+            describe the one mental shift each background tends to need and the trap that comes from carrying old habits
+            across unchanged. The recurring theme is that Rust makes explicit what your previous stack handled for you:
+            ownership of state, where conversions happen, and where bad input is rejected.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -568,6 +688,21 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">create_invoice_handler</code> top to
+              bottom and watch the boundary work: it authorizes using the typed{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">AuthenticatedUser</code>, builds exactly
+              one <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">CreateInvoiceCommand</code> from the
+              request DTO, calls the service once, and maps the domain&apos;s{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">DomainError</code> to an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ApiError</code> only on the way out. The
+              service itself never sees a request type, an auth header, or a status code. The diagram is that handler as a
+              flow, including the two ways it can reject before any work happens.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  H[create_invoice_handler] --> A{actor.can_create?}\n  A -->|no| F[ApiError::Forbidden]\n  A -->|yes| C[Build CreateInvoiceCommand]\n  C --> S[InvoiceService::create_invoice]\n  S -->|Err EmptyInvoice| B[ApiError::BadRequest]\n  S -->|Ok Invoice| R[CreatedInvoiceResponse 201]`}
+              caption="Authorize, build one command, call the service once, map errors at the edge. The service stays HTTP-free."
+            />
             <RustCodeEditor
               code={codes.fastapi_style_handler_service_boundary}
               onChange={(newCode) => updateCode("fastapi_style_handler_service_boundary", newCode)}
@@ -629,6 +764,20 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The shape to notice is that one value, the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">OpenApiDoc</code> returned by{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">build_doc</code>, is the single source
+              of truth. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">generate_code</code> only
+              reads it, deriving one client method per <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">operation_id</code>{" "}
+              and counting one server stub per operation. Add an operation to the doc and both the generated client and
+              the stub count follow automatically; nothing is maintained by hand on the side. That is the whole point of
+              treating OpenAPI as an artifact rather than a side effect. The diagram traces that fan-out.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  BD[build_doc] --> Doc[OpenApiDoc operations]\n  Doc --> GC[generate_code]\n  Doc --> SW[Swagger UI at /docs]\n  GC --> CM[Client methods per operation_id]\n  GC --> SS[Server stubs, one per operation]`}
+              caption="One OpenApiDoc feeds the Swagger surface and the codegen; clients and stubs are derived, never hand-kept."
+            />
             <RustCodeEditor
               code={codes.fastapi_style_openapi_codegen_scaffold}
               onChange={(newCode) => updateCode("fastapi_style_openapi_codegen_scaffold", newCode)}
@@ -706,851 +855,3 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { getPageIndexById } from "../page-index"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Map a FastAPI-style endpoint into Rust transport and service seams",
-    objective: "Practice translating a familiar typed web endpoint into Rust extractors, typed state, and one application service call without leaking HTTP inward.",
-    starterPrompt:
-      "Design one `POST /v1/invoices` endpoint with path or body extractors, typed application state, and an authenticated caller context.",
-    prompts: [
-      "Which values belong in transport DTOs and which values belong in one application command?",
-      "Which shared resources belong in typed app state: pools, config, telemetry, idempotency store?",
-      "Which checks belong in middleware or auth extraction versus in the handler itself?",
-      "What should the domain service never learn about this HTTP request?",
-    ],
-    acceptanceCriteria: [
-      "You separate transport DTOs from the application command clearly.",
-      "You put at least one real shared dependency into typed app state with a reason.",
-      "You identify at least one concern that belongs in middleware or auth extraction instead of in the domain service.",
-      "You explain why the domain model should not depend on framework request types.",
-    ],
-    hints: [
-      "Start from the handler signature you want another engineer to understand in ten seconds.",
-      "Then ask which part of that signature is transport-only versus business-relevant.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Spot transport leakage into the domain layer",
-    objective: "Read a handler and service pair and identify where HTTP types, status semantics, or documentation concerns have crossed the wrong boundary.",
-    starterPrompt:
-      "A `BillingService::create_invoice` method currently accepts `CreateInvoiceRequest`, returns `Result<InvoiceDto, StatusCode>`, and mentions OpenAPI field examples in comments right above the business rule logic.",
-    prompts: [
-      "Which parameters or return types are transport-layer concepts rather than domain or application concepts?",
-      "Which type should the service take instead of the HTTP request DTO?",
-      "Which type should the service return so the handler can translate it to HTTP later?",
-      "Where should the documentation examples and status mapping live instead?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one transport-shaped input and one transport-shaped output that should move out of the service layer.",
-      "You propose a command or query type that is calmer for the service boundary.",
-      "You place HTTP status mapping and documentation concerns back at the transport boundary.",
-      "You explain one concrete testing or refactoring benefit of the repaired seam.",
-    ],
-    hints: [
-      "If the service could not run under a message queue or CLI boundary anymore, HTTP has probably leaked too far inward.",
-      "The calm repair usually makes the service boundary easier to unit test as plain Rust.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Refactor a handler into a testable service boundary",
-    objective: "Implement a small typed handler that converts a request DTO into a command, calls a service, and returns one response shape without leaking transport types inward.",
-    starterPrompt:
-      "Take a small create-style endpoint, add an authenticated actor, map the request DTO into a command, call the service, and return a created response.",
-    prompts: [
-      "Keep the service API free of framework request wrappers.",
-      "Use one typed caller context such as tenant plus permission bit.",
-      "Translate one domain rejection into one API-facing error at the edge.",
-      "Return a status and response payload that another test can assert deterministically.",
-    ],
-    acceptanceCriteria: [
-      "The handler translates request DTO into a separate command type.",
-      "The service boundary does not accept HTTP request DTOs directly.",
-      "The handler performs at least one authorization or edge validation check before the service call.",
-      "The runnable lab prints the expected created status, invoice ID, and tenant.",
-    ],
-    hints: [
-      "A create handler should be boring: authorize, map, call, translate.",
-      "If the domain service still takes the request DTO, the transport seam is not finished yet.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Choose code-first, spec-first, or mixed OpenAPI workflow honestly",
-    objective: "Pick the workflow that matches team boundaries and generated-code obligations instead of choosing by fashion.",
-    starterPrompt:
-      "You have one Rust server, one TypeScript client, and one partner team that wants the contract reviewed before implementation lands.",
-    prompts: [
-      "What makes code-first attractive here?",
-      "What makes spec-first attractive here?",
-      "What would a mixed workflow look like if the checked-in spec must still be CI-enforced?",
-      "Which workflow makes generated clients least surprising for the teams involved?",
-    ],
-    acceptanceCriteria: [
-      "You choose one primary workflow and justify it from team and review boundaries.",
-      "You explain at least one tradeoff of the two alternatives.",
-      "You include one CI or artifact rule that keeps the chosen workflow honest.",
-      "You avoid claiming that one style is universally superior in every organization.",
-    ],
-    hints: [
-      "The right answer is usually the one that minimizes silent drift between server and clients.",
-      "Think about who reviews the contract and when, not only about who writes the code.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Prevent documentation drift and generated-code drift",
-    objective: "Design a review loop that keeps handlers, OpenAPI artifacts, Swagger UI, and generated clients describing the same API over time.",
-    starterPrompt:
-      "A recent rollout changed one handler input field, but the checked-in spec and generated client were not regenerated. The change passed unit tests and broke one downstream team.",
-    prompts: [
-      "Which CI check should fail first: spec diff, generated client compile, or contract fixture test?",
-      "Which artifacts should be checked into the repository and which can be generated only in CI?",
-      "How would you review Swagger UI or schema output without treating it as the only proof?",
-      "Which fields or operation IDs should be stabilized so downstream diffs stay reviewable?",
-    ],
-    acceptanceCriteria: [
-      "You define at least two drift-prevention checks with different jobs.",
-      "You include at least one checked artifact or snapshot strategy and one generated-client validation strategy.",
-      "You mention stable operation IDs or stable error envelopes explicitly.",
-      "You explain why documentation review still needs semantic contract assertions nearby.",
-    ],
-    hints: [
-      "The most useful drift check is the one that fails before a client release is cut from stale types.",
-      "Swagger UI helps humans, but CI still needs machine-checkable contract evidence.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Design one production API surface with versioning, pagination, idempotency, tracing, metrics, and graceful shutdown",
-    objective: "Make the non-happy-path parts of a web API explicit before the service ships.",
-    starterPrompt:
-      "You are designing a billing API with create, list, and lookup endpoints, one async side-effect path, and an operator requirement that canary rollout and rollback stay safe under load.",
-    prompts: [
-      "Which routes or envelopes carry version boundaries, and how do they evolve?",
-      "Which list route wants cursor pagination and what limits should be validated at the edge?",
-      "Which create route needs an idempotency key and where does finish-once state live?",
-      "Which trace and metric fields must exist before rollout?",
-      "How does the server stop admitting and drain gracefully during deployment shutdown?",
-    ],
-    acceptanceCriteria: [
-      "You define at least one versioning rule, one pagination rule, and one idempotency rule.",
-      "You include at least two observability hooks such as request ID, trace ID, route, queue age, or publish latency.",
-      "You describe one graceful shutdown sequence that stops admission before exit.",
-      "You keep the explanation tied to transport and application boundaries rather than only to framework settings.",
-    ],
-    hints: [
-      "A production API design is still an ownership and pacing design once traffic is real.",
-      "If the service causes duplicate side effects during deploy shutdown, graceful shutdown was not actually graceful.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What does it mean for a domain service to stay HTTP-free in a Rust web application?",
-  "Why are typed extractors and typed state a better long-term seam than passing one raw request object around?",
-  "When is code-first OpenAPI the calm default, and when does spec-first become more honest?",
-  "Why should generated clients stay in the transport layer rather than in the domain layer?",
-  "What CI checks keep Swagger UI and generated SDKs from silently drifting away from handler behavior?",
-]
-
-const workingLoop = [
-  "State the public API contract first: route, version, request DTO, response DTO, and caller-visible errors.",
-  "Translate transport DTOs into application commands or queries before the service boundary.",
-  "Choose one OpenAPI workflow and one CI drift check before adding more framework convenience.",
-  "Add auth, idempotency, tracing, metrics, and graceful shutdown at the boundaries where they change real behavior.",
-]
-
-const apiContractChecklist = [
-  "HTTP request and response DTOs stay separate from domain entities and service commands.",
-  "OpenAPI generation has one declared source of truth and one CI drift gate.",
-  "Generated clients and server stubs are validated as transport artifacts, not ignored after generation.",
-  "Request validation, typed errors, auth hooks, and observability fields are part of the public contract.",
-  "Graceful shutdown and idempotency are exercised before rollout, not only documented afterward.",
-]
-
-export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegenExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = getPageIndexById("ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises")
-  const mainPageIndex = getPageIndexById("ch46-fastapi-style-web-apps-swagger-openapi-codegen")
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 46 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice Rust web API design the way it survives review: typed boundaries, domain isolation, OpenAPI workflows,
-          generated-code discipline, and operational contracts that stay honest after rollout.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a transport-and-contract review. The strongest answer does not stop at “use a web
-                framework” or “generate OpenAPI.” It says which types belong at the edge, which types belong in the
-                application service, and which tests keep docs, codegen, and behavior aligned later.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 46
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">API contract checklist</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {apiContractChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  API contract drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Refactor the handler away from transport leakage"
-          description={
-            <>
-              Repair the starter so the handler maps a request DTO into a separate command type, calls the service, and
-              returns a created response without leaking HTTP-shaped types into the service boundary. The checker expects
-              the exact output below.
-            </>
-          }
-          filename="handler_boundary_lab.rs"
-          runKey="ch46_ex_handler_boundary"
-          expectedOutput={"status = 201\ninvoice = inv-7\ntenant = acme"}
-          helperText={
-            <>
-              Tip: create one <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">CreateInvoiceCommand</code>{" "}
-              from the actor and request, call <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">service.create(cmd)</code>,
-              then translate the returned domain invoice into the handler's response tuple.
-            </>
-          }
-          initialCode={`#[derive(Debug, Clone)]
-struct CreateInvoiceRequest {
-    customer_id: String,
-    total_cents: u64,
-}
-
-#[derive(Debug, Clone)]
-struct CreateInvoiceCommand {
-    tenant: String,
-    customer_id: String,
-    total_cents: u64,
-}
-
-#[derive(Debug, Clone)]
-struct Invoice {
-    id: String,
-    tenant: String,
-}
-
-#[derive(Debug, Clone)]
-struct Actor {
-    tenant: String,
-    can_create: bool,
-}
-
-#[derive(Debug)]
-enum ApiError {
-    Forbidden,
-    BadRequest(&'static str),
-}
-
-struct InvoiceService;
-
-impl InvoiceService {
-    fn create(&self, cmd: CreateInvoiceCommand) -> Result<Invoice, &'static str> {
-        if cmd.total_cents == 0 {
-            Err("total must be positive")
-        } else {
-            Ok(Invoice {
-                id: format!("inv-{}", cmd.customer_id),
-                tenant: cmd.tenant,
-            })
-        }
-    }
-}
-
-fn create_invoice_handler(
-    service: &InvoiceService,
-    actor: Actor,
-    request: CreateInvoiceRequest,
-) -> Result<(u16, String, String), ApiError> {
-    if !actor.can_create {
-        return Err(ApiError::Forbidden);
-    }
-
-    Err(ApiError::BadRequest("unfinished"))
-}
-
-fn main() {
-    let service = InvoiceService;
-    let actor = Actor {
-        tenant: String::from("acme"),
-        can_create: true,
-    };
-    let request = CreateInvoiceRequest {
-        customer_id: String::from("7"),
-        total_cents: 4_200,
-    };
-
-    match create_invoice_handler(&service, actor, request) {
-        Ok((status, invoice_id, tenant)) => {
-            println!("status = {}", status);
-            println!("invoice = {}", invoice_id);
-            println!("tenant = {}", tenant);
-        }
-        Err(_) => {
-            println!("status = {}", 0);
-            println!("invoice = broken");
-            println!("tenant = broken");
-        }
-    }
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to design one typed Rust endpoint with extractors and app state,
-            choose an OpenAPI workflow that matches your team boundaries, keep generated code in the transport layer, and
-            explain how documentation drift, idempotency, and graceful shutdown affect a production API contract.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch46_fastapi_style_web_apps_swagger_openapi_codegen/handler_service_boundary.rs`
-```rust
-#[derive(Debug, Clone)]
-struct CreateInvoiceRequest {
-    customer_id: String,
-    line_totals: Vec<u64>,
-}
-
-#[derive(Debug, Clone)]
-struct CreateInvoiceCommand {
-    tenant: String,
-    customer_id: String,
-    line_totals: Vec<u64>,
-}
-
-#[derive(Debug, Clone)]
-struct Invoice {
-    id: String,
-    tenant: String,
-    total_cents: u64,
-}
-
-#[derive(Debug)]
-enum DomainError {
-    EmptyInvoice,
-    Unauthorized,
-}
-
-#[derive(Debug)]
-enum ApiError {
-    BadRequest(&'static str),
-    Forbidden,
-}
-
-struct InvoiceService;
-
-impl InvoiceService {
-    fn create_invoice(&self, cmd: CreateInvoiceCommand) -> Result<Invoice, DomainError> {
-        if cmd.line_totals.is_empty() {
-            return Err(DomainError::EmptyInvoice);
-        }
-
-        let total_cents: u64 = cmd.line_totals.iter().copied().sum();
-
-        Ok(Invoice {
-            id: format!("inv-{}", cmd.customer_id),
-            tenant: cmd.tenant,
-            total_cents,
-        })
-    }
-}
-
-struct ApiState {
-    invoices: InvoiceService,
-    service_name: String,
-}
-
-#[derive(Debug)]
-struct AuthenticatedUser {
-    tenant: String,
-    can_create: bool,
-}
-
-#[derive(Debug)]
-struct CreatedInvoiceResponse {
-    status: u16,
-    request_id: String,
-    invoice_id: String,
-    tenant: String,
-    total_cents: u64,
-}
-
-fn create_invoice_handler(
-    state: &ApiState,
-    actor: AuthenticatedUser,
-    request_id: &str,
-    body: CreateInvoiceRequest,
-) -> Result<CreatedInvoiceResponse, ApiError> {
-    if !actor.can_create {
-        return Err(ApiError::Forbidden);
-    }
-
-    let cmd = CreateInvoiceCommand {
-        tenant: actor.tenant,
-        customer_id: body.customer_id,
-        line_totals: body.line_totals,
-    };
-
-    let created = state
-        .invoices
-        .create_invoice(cmd)
-        .map_err(|err| match err {
-            DomainError::EmptyInvoice => {
-                ApiError::BadRequest("invoice must contain at least one line")
-            }
-            DomainError::Unauthorized => ApiError::Forbidden,
-        })?;
-
-    Ok(CreatedInvoiceResponse {
-        status: 201,
-        request_id: request_id.to_string(),
-        invoice_id: created.id,
-        tenant: created.tenant,
-        total_cents: created.total_cents,
-    })
-}
-
-fn main() {
-    let state = ApiState {
-        invoices: InvoiceService,
-        service_name: String::from("billing-api"),
-    };
-    let actor = AuthenticatedUser {
-        tenant: String::from("acme"),
-        can_create: true,
-    };
-    let request = CreateInvoiceRequest {
-        customer_id: String::from("42"),
-        line_totals: vec![1_200_u64, 3_000],
-    };
-
-    let created = create_invoice_handler(&state, actor, "req-7", request).unwrap();
-
-    println!("status = {}", created.status);
-    println!("invoice = {}", created.invoice_id);
-    println!("total cents = {}", created.total_cents);
-    println!("request id = {}", created.request_id);
-}
-````
-
-### File: `examples/ch46_fastapi_style_web_apps_swagger_openapi_codegen/openapi_contract_codegen_scaffold.rs`
-```rust
-#[derive(Debug, Clone)]
-struct ApiSchema {
-    name: &'static str,
-    required_fields: &'static [&'static str],
-}
-
-#[derive(Debug, Clone)]
-struct ApiOperation {
-    method: &'static str,
-    path: &'static str,
-    operation_id: &'static str,
-    request: Option<ApiSchema>,
-    response: ApiSchema,
-    auth: bool,
-}
-
-#[derive(Debug)]
-struct OpenApiDoc {
-    title: &'static str,
-    version: &'static str,
-    swagger_ui_path: &'static str,
-    operations: Vec<ApiOperation>,
-}
-
-#[derive(Debug)]
-struct CodegenPlan {
-    client_methods: Vec<&'static str>,
-    server_stubs: usize,
-}
-
-fn build_doc() -> OpenApiDoc {
-    OpenApiDoc {
-        title: "Billing API",
-        version: "2026-04",
-        swagger_ui_path: "/docs",
-        operations: vec![
-            ApiOperation {
-                method: "POST",
-                path: "/v1/invoices",
-                operation_id: "create_invoice",
-                request: Some(ApiSchema {
-                    name: "CreateInvoiceRequest",
-                    required_fields: &["customer_id", "line_totals"],
-                }),
-                response: ApiSchema {
-                    name: "CreatedInvoiceResponse",
-                    required_fields: &["invoice_id", "total_cents"],
-                },
-                auth: true,
-            },
-            ApiOperation {
-                method: "GET",
-                path: "/v1/invoices/{id}",
-                operation_id: "get_invoice",
-                request: None,
-                response: ApiSchema {
-                    name: "InvoiceResponse",
-                    required_fields: &["invoice_id", "total_cents"],
-                },
-                auth: true,
-            },
-        ],
-    }
-}
-
-fn generate_code(doc: &OpenApiDoc) -> CodegenPlan {
-    let client_methods = doc
-        .operations
-        .iter()
-        .map(|op| op.operation_id)
-        .collect::<Vec<_>>();
-
-    CodegenPlan {
-        server_stubs: doc.operations.len(),
-        client_methods,
-    }
-}
-
-fn main() {
-    let doc = build_doc();
-    let plan = generate_code(&doc);
-
-    println!("operations = {}", doc.operations.len());
-    println!("swagger = {}", doc.swagger_ui_path);
-    println!("client methods = {}", plan.client_methods.join(","));
-    println!("server stubs = {}", plan.server_stubs);
-}
-````
-
-### File: `examples/ch46_fastapi_style_web_apps_swagger_openapi_codegen/typed_errors_auth_idempotency.rs`
-```rust
-#[derive(Debug, Clone)]
-struct PageRequest {
-    cursor: Option<String>,
-    limit: usize,
-}
-
-#[derive(Debug, Clone)]
-struct ListInvoicesQuery {
-    tenant: String,
-    cursor: Option<String>,
-    limit: usize,
-}
-
-#[derive(Debug, Clone)]
-struct Actor {
-    tenant: String,
-    can_read: bool,
-}
-
-#[derive(Debug)]
-enum ApiError {
-    Forbidden,
-    Validation(&'static str),
-}
-
-#[derive(Debug, Clone)]
-struct IdempotencyKey(String);
-
-fn normalize_limit(limit: usize) -> Result<usize, ApiError> {
-    if (1..=100).contains(&limit) {
-        Ok(limit)
-    } else {
-        Err(ApiError::Validation("limit must be 1..=100"))
-    }
-}
-
-fn build_query(actor: &Actor, request: &PageRequest) -> Result<ListInvoicesQuery, ApiError> {
-    if !actor.can_read {
-        return Err(ApiError::Forbidden);
-    }
-
-    Ok(ListInvoicesQuery {
-        tenant: actor.tenant.clone(),
-        cursor: request.cursor.clone(),
-        limit: normalize_limit(request.limit)?,
-    })
-}
-
-fn main() {
-    let actor = Actor {
-        tenant: String::from("acme"),
-        can_read: true,
-    };
-    let request = PageRequest {
-        cursor: Some(String::from("cur-7")),
-        limit: 25,
-    };
-    let key = IdempotencyKey(String::from("idem-100"));
-
-    let query = build_query(&actor, &request).unwrap();
-
-    println!("tenant = {}", query.tenant);
-    println!("limit = {}", query.limit);
-    println!(
-        "cursor = {}",
-        query.cursor.as_deref().unwrap_or("none")
-    );
-    println!("idempotency = {}", key.0);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -88,3 +88,5 @@ export { PageCh44PackagingAndDeployment } from "./page-ch44-packaging-and-deploy
- export { PageCh44PackagingAndDeploymentExercises } from "./page-ch44-packaging-and-deployment-exercises"
- export { PageCh45CapstoneDistributedRustSystem } from "./page-ch45-capstone-distributed-rust-system"
- export { PageCh45CapstoneDistributedRustSystemExercises } from "./page-ch45-capstone-distributed-rust-system-exercises"
-+export { PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen } from "./page-ch46-fastapi-style-web-apps-swagger-openapi-codegen"
-+export { PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegenExercises } from "./page-ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -97,6 +97,8 @@ import {
-   PageCh43ObservabilityExercises,
-   PageCh44PackagingAndDeployment,
-   PageCh44PackagingAndDeploymentExercises,
-   PageCh45CapstoneDistributedRustSystem,
-   PageCh45CapstoneDistributedRustSystemExercises,
-+  PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen,
-+  PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegenExercises,
- } from "./pages"
-@@ -194,6 +196,8 @@ const PAGE_COMPONENTS = [
-   PageCh43ObservabilityExercises,
-   PageCh44PackagingAndDeployment,
-   PageCh44PackagingAndDeploymentExercises,
-   PageCh45CapstoneDistributedRustSystem,
-   PageCh45CapstoneDistributedRustSystemExercises,
-+  PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen,
-+  PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegenExercises,
- ]
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh46Output } from "./rust-simulator-ch46"
- import { simulateCh45Output } from "./rust-simulator-ch45"
- import { simulateCh44Output } from "./rust-simulator-ch44"
- import { simulateCh43Output } from "./rust-simulator-ch43"
-@@ -1022,6 +1023,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch46Output = simulateCh46Output(code, key)
-+  if (ch46Output !== null) return ch46Output
- 
-   const ch45Output = simulateCh45Output(code, key)
-   if (ch45Output !== null) return ch45Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -35,6 +35,7 @@ import { DEFAULT_CODES_CH42 } from "./default-codes-ch42"
- import { DEFAULT_CODES_CH43 } from "./default-codes-ch43"
- import { DEFAULT_CODES_CH44 } from "./default-codes-ch44"
- import { DEFAULT_CODES_CH45 } from "./default-codes-ch45"
-+import { DEFAULT_CODES_CH46 } from "./default-codes-ch46"
- 
- export interface PageConfig {
-   id: string
-@@ -1135,6 +1136,28 @@ export const CHAPTERS: ChapterConfig[] = [
-         description: "Assemble the capstone architecture, define milestones, and refactor it from profiling and queue evidence",
-         icon: "trophy",
-       },
-+    ],
-+  },
-+  {
-+    id: "ch46-fastapi-style-web-apps-swagger-openapi-codegen",
-+    title: "Chapter 46 · FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch46-fastapi-style-web-apps-swagger-openapi-codegen",
-+        title: "FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen",
-+        shortTitle: "Web APIs and OpenAPI",
-+        description:
-+          "Routers, extractors, typed state, OpenAPI workflows, Swagger UI, code generation, validation, typed errors, auth, and production API concerns",
-+        icon: "book",
-+        codeKeys: ["fastapi_style_handler_service_boundary", "fastapi_style_openapi_codegen_scaffold"],
-+      },
-+      {
-+        id: "ch46-fastapi-style-web-apps-swagger-openapi-codegen-exercises",
-+        title: "Chapter 46 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Design typed REST endpoints, keep domains HTTP-free, choose OpenAPI workflows, and prevent documentation drift",
-+        icon: "trophy",
-+      },
-     ],
-   },
- ]
-@@ -1600,5 +1623,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH43,
-   ...DEFAULT_CODES_CH44,
-   ...DEFAULT_CODES_CH45,
-+  ...DEFAULT_CODES_CH46,
- }
- export interface BookState {
-````

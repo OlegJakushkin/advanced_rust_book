@@ -1,41 +1,46 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Distributed latency is layered",
-    body: "A slow task is often not a slow handler. It may have waited in a queue, sat behind a saturated worker pool, retried several times, or stalled in a fan-in reducer before the final state changed.",
+    title: "Latency is a stack of layers, not one number",
+    body: "A slow task is rarely a slow handler. The same job can wait in a queue, sit behind a saturated worker pool, retry several times, and then stall in a fan-in reducer before its final state changes. Profiling distributed work means attributing the delay to a layer, not averaging it into a single duration that hides where the time went.",
   },
   {
-    title: "At-least-once delivery changes the profile",
-    body: "Retries, lease expiry, and replay are part of the cost model. A queue can look healthy on average while duplicate work and retry amplification quietly inflate tail latency.",
+    title: "At-least-once delivery is part of the cost model",
+    body: "Once a broker can redeliver, retries, lease expiry, and replay stop being edge cases and become recurring traffic you must budget for. A queue can look perfectly healthy on its average while duplicate work and retry amplification quietly inflate the tail. If your cost model assumes each task runs exactly once, it is already wrong.",
   },
   {
     title: "One task ID should explain the whole trip",
-    body: "If you cannot pivot from one queue-latency spike to one trace, then to one worker log line, then to one completion record, the profiling surface is still incomplete.",
+    body: "The test for a complete profiling surface is a pivot, not a dashboard. Starting from one queue-latency spike, can you jump to the one trace it belongs to, then to the one worker log line that ran it, then to the one completion record that closed it? If any of those hops is missing, the surface still has a blind spot where incidents hide.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "The profiler question is less about one hot function and more about one distributed control path. Queue wait, retries, and aggregation lag often dominate before one inner loop does.",
+    body: "Your profiler instinct points at a hot function and a flame graph on one machine. Here the expensive thing is usually a distributed control path you cannot sample with perf: time spent waiting in a queue, time lost to retries, and time stalled in a fan-in reducer. The mental shift is to treat wall-clock spans across process boundaries as the unit of profiling, not CPU cycles inside one binary.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of one async method chain and more in terms of explicit transport and worker boundaries. A task can be 'slow' even when no single handler frame is especially expensive.",
+    body: "An async/await call chain feels like one continuous timeline, so it is tempting to read a task as a single method that happens to suspend. In a worker fleet the timeline is broken into explicit transport and worker boundaries that you must instrument by hand. A task can blow its budget while every individual handler frame is cheap, because the cost lives in the gaps between frames.",
   },
   {
     title: "Go background",
-    body: "A distributed queue is not a goroutine backlog with extra latency. It is an ownership, retry, and pacing boundary whose queue age and redelivery rate belong in the profile directly.",
+    body: "A distributed queue is not a buffered channel with more latency. A channel hands work to a goroutine in-process and forgets it; a broker queue is an ownership, retry, and pacing boundary where a message can be redelivered, leased twice, or aged for minutes. Queue age and redelivery rate are not background noise — they belong directly in the profile.",
+  },
+  {
+    title: "Python background",
+    body: "If your model is Celery or RQ, you already think in tasks, brokers, and retries — but the visibility usually stops at the worker process. Rust services make it cheap to carry typed envelopes and structured spans through the whole trip, so the shift is to instrument enqueue-to-completion as one budget rather than trusting per-worker timing and broker dashboards that never line up.",
   },
 ]
 
@@ -197,8 +202,10 @@ export function PageCh36DistributedTasksProfiling() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Distributed task profiling separates queue wait, worker execution, retries, fan-out, and downstream pressure.
-          This chapter gives Rust services the metrics needed to assign bottlenecks to the right boundary.
+          When work travels through brokers, leases, worker pools, and reducers, &ldquo;slow&rdquo; stops being a single
+          number. This chapter is about taking the latency a user actually feels and splitting it into the layers that
+          produced it &mdash; queue wait, worker execution, retries, fan-out, and downstream pressure &mdash; so a Rust
+          service can point at the boundary that is really failing instead of guessing.
         </p>
       </div>
 
@@ -237,16 +244,30 @@ export function PageCh36DistributedTasksProfiling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A media pipeline reports stable handler time while users still wait for completion. The business requirement
-            is to profile the distributed path end to end: queue wait, lease claim delay, worker saturation, retry
-            amplification, reducer lag, and durable completion.
+            A media-processing pipeline starts getting complaints that uploads take &ldquo;forever&rdquo; to finish, yet
+            every dashboard the team trusts looks healthy. Handler time is flat. CPU is moderate. Error rates are normal.
+            The handler traces show a job running in a few hundred milliseconds, exactly as designed. Despite all of that,
+            the customer&rsquo;s clock keeps running long after the handler returned, because the part the team measured is
+            only one stretch of a much longer trip.
           </p>
-          <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-            <code className="font-mono text-foreground">{`submit -> queue wait -> lease claim -> handler run -> downstream call -> durable completion
-           ^             ^                  ^                ^
-           |             |                  |                |
-       queue depth   queue latency     worker sat      end-to-end SLO`}</code>
-          </pre>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The business requirement is to profile that whole trip, not just the handler. A submitted job waits in a
+            queue, gets claimed under a lease, runs in a worker, calls a downstream service, possibly retries, and only
+            then commits a durable completion record. Each of those segments has its own latency and its own failure
+            mode, and the user-visible delay is their sum. The job of this chapter is to make every segment measurable so
+            the team can say which one is actually eating the budget.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-4">
+            Read the path below as a stopwatch with several intermediate splits. The arrows are where time accumulates;
+            the labels underneath name the metric that watches each split. The single most common mistake is to stare at
+            <span className="text-foreground"> handler run</span> while the real cost is sitting in
+            <span className="text-foreground"> queue wait</span> or hiding inside a retry loop that the handler trace never
+            shows.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Submit([submit]) --> Wait[queue wait]\n  Wait --> Claim[lease claim]\n  Claim --> Run[handler run]\n  Run --> Down[downstream call]\n  Down --> Done([durable completion])\n  Wait -.watched by.-> M1{{queue depth and age}}\n  Claim -.watched by.-> M2{{queue latency}}\n  Run -.watched by.-> M3{{worker saturation}}\n  Done -.watched by.-> M4{{end-to-end SLO}}`}
+            caption="The user feels the whole left-to-right path. Each metric underneath watches one segment of it, so a spike can be assigned to a boundary instead of blamed on the handler by default."
+          />
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
@@ -294,6 +315,12 @@ export function PageCh36DistributedTasksProfiling() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">End-to-end latency, queue latency, and worker saturation</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              These three measurements are the backbone of everything else in the chapter, and they answer different
+              questions. End-to-end latency tells you what the user feels. Queue latency tells you how long work waited
+              before anyone touched it. Worker saturation tells you whether there is any headroom left to absorb the next
+              burst. Read in isolation, each one can lie; read together, they triangulate the bottleneck.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {latencyCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -304,15 +331,28 @@ export function PageCh36DistributedTasksProfiling() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                A practical rule is simple. If end-to-end latency rises while handler run time stays flat, the first next
-                question is usually queueing or admission, not inner-loop CPU.
+                The practical rule is short enough to keep on a sticky note: if end-to-end latency rises while handler
+                run time stays flat, the time is being spent before the handler, not inside it. The first question is
+                queueing or admission &mdash; backlog, lease contention, a closed pool &mdash; not inner-loop CPU. Reaching
+                for a flame graph at that moment optimizes the one part of the system that was never slow.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Retry storms and tail latency</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A retry storm is a feedback loop, and that loop is what makes it dangerous. Some tasks start failing, the
+              broker redelivers them, the redeliveries add to arrival rate, the higher arrival rate pushes workers past
+              saturation, saturation causes more timeouts, and the timeouts produce more retries. The diagram below traces
+              that cycle. Notice that the dashed edge feeds back into the top: nothing breaks the loop on its own, so it
+              compounds until a budget or a circuit breaker cuts it.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Fail[some tasks fail] --> Redeliver[broker redelivers]\n  Redeliver --> Arrival[arrival rate climbs]\n  Arrival --> Sat[workers pass saturation]\n  Sat --> Timeout[more timeouts]\n  Timeout -.amplifies.-> Fail`}
+              caption="A retry storm is a self-reinforcing cycle. Each lap raises arrival rate faster than workers can drain it, so retries are load before they are diagnostics."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               {stormCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -322,14 +362,23 @@ export function PageCh36DistributedTasksProfiling() {
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A retry storm is often visible before it becomes catastrophic: retry rate rises, queue age rises, worker
-                saturation rises, and the oldest visible message starts to drift far above the median.
+                The good news is that a storm announces itself before it becomes catastrophic. Retry rate rises, queue age
+                rises, worker saturation rises, and the oldest visible message drifts far above the median &mdash; usually
+                in that order. If those four signals share a dashboard, you get minutes of warning instead of a page after
+                the queue has already buried you.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Distributed tracing</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              In a single process, a tracing library can stitch spans together automatically because they share a call
+              stack. The moment work crosses a broker, that stack is gone &mdash; the worker that picks up a message has no
+              idea where it came from unless the message itself carries the context. So distributed tracing here is mostly
+              a discipline about what you put in the task envelope. Every message has to carry enough identity to rejoin
+              its trace on the other side.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {traceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -338,6 +387,14 @@ export function PageCh36DistributedTasksProfiling() {
                 </div>
               ))}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-4">
+              The envelope below is the minimum that makes correlation possible. The two fields most teams forget are the
+              ones that matter most under load:
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">attempt</code>
+              lets you separate the first try from the third when a storm hits, and
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">parent_task_id</code>
+              is what lets a fan-out graph reassemble itself into a tree instead of a pile of unrelated spans.
+            </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{`struct TaskEnvelope {
     task_id: String,
@@ -351,6 +408,14 @@ export function PageCh36DistributedTasksProfiling() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Metrics design</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Three shapes of metric answer three different kinds of question, and choosing the wrong shape is a common
+              way to end up with dashboards that cannot answer the question you actually have. Counters answer &ldquo;how
+              much of this happened?&rdquo; Gauges answer &ldquo;what is the level right now?&rdquo; Histograms answer
+              &ldquo;what does the distribution look like, especially the tail?&rdquo; The fourth card is the one that
+              keeps the system affordable: keep identity out of labels, because a counter with a per-task label is no
+              longer a metric &mdash; it is a log line that your monitoring system cannot store.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {metricsDesignCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -363,22 +428,50 @@ export function PageCh36DistributedTasksProfiling() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Correlating logs, metrics, and traces</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Metrics, traces, and logs are three views of the same incident, and they are only useful together if a
+              single identity threads through all three. The checklist below is really one idea repeated: pick a small set
+              of fields and a shared timestamp vocabulary, then carry them everywhere so an operator can walk from an
+              aggregate spike down to one concrete record without re-deriving the link by hand.
+            </p>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               {correlationChecklist.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ol>
-            <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <p className="text-sm text-muted-foreground leading-6">
-                The calm incident loop is usually: metric spike first, one representative trace second, worker and queue
-                logs third, then one durable completion or retry record last.
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-4">
+              That correlation buys you a calm, repeatable order of investigation under pressure. The point of the
+              sequence below is the direction of travel: you start from the aggregate that paged you and narrow toward a
+              single record, instead of reading four tools in parallel and trying to merge them in your head.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant Op as Operator\n  participant M as Metrics\n  participant T as Traces\n  participant L as Logs\n  participant C as Completion store\n  Op->>M: see the spike\n  M->>T: pick one representative trace\n  T->>L: open that worker and queue log\n  L->>C: read the retry or completion record\n  C-->>Op: full story for one task`}
+              caption="The calm incident loop: aggregate spike first, one trace second, worker and queue logs third, one durable record last. Identity fields are what make each hop possible."
+            />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling task graphs</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When a job is a DAG rather than a single handler, the intuition that &ldquo;total time is the sum of the
+              stages&rdquo; quietly becomes wrong. Stages that run in parallel overlap, so adding their durations
+              double-counts time the system never spent. The number that predicts completion is the
+              <span className="text-foreground"> critical path</span>: the longest dependency chain from start to finish.
+              Everything off that path has slack and can get slower without anyone noticing &mdash; until it gets slow
+              enough to become the new critical path.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Look at the graph below. After <span className="text-foreground">parse</span>, the work forks into
+              <span className="text-foreground"> enrich</span> and <span className="text-foreground">store</span>, which run
+              at the same time, and <span className="text-foreground">notify</span> waits for both. The completion time is
+              governed by whichever fork is slower, not by their sum. That is exactly what the formula under the diagram
+              computes: the max over the two competing chains, not the total of every box.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Fetch[fetch] --> Parse[parse]\n  Parse --> Enrich[enrich]\n  Parse --> Store[store]\n  Enrich --> Notify[notify]\n  Store --> Notify\n  Notify --> Done([done])`}
+              caption="enrich and store run in parallel after parse, and notify joins them. The critical path is the slower of the two branches plus the shared head and tail, not the sum of all four stages."
+            />
+            <div className="grid gap-4 lg:grid-cols-3 mt-4">
               {taskGraphCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -394,6 +487,14 @@ critical path = max(fetch+parse+enrich+notify, fetch+parse+store+notify)`}</code
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Capacity planning</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Capacity planning for a worker fleet rests on two old results that are worth keeping in your head. The first
+              is Little&rsquo;s Law: the average number of items in flight equals arrival rate times the time each item
+              spends in the system. The second is the queueing cliff: as utilization approaches one, waiting time does not
+              rise gently &mdash; it heads toward infinity. That is why the formulas below divide by a
+              <span className="text-foreground"> target utilization</span> below one rather than sizing for exactly the
+              average load. You are buying the headroom that keeps queue age finite when a burst or a retry wave arrives.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {capacityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -402,22 +503,38 @@ critical path = max(fetch+parse+enrich+notify, fetch+parse+store+notify)`}</code
                 </div>
               ))}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-4">
+              The two lines below are deliberately rough planning rules, not a simulator. The first sizes a pool from how
+              fast work arrives and how long each task runs; the second estimates how much work is in flight at any moment.
+              The trap to avoid is plugging in happy-path numbers &mdash; arrival rate has to include retry traffic, or the
+              pool you size will be the one that triggers the storm it cannot survive.
+            </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{`rough_workers_needed ≈ arrival_rate * service_time / target_utilization
 in_flight ≈ arrival_rate * time_in_system`}</code>
             </pre>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">How this looks coming from C++, C#, and Go</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this looks coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Most senior engineers arrive with a profiling reflex that worked well on their previous stack and quietly
+            misleads them here. The shift is the same in every case: the expensive thing has moved out of one process and
+            into the spaces between processes &mdash; queues, leases, retries, and joins &mdash; where your old tools cannot
+            see it. These cards name the specific reframe each background needs, not a table of crate equivalents.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -463,6 +580,12 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Both examples are deliberately small enough to read in one sitting and to run in the editor below them. The
+            first builds the four-signal window an operator should see at a glance; the second computes a critical path
+            through a DAG. Run each one to confirm the baseline output, then change an input and watch which number moves.
+            The goal is to feel how the metric reacts, not to memorize the arithmetic.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -486,6 +609,24 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the code takes one batch of completed-task samples and folds it down into four headline
+              numbers. Follow the data flow in the diagram first &mdash; raw samples in on the left, four independent
+              reductions in the middle (percentiles for the latencies, a ratio for saturation, a rate for retries), and the
+              compact window an operator reads on the right. The key idea is that all four come out of the
+              <span className="text-foreground"> same</span> sample window, which is what lets you compare them honestly.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Samples[(task samples)] --> E2E[p95 end-to-end]\n  Samples --> Q[p95 queue wait]\n  Samples --> Sat[busy / total]\n  Samples --> Retry[retried / claimed]\n  E2E --> Cont[four reductions, continue below]\n  Q --> Cont\n  Sat --> Cont\n  Retry --> Cont`}
+              caption="Fan-out: one sample window splits into four independent reductions — percentiles for the latencies, a ratio for saturation, a rate for retries."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The four reductions then converge back into a single operator window:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[four reductions] --> E2E[p95 end-to-end]\n  Cont --> Q[p95 queue wait]\n  Cont --> Sat[busy / total]\n  Cont --> Retry[retried / claimed]\n  E2E --> Win[[operator window]]\n  Q --> Win\n  Sat --> Win\n  Retry --> Win`}
+              caption="Fan-in: the four numbers fold back into one summary. Read together, they say whether the cost is waiting, running, capacity, or replay."
+            />
             <RustCodeEditor
               code={codes.distributed_profiling_latency_window}
               onChange={(newCode) => updateCode("distributed_profiling_latency_window", newCode)}
@@ -546,6 +687,18 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: this is the graph from the concepts section above, but now each stage carries two costs
+              instead of one &mdash; the time it waited in its queue plus the time it actually ran. The algorithm walks the
+              DAG and, for every node, keeps the longest finishing time among its parents and adds the node&rsquo;s own
+              queue and run cost. The diagram shows that per-stage accumulation. The answer is the largest finishing time
+              at the end, and the stage that set it is the <span className="text-foreground">tail stage</span> to
+              investigate first.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Fetch["fetch<br/>queue + run"] --> Parse["parse<br/>queue + run"]\n  Parse --> Enrich["enrich<br/>queue + run"]\n  Parse --> Store["store<br/>queue + run"]\n  Enrich --> Notify["notify<br/>queue + run"]\n  Store --> Notify\n  Notify --> CP{{"finish = max parent + own cost"}}`}
+              caption="Each stage contributes queue wait plus run time. Walking the DAG and keeping the max parent finish at every join yields the critical path and names the tail stage."
+            />
             <RustCodeEditor
               code={codes.distributed_profiling_task_graph}
               onChange={(newCode) => updateCode("distributed_profiling_task_graph", newCode)}

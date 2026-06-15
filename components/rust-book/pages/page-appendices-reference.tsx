@@ -47,7 +47,7 @@ const READING_PATHS = {
     "ch28-cpp-integration",
     "ch32-mpi-and-high-performance-computing",
     "ch33-performance-oriented-rust",
-    "ch54-no-std-rust-constrained-runtime-derivatives",
+    "ch56-no-std-rust-constrained-runtime-derivatives",
   ],
   csharp: [
     "ch01-why-rust-feels-different",
@@ -630,7 +630,7 @@ const APPENDIX_SPECS: Record<string, AppendixPageSpec> = {
     intro:
       "A final portability and audit checklist for `no_std`, freestanding, embedded, WASM guest, and constrained-runtime Rust.",
     jumpLinks: [
-      { label: "no_std chapter", pageId: "ch54-no-std-rust-constrained-runtime-derivatives" },
+      { label: "no_std chapter", pageId: "ch56-no-std-rust-constrained-runtime-derivatives" },
       { label: "Unsafe audit", pageId: "appendix-e-unsafe-rust-audit-checklist" },
       { label: "FFI checklist", pageId: "appendix-h-ffi-checklist" },
     ],
@@ -855,11 +855,11 @@ export function PageExerciseIndex() {
             </div>
             <Button
               variant="outline"
-              onClick={() => setCurrentPage(getPageIndexById("ch54-no-std-rust-constrained-runtime-derivatives"))}
+              onClick={() => setCurrentPage(getPageIndexById("ch56-no-std-rust-constrained-runtime-derivatives"))}
               className="gap-2 shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 54
+              Back to Chapter 56
             </Button>
           </div>
         </section>

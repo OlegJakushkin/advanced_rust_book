@@ -1,41 +1,46 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Testing advanced Rust systems is mostly about boundary design",
-    body: "If ownership, time, queues, retries, and unsafe invariants are vague, tests become vague too. The calmest test suite follows the real operational boundaries instead of fighting them.",
+    title: "Decide what each test is actually proving",
+    body: "Before you reach for a tool, write down the claim in one sentence: “used quota never exceeds the limit,” “a truncated frame is rejected,” “a duplicate delivery has no second effect.” When ownership, time, queues, retries, and unsafe invariants are vague, tests are vague too. The calmest suite follows the real operational boundaries of the system instead of fighting them, and every test names the one fact it defends.",
   },
   {
-    title: "Use the cheapest layer that can prove the claim",
-    body: "A unit test around one invariant is usually cheaper and more stable than a whole service test. A property test is better than thirty ad hoc examples when the real question is algebraic or state-machine correctness.",
+    title: "Use the cheapest layer that can still prove the claim",
+    body: "Tests are not free: the slower and wider the layer, the more flaky and expensive each failure becomes. A unit test around one invariant is cheaper and more stable than a whole-service test, and a property test beats thirty hand-picked examples when the real question is algebraic or state-machine correctness. Spend the heavy layers only on the claims that genuinely need transport, a runtime, or a broker to be true.",
   },
   {
-    title: "Determinism is a feature, not a convenience",
-    body: "Fake clocks, stable IDs, bounded queues, explicit retries, and normalized outputs make advanced systems testable. Sleep-heavy tests and incidental randomness mostly hide the real contract.",
+    title: "Determinism is a feature you design in, not a happy accident",
+    body: "Advanced systems become testable when the things that wobble are put under your control: fake clocks instead of wall-clock sleeps, stable IDs instead of random UUIDs, bounded queues with explicit capacity, explicit retries, and normalized output. Sleep-heavy tests and incidental randomness do not test more of the system — they mostly hide the real contract behind timing luck, and then get re-labeled “CI noise” when they fail.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You may already trust sanitizer-heavy integration suites for parser and ABI code. Rust still benefits from those, but it also wants explicit invariant tests around ownership and unsafe boundaries before the whole system path is involved.",
+    body: "You probably already trust sanitizer-heavy integration suites for parser and ABI code, and you should keep them. The shift is that Rust lets you assert invariants directly at the type and ownership boundary before the whole system path is involved, so the unsafe edge gets its own small, named tests rather than being covered only by a happy-path end-to-end run. Miri replaces some of what you would have asked ASan/UBSan to catch, but only inside Rust.",
   },
   {
     title: "C# background",
-    body: "Rust has fewer ambient mocking surfaces and less runtime reflection. The usual win is narrower seams, typed fakes, and deterministic state transitions rather than wide mock-heavy object graphs.",
+    body: "There is far less ambient mocking surface and no runtime reflection to lean on, so the wide mock-heavy object graph you might build with Moq does not translate. The Rust win is narrower seams: a small trait you can swap for a typed fake, an injected clock, deterministic state transitions. You design the seam into the type instead of generating a proxy at runtime, which means the test boundary is visible in the signature.",
   },
   {
     title: "Go background",
-    body: "Table-driven tests translate well, but Rust often gains even more from property tests, fuzzing, and replay-oriented async or distributed harnesses because ownership and parser boundaries are sharper.",
+    body: "Your table-driven instinct carries over almost unchanged and is still excellent for enumerated cases. The new leverage is that Rust’s sharp ownership and parser boundaries pay off even more under property tests, fuzzing, and replay-oriented harnesses: instead of one row per case, you state the invariant once and let proptest or cargo-fuzz hunt for the counterexample, then shrink it down to the minimal failing input for you.",
+  },
+  {
+    title: "Python background",
+    body: "Coming from pytest plus monkeypatch and unittest.mock, you are used to patching names at runtime to isolate code. Rust has no monkeypatching — you cannot reach in and replace a function the production code already bound. Substitution happens through generics or trait objects chosen at the call site, so the testable seam must exist in the design. The payoff is that the compiler proves your fake satisfies the same contract as the real implementation.",
   },
 ]
 
@@ -219,8 +224,9 @@ export function PageCh42TestingAdvancedRustSystems() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Advanced Rust testing protects invariants across parsers, concurrency, IO, time, and failure modes. This chapter
-          organizes tests around production risk rather than command coverage.
+          Testing an advanced Rust system is less about test count and more about defending the right invariants at the
+          cheapest layer that can still prove them — across parsers, concurrency, IO, time, and failure. This chapter
+          organizes a test suite around production risk and determinism rather than line or command coverage.
         </p>
       </div>
 
@@ -262,19 +268,70 @@ export function PageCh42TestingAdvancedRustSystems() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service combines an unsafe parser fast path, async workers, distributed replay, generated reports, and
-            latency budgets. The business requirement is a deterministic test strategy that proves local invariants,
-            hostile input handling, retry safety, output stability, and performance budgets at the cheapest reliable layer.
+            Picture one service that has accumulated every hard-to-test ingredient at once. It has an unsafe parser fast
+            path that walks raw bytes, async workers that process those frames, distributed replay where the same message
+            can arrive twice, generated reports that another team reviews byte-for-byte, and a latency budget that the
+            product has promised to customers. A single end-to-end suite that boots the whole thing and pokes it from the
+            outside would be slow, flaky, and almost useless when it fails: a red build would tell you something broke,
+            not which contract broke.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The job for the rest of this chapter is to take that one tangled service and break its risks apart into
+            separate, mostly deterministic claims — local invariants, hostile-input handling, retry safety, output
+            stability, and performance budgets — and then prove each claim at the cheapest layer where it can be proven
+            reliably. The diagram below shows that mapping: a single risk in the system on the left, the test layer that
+            owns it on the right.
+          </p>
+          <div className="mt-4">
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Risks1 ["Where the system can break"]
+    Inv[Local invariant]
+    Hostile[Hostile bytes]
+    Replay[Duplicate delivery]
+  end
+  subgraph Layers1 ["Cheapest layer that proves it"]
+    Unit["Unit / property test"]
+    Fuzz[Fuzz target]
+    Async[Deterministic async harness]
+  end
+  Inv --> Unit
+  Hostile --> Fuzz
+  Replay --> Async`}
+              caption="Part 1 — invariants, hostile input, and duplicate delivery each push down to a cheap, deterministic layer."
+            />
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            The same mapping continues for output stability and performance:
+          </p>
+          <div className="mt-4">
+            <MermaidDiagram
+              chart={`flowchart TD
+  subgraph Risks2 ["Where the system can break"]
+    Out[Generated output]
+    Budget[Latency budget]
+  end
+  subgraph Layers2 ["Cheapest layer that proves it"]
+    Snap["Golden / snapshot"]
+    Bench[Benchmark lane]
+  end
+  Out --> Snap
+  Budget --> Bench`}
+              caption="Part 2 — generated output and latency budgets move to snapshot review and an isolated benchmark lane, instead of being tested only through one slow end-to-end path."
+            />
+          </div>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <p className="text-sm text-muted-foreground leading-6">
-              In a real Cargo repository, this chapter commonly translates into a mix of unit-test modules,
+              In a real Cargo repository this layering is not abstract — it shows up as concrete files and crates: ordinary
+              unit-test modules next to the code, an
               <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] mx-1">tests/</code>
-              integration suites, property-testing crates such as
+              directory for integration suites, a property-testing crate such as
               <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] mx-1">proptest</code>,
-              fuzz targets such as
+              fuzz targets driven by
               <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] mx-1">cargo-fuzz</code>,
-              snapshot tooling, and separate benchmark lanes.
+              snapshot tooling such as
+              <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] mx-1">insta</code>,
+              and a benchmark lane kept well away from the correctness suite.
             </p>
           </div>
         </section>
@@ -306,6 +363,11 @@ export function PageCh42TestingAdvancedRustSystems() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Three ideas carry most of the weight in this chapter. Name the claim each test defends, prove it at the
+            cheapest layer that can, and engineer determinism instead of hoping for it. Everything else — which crate,
+            which macro, which directory — is downstream of getting these three right.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -323,12 +385,43 @@ export function PageCh42TestingAdvancedRustSystems() {
           </div>
 
           <article className="rounded-xl border border-border bg-card p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers className="h-4 w-4 text-primary" />
+              <h4 className="font-semibold text-foreground">The shape of a layered suite</h4>
+            </div>
+            <p className="text-sm text-muted-foreground leading-6">
+              The familiar “test pyramid” is really a statement about cost and stability. Cheap, fast, deterministic tests
+              live at the bottom and there are many of them; expensive, slower, more fragile tests live at the top and
+              there are few. Property tests and fuzzing sit off to the side: they are not a separate altitude so much as a
+              different way of generating inputs for the bottom and middle layers. Read the next diagram as a budget — most
+              of your assertions should be near the base, and each step up should be justified by a claim that genuinely
+              needs that much machinery to be true.
+            </p>
+            <div className="mt-4">
+              <MermaidDiagram
+                chart={`flowchart TD
+  E2E["End-to-end / transport smoke"] --> Integ[Integration tests at public seams]
+  Integ --> Unit[Unit tests for local invariants]
+  Gen[Property tests and fuzzing] -.feed inputs into.-> Unit
+  Gen -.feed inputs into.-> Integ`}
+                caption="Most assertions live at the cheap base; property tests and fuzzing feed generated inputs into the lower layers rather than forming a separate top tier."
+              />
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Unit tests</h4>
             <p className="text-sm text-muted-foreground leading-6">
               Unit tests are the right layer for local invariants, pure helpers, edge conditions, and typed domain rules.
               They should prove things like “quota never exceeds limit,” “state transition rejects duplicate submission,” or
-              “parser header length is checked before decoding.” This is usually the cheapest place to keep failures
-              precise.
+              “parser header length is checked before decoding.” This is usually the cheapest place to keep a failure
+              precise: when a unit test goes red, the blast radius is one function or one type, so the message points
+              almost directly at the broken line instead of at incidental wiring.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              In the snippet below, look at the two assertions on the same ID. The first insert must succeed and the second
+              must fail — that pair is the entire contract of a duplicate-rejecting index, stated without booting anything
+              around it.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{unitTestSnippet}</code>
@@ -338,9 +431,19 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Integration tests</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Integration tests should exercise public seams the way another crate or another deployment unit does. That
-              means HTTP handlers through a test app, adapter plus store round-trips, or queue consumer shells around owned
-              envelopes. They are not the place to prove every tiny invariant from scratch again.
+              Integration tests should exercise public seams the way another crate or another deployment unit does: HTTP
+              handlers driven through a test app, an adapter and its store doing a real round-trip, or a queue-consumer
+              shell wrapped around an owned envelope. The discipline that keeps them useful is restraint. They are not the
+              place to re-prove every tiny invariant from scratch — that work belongs in the cheap layers below. An
+              integration test should assert the things that only become true once the pieces are wired together, such as
+              “a successful checkout returns 202 and the outbox now contains the order.”
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              In the example, the interesting lines are the two assertions after the request. The status code proves the
+              public HTTP contract; the
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">outbox_contains</code>
+              check proves the side effect crossed the seam. Everything before them is just enough setup to make those two
+              claims meaningful.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{integrationTestSnippet}</code>
@@ -350,10 +453,20 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Property-based testing</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Property-based tests are best when the important claim is general: no negative balance, output always sorted,
-              parser round-trip is lossless, resource accounting never exceeds limit, or retry bookkeeping remains
-              idempotent under repeated inputs. The interesting part is not random data by itself. The interesting part is
-              the invariant plus shrinking when the invariant fails.
+              A property test inverts how you normally write assertions. Instead of supplying a specific input and
+              checking a specific output, you state a rule that must hold for <em>every</em> input in some range, and the
+              framework generates hundreds of cases trying to break it. Properties shine when the important claim is
+              general: no negative balance, output always sorted, a parser round-trip is lossless, resource accounting
+              never exceeds the limit, or retry bookkeeping stays idempotent under repeated input.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The random data is not the valuable part on its own — thirty random runs that all pass prove little. The
+              valuable part is <strong>shrinking</strong>: when a property fails,
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">proptest</code>
+              automatically reduces the failing case to a minimal counterexample, so you get the smallest input that
+              violates the rule rather than a 4 KB blob you still have to debug. In the snippet, the loop body is the whole
+              test: after every reservation, used quota must stay at or below the limit, no matter which sequence of
+              quantities the generator picked.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{propertySnippet}</code>
@@ -363,9 +476,19 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Fuzzing</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Fuzzing is for hostile input spaces: parsers, decoders, compression wrappers, protocol frames, unsafe byte
-              walkers, and FFI boundaries. Target the smallest boundary that still reproduces the failure. Save crashing
-              inputs into a corpus and keep the harness boring enough that the crash cause is diagnosable.
+              Fuzzing is property testing pointed at openly hostile input. It is the right tool for parsers, decoders,
+              compression wrappers, protocol frames, unsafe byte walkers, and FFI boundaries — anywhere arbitrary bytes
+              from outside cross into your code. A coverage-guided fuzzer such as
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">cargo-fuzz</code>
+              mutates inputs and watches which branches they reach, steadily steering toward the paths your hand-written
+              cases never thought to exercise. The implicit property is usually the simplest one possible: “whatever bytes
+              arrive, this function must not panic, hang, or trigger undefined behavior.”
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              Two habits make fuzzing pay off. Target the smallest boundary that still reproduces the failure, so a crash
+              points at one parser rather than the whole service. And save crashing inputs into a corpus so each fix comes
+              with a permanent regression case. The harness below is deliberately tiny — that minimalism is the point,
+              because a boring target keeps the crash cause diagnosable.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{fuzzSnippet}</code>
@@ -374,6 +497,15 @@ export function PageCh42TestingAdvancedRustSystems() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Testing unsafe code</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Unsafe code is different because the bug you fear may not be observable from a passing test. A use of an
+              invalid pointer or a violated aliasing rule is undefined behavior: the program might return the right answer
+              today and corrupt memory next week after the optimizer makes a different choice. So testing unsafe code is
+              not about throwing more inputs at it — it is about pinning down the invariant the unsafe block relies on, and
+              then checking that invariant with tools that can see undefined behavior even when ordinary assertions cannot.
+              The checklist below is the order that tends to work: write the invariant first, then keep a safe reference,
+              then hammer the boundaries, then bring in Miri and sanitizers.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -394,11 +526,35 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Testing async code</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Async tests should control time, queueing, cancellation, and task ownership deliberately. If a test depends
-              on sleeps, real clock delays, or lucky scheduler timing, it is usually asserting the wrong thing. For highly
-              concurrent state machines, ecosystem tools such as loom can also be useful for exploring interleavings, but
-              the first step is still a deterministic boundary.
+              The recurring temptation in async tests is to express “after some time, X should happen” with a real
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">sleep</code>.
+              That makes the test slow and, worse, makes it depend on scheduler luck, so it passes on a fast laptop and
+              flakes in CI. The fix is to take time out of the operating system’s hands and put it in the test’s hands.
+              Tokio’s
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">start_paused = true</code>
+              freezes the clock so it only advances when you advance it, which turns “wait 31 seconds for a lease to
+              expire” into an instantaneous, exact, repeatable step. The same instinct applies to queueing, cancellation,
+              and task ownership: control them deliberately rather than hoping the runtime cooperates. For genuinely
+              concurrent state machines, loom can later explore interleavings, but a deterministic boundary comes first.
             </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The test below exercises a lease that should expire and let the task be reclaimed. The behavior under test is
+              a small state machine, so it is worth seeing the states before the code. Watch how the test never sleeps for
+              real: it claims the task, advances the fake clock past the lease, and then claims again, expecting the same
+              task to come back.
+            </p>
+            <div className="mt-4">
+              <MermaidDiagram
+                chart={`stateDiagram-v2
+  [*] --> Available
+  Available --> Leased: claim(task)
+  Leased --> Available: lease expires (clock advanced)
+  Leased --> Done: ack before expiry
+  Available --> Leased: re-claim after expiry
+  Done --> [*]`}
+                caption="A leased task returns to Available when the (fake) clock passes the lease deadline, so a re-claim redelivers the same task — the exact path the test drives."
+              />
+            </div>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{asyncTestSnippet}</code>
             </pre>
@@ -412,11 +568,37 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Testing distributed systems</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Distributed tests need to prove replay, duplicate suppression, retry classification, queue age, and durable
-              completion more than they need to prove that one broker connection opens successfully. Put the transport
-              reality in a small top layer, then test lease expiry, retry windows, and idempotent completion with fake time
-              and owned envelopes below it.
+              In a distributed system the connection opening is the boring part. What actually keeps you up at night is
+              everything that happens because most brokers deliver at least once: the same message can arrive twice, a
+              lease can expire and redeliver mid-flight, a retry can re-run work that already half-succeeded. So the claims
+              worth testing are replay safety, duplicate suppression, retry classification, queue age, and durable
+              completion — not “a broker connection opened.” Keep the transport reality in one small top layer if the repo
+              already supports it, and prove the hard behavior below it with fake time and owned envelopes, where it is
+              deterministic.
             </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The single most important property is usually idempotency under duplicate delivery. The sequence below is the
+              one your test should drive directly: the same message ID is delivered twice, but the durable effect happens
+              exactly once because the worker checks a completion record before acting. If your harness can produce this
+              flow and assert “one effect, one duplicate suppressed,” you have tested the contract that matters.
+            </p>
+            <div className="mt-4">
+              <MermaidDiagram
+                chart={`sequenceDiagram
+  participant B as Broker
+  participant W as Worker
+  participant S as Durable store
+  B->>W: deliver msg id=7
+  W->>S: seen id=7?
+  S-->>W: no
+  W->>S: commit effect, mark id=7 done
+  B->>W: deliver msg id=7 (duplicate)
+  W->>S: seen id=7?
+  S-->>W: yes
+  W-->>B: ack, no second effect`}
+                caption="At-least-once delivery means id=7 can arrive twice; the completion check in the durable store makes the second delivery a no-op. This is the flow a distributed test should reproduce."
+              />
+            </div>
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {distributedTestingChecklist.map((item) => (
                 <li key={item}>{item}</li>
@@ -427,9 +609,16 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Golden files</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Golden files are best for fixed externally meaningful outputs. They work well for protocol frames, normalized
-              CLI output, compiler-like diagnostics, and rendering layers where humans need to review exact changes across
-              revisions.
+              A golden-file test compares the program’s output against a known-good artifact checked into the repository.
+              It shines when the output is an external contract someone actually cares about byte-for-byte: a protocol
+              frame, a normalized CLI dump, compiler-style diagnostics, or a rendered document another team consumes. The
+              point is that a change to that output should be a deliberate, reviewable event — a diff against the golden
+              file in a pull request — rather than something that drifts silently.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The snippet is the whole pattern in three lines: render the artifact, read the committed golden bytes,
+              compare. The only subtlety lives in what you render — anything nondeterministic (timestamps, UUIDs, paths)
+              must be normalized before the comparison, or the test becomes noise the team learns to ignore.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{goldenSnippet}</code>
@@ -444,8 +633,18 @@ export function PageCh42TestingAdvancedRustSystems() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Snapshot testing</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              Snapshot testing is useful when the output is too large for hand-written assertions but still small enough for
-              human review. It is not a replacement for semantic checks. It is a review tool for structured output shape.
+              Snapshot testing is the ergonomic cousin of golden files. A crate such as
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">insta</code>
+              captures the output on the first run, stores it next to the test, and on later runs shows you a diff and lets
+              you accept or reject the change with a review command. It is the right tool when the output is too large to
+              hand-write assertions for but still small enough that a human can eyeball the diff: CLI reports, error trees,
+              generated code, formatted documents.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The one-line call in the snippet hides the workflow, not the risk. A snapshot proves “the output looks like
+              this,” which is weaker than “the output is correct.” Treat it as a review aid for shape and pair it with a
+              real semantic assertion for any load-bearing invariant — accepting a snapshot diff without thinking is how a
+              genuine regression slips through.
             </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{snapshotSnippet}</code>
@@ -469,6 +668,14 @@ export function PageCh42TestingAdvancedRustSystems() {
               <code className="font-mono text-foreground"> [[bench]]</code> harness is the cleaner home once the budget
               earns one.
             </p>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              In the snippet, the two things to notice are the
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">#[ignore]</code>
+              attribute that keeps this out of the normal correctness run, and the comparison against a single coarse
+              budget (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">p95_us &lt;= 250</code>) rather
+              than an exact timing. That looseness is intentional: it is a guard against regressions large enough to matter
+              operationally, not a precise measurement.
+            </p>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{benchmarkSnippet}</code>
             </pre>
@@ -479,9 +686,15 @@ export function PageCh42TestingAdvancedRustSystems() {
             </ul>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">How this compares to C++, C#, and Go</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+          <article className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+            <h4 className="font-semibold text-foreground mb-2">How testing thinking shifts by background</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The hardest part of testing advanced Rust is rarely the syntax of
+              <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] mx-1">#[test]</code>
+              — it is unlearning the substitution and isolation habits your previous language made cheap. Each card below
+              names the mental-model shift, not a crate-for-library mapping.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -534,6 +747,12 @@ export function PageCh42TestingAdvancedRustSystems() {
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Both runnable examples below are deliberately deterministic so they execute in the browser, but each is shaped
+            like the production test it stands in for. The first is a quota invariant — the seed of a property test. The
+            second is a duplicate-delivery harness — the seed of a distributed idempotency test. Run each once to see the
+            baseline output, then change an input and watch which assertion moves.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">

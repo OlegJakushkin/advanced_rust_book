@@ -1,0 +1,206 @@
+{
+ "chapterKey": "ch05",
+ "num": 5,
+ "title": "Pointers, References, and Ownership Inside Structs",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose owned versus borrowed fields for two domain objects",
+   "objective": "Practice separating a short-lived view type from a long-lived stored type instead of trying to make one struct serve both jobs.",
+   "starterPrompt": "Design two structs for an API gateway: `RouteMatchView` used only during request parsing, and `StoredRouteMatch` used later in metrics and retries.",
+   "prompts": [
+    "Which fields in `RouteMatchView` should borrow from the request buffer?",
+    "Which fields in `StoredRouteMatch` should become owned before they hit metrics, retries, or persistence?",
+    "Explain one concrete reason the two structs should not have the same field types."
+   ],
+   "acceptanceCriteria": [
+    "You give the view type borrowed fields only where the upstream owner is obvious and nearby.",
+    "You give the stored type owned fields for data that must outlive the parse step.",
+    "You explain at least one tradeoff involving allocation cost versus lifetime simplicity."
+   ],
+   "hints": [
+    "A parser view and a stored record usually have different jobs.",
+    "Ask whether the second struct could sit in a `Vec`, queue, or cache without external lifetime baggage."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Explain the lifetime coupling in a borrowed-field struct",
+   "objective": "Read a struct with references and describe what the lifetime parameter means operationally rather than syntactically.",
+   "starterPrompt": "Given `struct HeaderView<'a> { name: &'a str, value: &'a str }`, explain what `<'a>` says, what it does not say, and where this type is a good fit.",
+   "prompts": [
+    "Who owns the bytes behind `name` and `value`?",
+    "Why does the struct need a lifetime parameter at all?",
+    "Why is this design usually comfortable in parsing code but awkward in caches and queues?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that the struct borrows from some external owner and therefore cannot outlive that owner.",
+    "You state that the lifetime parameter constrains reference validity and does not extend storage lifetime.",
+    "You identify at least one scenario where the type is a good fit and one where it becomes burdensome."
+   ],
+   "hints": [
+    "Treat `<'a>` as a relationship marker, not as a retention policy.",
+    "A good answer names the owner outside the struct."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Build a struct that owns a buffer and exposes read-only views safely",
+   "objective": "Implement an owned-buffer pattern that returns borrowed views derived from `&self` instead of storing self-references.",
+   "starterPrompt": "Implement `AuditLine` so it owns a raw log line and exposes a `level(&self) -> &str` method that returns the text before the first colon.",
+   "prompts": [
+    "Keep the owned field as `String`.",
+    "Return `&str` from `level`.",
+    "Do not store a second field borrowing from `raw`."
+   ],
+   "acceptanceCriteria": [
+    "The struct stores the raw line as owned `String` data.",
+    "The `level` method returns a borrowed `&str` view derived from `&self`.",
+    "The sample output is exactly `level = WARN` and `raw = WARN: cache miss`."
+   ],
+   "hints": [
+    "Own the line once, then slice it on demand.",
+    "A method returning `&str` from `&self` is the key idea here."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Refactor a self-referential design into stable indices",
+   "objective": "Replace an invalid self-borrowing layout with a representation Rust can move and reason about safely.",
+   "starterPrompt": "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }`. Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
+   "prompts": [
+    "Will you store a byte range, a start/end offset pair, or a typed token ID?",
+    "How will the accessor recover `&str` from `&self`?",
+    "What happens if the owned buffer can mutate later?"
+   ],
+   "acceptanceCriteria": [
+    "Your redesign removes the self-reference entirely.",
+    "Your replacement stores stable metadata such as offsets, ranges, or IDs.",
+    "You explain how the accessor reconstructs a borrowed view from the owned buffer.",
+    "You note that mutation rules must preserve whatever indexing metadata you store."
+   ],
+   "hints": [
+    "If the accessor starts from `&self`, it can borrow from the owned buffer at call time.",
+    "Offsets and ranges are often simpler than pointer-like designs."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Choose Box, Rc, or Arc intentionally",
+   "objective": "Practice mapping pointer types to actual ownership semantics instead of treating them as interchangeable heap wrappers.",
+   "starterPrompt": "Choose a field type for each case: a recursive AST node owned by one parent, a read-mostly UI template shared inside one thread, and a schema object shared across worker threads.",
+   "prompts": [
+    "Where is `Box<T>` the right indirection tool?",
+    "Why is `Rc<T>` wrong at a thread boundary?",
+    "What extra truth must hold before `Arc<T>` is enough?"
+   ],
+   "acceptanceCriteria": [
+    "You choose `Box<T>` for the recursive single-owner case.",
+    "You choose `Rc<T>` only for single-thread shared ownership.",
+    "You choose `Arc<T>` only for cross-thread shared ownership and mention that `T` must still be thread-safe."
+   ],
+   "hints": [
+    "Reference counting answers an ownership-count question, not a mutability-design question.",
+    "Start with 'how many owners?' and 'which threads?' before naming the type."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design long-lived service structs without over-lifetime-parameterization",
+   "objective": "Make a lifetime-aware struct design for a service pipeline without turning every downstream type into `Thing<'a>`.",
+   "starterPrompt": "You are designing `socket bytes -> parse headers -> build Event -> enqueue -> retry -> persist`. Decide which types are temporary borrowed views and which types should own their fields.",
+   "prompts": [
+    "Which types exist only inside parsing or validation?",
+    "At which boundary does `Event` become fully owned?",
+    "Where would `Arc<T>` be semantically real, and where would it merely hide unclear ownership?",
+    "What is one allocation you would accept to simplify the rest of the system?"
+   ],
+   "acceptanceCriteria": [
+    "You keep borrowed views local to parsing or validation.",
+    "You convert queued, retried, or persisted data into owned forms before those boundaries.",
+    "You justify at least one tradeoff involving allocation, indirection, or shared ownership cost.",
+    "You avoid making all downstream service structs lifetime-parameterized by default."
+   ],
+   "hints": [
+    "Queues and retries are ownership boundaries.",
+    "If a type survives past the input buffer, it should usually stop borrowing from it."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "When is a borrowed-field struct a strong design, and when is it a maintenance smell?",
+  "Why does one borrowed field often force a lifetime parameter onto the whole struct?",
+  "What problem does `Box<T>` solve that plain owned `T` does not?",
+  "Why is `Arc<T>` not a synonym for 'safe to share and mutate however I want'?",
+  "Why do offsets, ranges, or IDs often beat self-references inside owned structs?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Exercise 3",
+  "filename": "audit_line_lab.rs",
+  "runKey": "ch05_ex_audit_line",
+  "expectedOutput": "level = WARN\nraw = WARN: cache miss",
+  "initialCode": "struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(),\n        }\n    }\n\n    fn level(&self) -> &str {\n        \"UNKNOWN\"\n    }\n}\n\nfn main() {\n    let line = AuditLine::new(\"WARN: cache miss\");\n    println!(\"level = {}\", line.level());\n    println!(\"raw = {}\", line.raw);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 02 and 04",
+  "Opening scenario",
+  "A durable design order",
+  "Mental model",
+  "Core concepts",
+  "Owned fields vs borrowed fields",
+  "Structs containing references and lifetime parameters on structs",
+  "Interior ownership using Box, Rc, and Arc",
+  "Structs that own buffers and expose views",
+  "Self-referential struct problems",
+  "Translating from C++, C#, and Go",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: own the buffer, borrow the view",
+  "Example 2: choose Box, Rc, and Arc by ownership semantics",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Struct design fixes ownership policy in public data models. This chapter covers owned fields, borrowed views, shared pointers, and stable representations for systems that must expose safe state without hidden aliasing.",
+  "Chapter 02 established values, moves, drops, and heap-backed ownership. Chapter 04 explained borrowing and lifetime relationships. This chapter moves those rules into struct design, where production Rust either becomes clear or becomes accidentally lifetime-heavy.",
+  "A command-processing service converts request text into normalized records, stores selected data, and sends background work to processors. The business requirement is to classify every struct as a transient view or owned state, so lifetimes stay local and durable data remains eas",
+  "The choice is not about which is faster to type. It is about which direction the dependency points. An owned field copies the data inside the struct, so the struct stands alone. A borrowed field stores a reference back to data someone else holds, so the struct can only live as lo",
+  "The borrowed case points the dependency the other way:",
+  "A borrowed-field struct is usually a temporary lens over someone else’s data. An owned-field struct is usually a value the rest of the system may keep, move, test, queue, and reason about independently.",
+  "The thing to watch is contagion. The moment one field is a reference, the struct gains a lifetime parameter, and that parameter has to be named everywhere the struct appears: in the functions that build it, in the fields of any struct that holds it, in the return types that hand ",
+  "That parameter does not stop at the type definition. It reaches all the way out to call sites:",
+  "If this struct ended up inside a Vec, a cache, a worker message, or a test fixture, would you still want it tied to some external owner’s lifetime? If the answer is no, give the struct owned fields.",
+  "These three smart pointers all put a field behind heap indirection, but they answer different questions. The deciding factor is how many owners the value has and whether any of them live on another thread. Walk the two questions in the diagram and each pointer falls out of the an",
+  "The pointer type is part of the domain model. Box<T> means one owner plus indirection. Rc<T> means shared ownership in one thread. Arc<T> means shared ownership across threads, provided T is itself safe there.",
+  "This is one of the most Rust-native patterns in systems and service code. Let the struct own the buffer. Then derive borrowed slices from &self as needed. The struct manages lifetime. Callers get safe read-only views.",
+  "The repository example examples/ch05_ownership_inside_structs/owned_buffer_views.rs mirrors the first example below.",
+  "The tempting shape is something like struct Parsed<'a> {\" raw: String, first: &'a str \"} . You cannot construct it in safe code: filling first requires borrowing self.raw, which conflicts with moving raw into the same value, and the lifetime 'a is supplied by the caller — no life",
+  "The repository example examples/ch05_ownership_inside_structs/stable_indices_instead_of_self_reference.rs shows the most practical repair: own the buffer, store ranges, and derive views when needed.",
+  "The cheapest-looking field type is not always the cheapest design. Saving one allocation by borrowing can cost far more if the whole object graph becomes lifetime-coupled and hard to store, test, or hand off.",
+  "The struct owns the raw line. Methods derive lightweight views from that owned buffer.",
+  "What to look at: the struct holds exactly one owned field, the raw line. Every accessor returns a &str that is sliced out of that field on demand, so the borrows live and die with each call instead of being stored. Follow the single owner down to the short-lived views in the diag",
+  "Quick check: run the baseline, then change the raw line passed to LogLine::new. The output changes, but the ownership stays simple: one owner, many short borrows.",
+  "The returned &str values are tied to &self, not stored inside the struct. That keeps the representation movable and ordinary.",
+  "This pattern shows up in log parsing, protocol headers, request lines, and binary message frames: own once, slice many times, store offsets only when repeated lookup deserves it.",
+  "One field needs single-owner indirection, one needs single-thread shared ownership, and one must cross a thread boundary.",
+  "What to look at: read the three field types, not the strings they hold. Each field encodes a different ownership story, and the code downstream is forced to respect it. The boxed config is consumed by one owner, the Rc template is cloned and used only on the main thread, and the ",
+  "The Arc-wrapped schema is the one field allowed to cross the thread boundary:",
+  "Quick check: keep the three field types distinct, then change the string literals and rerun. The point is not the output itself. The point is that the field type communicates the ownership model.",
+  "The parser config still has one owner. The box gives indirection without changing ownership count.",
+  "The UI template is shared on one thread only. That is why the example clones it locally and never sends it to the worker.",
+  "The shared schema crosses a thread boundary, so the reference count must be atomic and the inner type must remain thread-safe.",
+  "The exercise page asks you to choose owned versus borrowed fields for real domain objects, refactor a self-referential design into stable indices, select between `Box`, `Rc`, and `Arc`, and build a struct that owns data while exposing safe read-only views."
+ ],
+ "codeSamples": {
+  "ownership_structs_owned_views": "struct LogLine {\n    raw: String,\n}\n\nimpl LogLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: raw.to_string(),\n        }\n    }\n\n    fn level(&self) -> &str {\n        self.raw.split(':').next().unwrap_or(\"UNKNOWN\")\n    }\n\n    fn message(&self) -> &str {\n        self.raw\n            .split_once(':')\n            .map(|(_, message)| message.trim())\n            .unwrap_or(\"\")\n    }\n}\n\nfn main() {\n    let line = LogLine::new(\"INFO: user signed in\");\n    println!(\"level = {}\", line.level());\n    println!(\"message = {}\", line.message());\n}",
+  "ownership_structs_pointer_choices": "use std::rc::Rc;\nuse std::sync::Arc;\nuse std::thread;\n\nstruct ParserConfig {\n    delimiter: Box<str>,\n}\n\n#[derive(Clone)]\nstruct UiTemplate {\n    name: Rc<str>,\n}\n\n#[derive(Clone)]\nstruct SharedSchema {\n    version: Arc<str>,\n}\n\nfn main() {\n    let parser = ParserConfig {\n        delimiter: \"=>\".into(),\n    };\n    let template = UiTemplate {\n        name: Rc::from(\"invoice\"),\n    };\n    let template_copy = template.clone();\n    let schema = SharedSchema {\n        version: Arc::from(\"v2\"),\n    };\n    let schema_for_worker = schema.clone();\n\n    let handle = thread::spawn(move || {\n        format!(\"thread schema = {}\", schema_for_worker.version)\n    });\n\n    println!(\"box delimiter = {}\", parser.delimiter);\n    println!(\"rc clones = {}\", Rc::strong_count(&template_copy.name));\n    println!(\"{}\", handle.join().unwrap());\n}"
+ },
+ "labReferenceSolution": null
+}

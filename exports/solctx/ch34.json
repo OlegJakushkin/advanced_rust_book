@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch34",
+ "num": 34,
+ "title": "Memory Profiling",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Match the symptom to the measurement",
+   "objective": "Choose whether the next step should be allocation counts, heap snapshots, RSS tracking, queue metrics, or cycle inspection.",
+   "starterPrompt": "Classify four symptoms: rising RSS after a burst, stable RSS but rising task count, flat heap snapshots with a high allocation rate, and a graph of `Rc` nodes that never seems to disappear.",
+   "prompts": [
+    "Which symptom points first toward fragmentation or allocator retention?",
+    "Which symptom points first toward async backlog rather than a leak?",
+    "Which symptom points first toward churn rather than retained memory?",
+    "Which symptom points first toward logical reachability and cycle inspection?"
+   ],
+   "acceptanceCriteria": [
+    "You choose a distinct first measurement for each symptom.",
+    "You distinguish retained memory from allocation churn clearly.",
+    "You avoid calling every memory symptom a leak before evidence exists."
+   ],
+   "hints": [
+    "Start by asking what changed: owner count, queue depth, or allocator behavior.",
+    "A useful first measurement is the one that rules out the most wrong theories quickly."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find clone pressure in a sample workload",
+   "objective": "Read a request path and identify where deep clones, not Arc clones, are driving memory growth.",
+   "starterPrompt": "A route filter clones owned strings into an output list, then later formats another owned label per selected item before queueing work.",
+   "prompts": [
+    "Which clone creates another owner of the same allocation and which clone duplicates underlying bytes?",
+    "Which helper only needed borrowed access?",
+    "Where should ownership become explicit if the next stage truly must outlive the input?",
+    "What local counter would you add before reaching for a whole-process heap profiler?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one deep-clone site correctly.",
+    "You propose at least one borrowed API repair.",
+    "You mention one local measurement such as clone count or cloned-byte count."
+   ],
+   "hints": [
+    "Look for `.to_string()`, `.clone()`, and formatting inside a loop.",
+    "The first fix is often API shape, not allocator choice."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Instrument clone pressure on purpose",
+   "objective": "Add a narrow local measurement before moving to a heavier heap profiler.",
+   "starterPrompt": "Write a small helper that counts how many selected routes are cloned and how many bytes those clones represent.",
+   "prompts": [
+    "Count clones separately from selected outputs.",
+    "Track bytes from the borrowed source length before conversion.",
+    "Keep the instrumentation local to the hot path instead of turning it into a global abstraction.",
+    "Explain when you would delete this instrumentation after the incident is resolved."
+   ],
+   "acceptanceCriteria": [
+    "You count at least clone events and cloned bytes explicitly.",
+    "The measurement stays local and workload-focused.",
+    "You explain why this is a comparative tool rather than a complete memory profile."
+   ],
+   "hints": [
+    "A small counter is often enough to prove the next refactor target.",
+    "The important question is what changed across the refactor or incident window."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Diagnose an Rc cycle leak",
+   "objective": "Repair a graph whose strong edges make collection impossible even though there is no unsafe code.",
+   "starterPrompt": "A tree stores parent and child edges as strong `Rc<Node>` references and the root never seems to disappear after local work ends.",
+   "prompts": [
+    "Which edge is observational rather than owning?",
+    "What should become `Weak<Node>`?",
+    "What strong-count signal would you inspect before and after the repair?",
+    "Would this design be calmer with arena IDs instead of shared ownership at all?"
+   ],
+   "acceptanceCriteria": [
+    "You explain the logical leak precisely in terms of strong ownership count.",
+    "You replace at least one back-edge with `Weak<T>` in the design.",
+    "You mention one alternative such as arena handles when shared ownership is not semantically real."
+   ],
+   "hints": [
+    "The bug is usually not 'Rust leaked.' The bug is 'the graph still has owners.'",
+    "Ask which edge truly owns lifetime and which edge only wants lookup."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Profile async memory usage before calling it a leak",
+   "objective": "Read an async pipeline and decide whether the real issue is queue growth, too many tasks, large payloads, or an actual retention bug.",
+   "starterPrompt": "A Tokio service has an unbounded channel, a `spawn` per input item, and a large owned payload crossing several awaits before the final consumer falls behind.",
+   "prompts": [
+    "Which metrics should you collect first: queue depth, task count, payload size, or all three?",
+    "Which boundary wants a semaphore or bounded queue?",
+    "What should become smaller or more borrowed before the spawned task boundary?",
+    "When would you still suspect a true leak after those backlog fixes?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one boundedness failure in the design.",
+    "You propose a queue or concurrency cap with a reason.",
+    "You mention at least one payload-shape repair and one metric to confirm the change."
+   ],
+   "hints": [
+    "A growing backlog keeps memory alive even if the objects are perfectly reachable by design.",
+    "Measure in-flight work before debugging allocator internals."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Prepare a memory profiling checklist for a real service",
+   "objective": "Build the review checklist another engineer could use during an incident or a regression investigation.",
+   "starterPrompt": "Create a checklist for a service that accepts requests, parses them, queues owned work, fans out to async tasks, uses an arena during parsing, and keeps a read-mostly cache.",
+   "prompts": [
+    "Which numbers belong in the first page of the investigation: RSS, live bytes, queue depth, task count, clone count, or all of them?",
+    "Which leak candidates should be named explicitly: Rc or Arc cycles, unbounded queues, non-evicting caches, oversized arenas?",
+    "Which OS-specific tools would you choose on Linux, macOS, and Windows?",
+    "Which acceptance condition tells you the incident is actually resolved instead of merely masked?"
+   ],
+   "acceptanceCriteria": [
+    "Your checklist includes allocator or heap signals plus workload signals such as queue depth or task count.",
+    "Your checklist explicitly names at least three likely retention sources.",
+    "Your checklist includes at least one Linux, one macOS, and one Windows tool choice.",
+    "Your checklist defines one concrete success condition after the fix."
+   ],
+   "hints": [
+    "A checklist is most useful when it forces the team to rule out the wrong theories quickly.",
+    "Include one stop condition such as RSS after burst, queue age, or cloned bytes per request."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is a local clone counter often a good first memory-profiling tool?",
+  "What is the practical difference between allocation churn and retained live data?",
+  "Why can RSS stay high after the logical working set falls?",
+  "Why are unbounded queues and task floods often memory bugs even when no object is unreachable?",
+  "What does `Weak<T>` repair that a strong `Rc<T>` or `Arc<T>` back-edge cannot?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Remove clone pressure from a hot route filter",
+  "filename": "clone_pressure_lab.rs",
+  "runKey": "ch34_ex_clone_pressure",
+  "expectedOutput": "selected = 2\nclones = 0",
+  "initialCode": "use std::sync::atomic::{AtomicUsize, Ordering};\n\nstatic CLONES: AtomicUsize = AtomicUsize::new(0);\n\nfn track_clone(value: &str) -> String {\n    CLONES.fetch_add(1, Ordering::Relaxed);\n    value.to_string()\n}\n\nfn hot_routes(routes: &[&str]) -> Vec<String> {\n    let mut out = Vec::with_capacity(routes.len());\n\n    for &route in routes {\n        if route.starts_with(\"/api/\") {\n            out.push(track_clone(route));\n        }\n    }\n\n    out\n}\n\nfn main() {\n    let routes = [\"/api/orders\", \"/health\", \"/api/users\"];\n    CLONES.store(0, Ordering::Relaxed);\n\n    let selected = hot_routes(&routes);\n\n    println!(\"selected = {}\", selected.len());\n    println!(\"clones = {}\", CLONES.load(Ordering::Relaxed));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 07, 09, 13, 25, and 33",
+  "Opening scenario",
+  "A practical triage order",
+  "Mental model",
+  "Core concepts",
+  "Measuring allocations",
+  "Heap profiling: who allocated, and how much is still live",
+  "Tracking clone pressure",
+  "Detecting leaks with Rc and Arc cycles",
+  "Fragmentation and allocator retention",
+  "Arena allocation profiling",
+  "Profiling async memory usage",
+  "Tools for Linux, macOS, and Windows",
+  "Interpreting allocator behavior",
+  "Reducing memory footprint",
+  "How to think about this coming from another language",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: measure clone pressure before you profile the whole heap",
+  "Example 2: find an Rc cycle before you call it a leak",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Memory profiling identifies where allocations, retention, and queue growth affect cost and reliability. This chapter connects Rust ownership decisions to measurable memory behavior.",
+  "Chapter 07 separated deep clone cost from ordinary moves and `Arc::clone`. Chapter 09 covered `Rc`, `Arc`, `Weak`, and cycle risk. Chapter 13 introduced arena lifetimes and region retention. Chapter 25 explained task and queue backpressure in Tokio. Chapter 33 established the bro",
+  "A burst load test shows the resident set climbing after a routine service release, and it does not fall back down when the burst ends. The graph alone cannot tell you what is wrong: the same upward curve is produced by allocation churn, by genuinely retained heap, by an allocator",
+  "The fastest way through is a fixed triage order rather than a favorite tool. Name the symptom precisely first, then measure allocation and retention together, then correlate the memory curve with the workload curve, and only then commit to a diagnosis. The flow below is the path ",
+  "When the heap is genuinely retained, the second half decides why it is still reachable:",
+  "The cheapest signal in the whole toolbox is simply how often the program asks the allocator for memory and how many bytes it asks for. Those are two separate numbers and they describe two different problems. One hundred tiny allocations on every request is a count problem, usuall",
+  "A global allocator that wraps the system allocator and bumps an atomic counter on every call is the smallest tool that answers the count question. It adds one relaxed atomic increment per allocation, so it is cheap enough to leave behind a feature flag and read whenever a regress",
+  "Keep this kind of tool local and comparative. The exact count is less important than the fact that one refactor introduced twice as many allocations on the request path.",
+  "A counter tells you that allocations rose; a heap profiler tells you where they came from and whether they are still alive. The two questions a good heap profile answers are which callsite allocated and how much of what it allocated is retained right now. That second question is ",
+  "In safe Rust the most common cause of allocation churn is the word clone, and the trap is that one verb covers two completely different operations. A deep clone of a String or Vec<T> copies the entire backing buffer and allocates fresh heap; an Arc::clone or Rc::clone copies noth",
+  "Safe Rust guarantees you will never read freed memory, but it does not guarantee that memory you no longer need will be freed. The destructor for a reference-counted value runs only when its strong count reaches zero, and a cycle keeps that count permanently above zero. The class",
+  "Making one direction non-owning turns the same shape into a collectible graph:",
+  "Fragmentation is the gap between what your program logically holds and what the process resident set actually shows. When you free memory, the allocator does not necessarily hand the pages back to the operating system; it usually keeps them to satisfy the next request quickly. On",
+  "A bump arena trades per-object freeing for one bulk reset: allocations are nearly free and the memory is reclaimed all at once when the region resets. That is excellent for locality and churn, but it changes what you have to measure. Inside an arena, the relevant number is no lon",
+  "Async memory growth usually traces back to a boundedness failure rather than a leak. When producers run faster than consumers and the channel between them is unbounded, the queue absorbs the difference, and every queued message keeps its payload alive. The same thing happens when",
+  "What to look at in the sketch below: the four fields are tracked as one struct on purpose. A leak would move only one of them; an admission problem moves several at once, which is what tells the two apart.",
+  "Either way, the consumer side eventually drains and frees the payload:",
+  "If these numbers rise together, you probably have an admission problem before you have a leak problem.",
+  "The platform tools differ in name but cluster into three jobs that map onto the signals above: growth by callsite, resident-versus-logical disagreement, and timeline correlation with the workload. Reach for the callsite tool when you need to know who allocated, the resident-versu",
+  "Once you have the curves, reading them correctly is most of the work. The same shape means different things depending on which signals move together, and the table below is the lookup. The recurring mistake is treating any rising line as a problem: an allocator releasing memory b",
+  "Reducing a footprint is usually a design repair before it is an allocator trick. The largest wins come from owning less data, and owning it in fewer places: borrow on read paths instead of cloning, shrink a payload before it crosses a queue or task boundary rather than carrying t",
+  "Every one of these languages has a memory profiler you already trust, and the tools mostly transfer. What does not transfer is the mental model of where memory goes and what reclaims it. The shift that matters in Rust is that cleanup is tied to ownership and runs deterministicall",
+  "The most expensive memory optimization is often the one you make before the symptom is understood. A clone counter, a queue-depth graph, or one heap snapshot delta is often enough to avoid rewriting the wrong subsystem.",
+  "This local counter is intentionally simple. It helps you prove that one hot route filter is creating owned strings, how many times it does that, and how many bytes those clones account for.",
+  "What to look at: the flow is filter, then clone, then count. The filter chooses which records survive, and only the surviving records get cloned, so the clone count and cloned-byte total are a direct measure of how much owned data this path chose to duplicate. Watch the two count",
+  "The counter answers one narrow question: how much deep-copy work did this path choose?",
+  "This is not a whole-process allocator trace. It is a local instrument to guide the next profiling pass.",
+  "If the result surprises you, the next review question is usually whether the output could stay borrowed longer.",
+  "The first half creates a strong cycle. The second half repairs the parent edge with `Weak`, which turns the retained graph into an observational link instead of another owner.",
+  "What to look at: the program runs the same parent/child relationship twice and prints the parent strong count each time. In the first build the child holds a strong edge back to the parent, so the count stays at two and the subgraph can never drop — that is the leak. In the secon"
+ ],
+ "codeSamples": {
+  "memory_profiling_clone_pressure_counter": "#[derive(Debug, Default)]\nstruct CloneStats {\n    clones: usize,\n    cloned_bytes: usize,\n}\n\nfn select_api_routes(routes: &[&str], stats: &mut CloneStats) -> Vec<String> {\n    let mut out = Vec::with_capacity(routes.len());\n\n    for &route in routes {\n        if route.starts_with(\"/api/\") {\n            stats.clones += 1;\n            stats.cloned_bytes += route.len();\n            out.push(route.to_string());\n        }\n    }\n\n    out\n}\n\nfn main() {\n    let routes = [\"/api/orders\", \"/health\", \"/api/users\"];\n    let mut stats = CloneStats::default();\n    let selected = select_api_routes(&routes, &mut stats);\n\n    println!(\"selected = {}\", selected.len());\n    println!(\"clones = {}\", stats.clones);\n    println!(\"cloned bytes = {}\", stats.cloned_bytes);\n}",
+  "memory_profiling_rc_cycle_leak": "use std::cell::RefCell;\nuse std::rc::{Rc, Weak};\n\n#[derive(Debug)]\nstruct BadNode {\n    name: &'static str,\n    parent: RefCell<Option<Rc<BadNode>>>,\n    children: RefCell<Vec<Rc<BadNode>>>,\n}\n\n#[derive(Debug)]\nstruct GoodNode {\n    name: &'static str,\n    parent: RefCell<Weak<GoodNode>>,\n    children: RefCell<Vec<Rc<GoodNode>>>,\n}\n\nfn main() {\n    let bad_root = Rc::new(BadNode {\n        name: \"root\",\n        parent: RefCell::new(None),\n        children: RefCell::new(Vec::new()),\n    });\n    let bad_leaf = Rc::new(BadNode {\n        name: \"leaf\",\n        parent: RefCell::new(None),\n        children: RefCell::new(Vec::new()),\n    });\n\n    bad_root.children.borrow_mut().push(Rc::clone(&bad_leaf));\n    *bad_leaf.parent.borrow_mut() = Some(Rc::clone(&bad_root));\n\n    let good_root = Rc::new(GoodNode {\n        name: \"root\",\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n    let good_leaf = Rc::new(GoodNode {\n        name: \"leaf\",\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n\n    good_root.children.borrow_mut().push(Rc::clone(&good_leaf));\n    *good_leaf.parent.borrow_mut() = Rc::downgrade(&good_root);\n\n    println!(\"bad strong = {}\", Rc::strong_count(&bad_root));\n    println!(\"good strong = {}\", Rc::strong_count(&good_root));\n    println!(\n        \"good parent = {}\",\n        good_leaf\n            .parent\n            .borrow()\n            .upgrade()\n            .map(|node| node.name)\n            .unwrap_or(\"none\")\n    );\n}"
+ },
+ "labReferenceSolution": null
+}

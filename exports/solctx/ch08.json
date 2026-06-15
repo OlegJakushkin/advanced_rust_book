@@ -1,0 +1,209 @@
+{
+ "chapterKey": "ch08",
+ "num": 8,
+ "title": "Undefined Behavior and Unsafe Rust",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Name the invariant before the pointer",
+   "objective": "Translate one unsafe operation into explicit preconditions instead of vague confidence.",
+   "starterPrompt": "A helper builds `slice::from_raw_parts(ptr, len)` from a raw pointer returned by a packet parser. State the invariants that must hold before that slice is valid.",
+   "prompts": [
+    "What must be true about nullability, alignment, and bounds?",
+    "What lifetime story makes the returned slice valid?",
+    "What aliasing story must still hold if the slice is shared or mutable?"
+   ],
+   "acceptanceCriteria": [
+    "You name pointer validity conditions such as non-null when required, alignment, and readable memory for `len` elements.",
+    "You explain that the produced slice cannot outlive the real owner of the backing allocation.",
+    "You mention aliasing requirements that would apply if references are created from the raw pointer."
+   ],
+   "hints": [
+    "Start with: what memory is this pointer allowed to refer to right now?",
+    "Then ask: for how long is that still true?"
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the UB risks in a raw-pointer copy helper",
+   "objective": "Practice spotting the real missing proof obligations in a pointer-based routine.",
+   "starterPrompt": "Review a function that takes `dst: *mut u8`, `src: *const u8`, and `len: usize`, loops with pointer arithmetic, and is exposed as a safe public function with no checks.",
+   "prompts": [
+    "Which caller obligations are currently undocumented?",
+    "Should the function stay safe, become `unsafe fn`, or be redesigned around slices?",
+    "Where could null, lifetime, writability, or bounds assumptions fail?"
+   ],
+   "acceptanceCriteria": [
+    "You identify multiple missing obligations rather than saying only 'raw pointers are dangerous.'",
+    "You explain why a safe public API is wrong if the callee cannot actually enforce those obligations.",
+    "You propose either an `unsafe fn` contract or a safe redesign using slices or owned buffers."
+   ],
+   "hints": [
+    "Ask whether the callee can validate the entire contract or only part of it.",
+    "If the caller must uphold the truth, the API shape should say so."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Wrap unsafe internals in a safe public API",
+   "objective": "Implement a checked wrapper that writes a fixed four-byte marker only when the buffer is large enough.",
+   "starterPrompt": "Implement `write_magic(buf: &mut [u8]) -> Result<(), &'static str>` so buffers shorter than four bytes return `Err(\"buffer too small\")`, and valid buffers become `RST!` through a small unsafe raw-pointer write block.",
+   "prompts": [
+    "Keep the public signature safe.",
+    "Check the length before any unsafe write happens.",
+    "Write the bytes `82, 83, 84, 33` into positions `0..4`."
+   ],
+   "acceptanceCriteria": [
+    "Short buffers return `Err(\"buffer too small\")` exactly.",
+    "Long enough buffers return `Ok(())` and contain the marker `RST!`.",
+    "The unsafe region stays small and depends on an explicit length check."
+   ],
+   "hints": [
+    "The unsafe block should begin only after the precondition is already true.",
+    "This is the classic shape of a safe abstraction over unsafe internals."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Move `assume_init` to the only valid place",
+   "objective": "Repair a `MaybeUninit` design that treats uninitialized storage as a finished value too early.",
+   "starterPrompt": "You inherit code that creates `MaybeUninit<[u32; 4]>`, calls `assume_init()` immediately, and then writes only some elements afterward. Refactor the flow so initialization becomes explicit and ordered correctly.",
+   "prompts": [
+    "Where should writes occur relative to `assume_init`?",
+    "What must be true before the final array exists as a real `[u32; 4]`?",
+    "How would you explain the bug to a reviewer in one sentence?"
+   ],
+   "acceptanceCriteria": [
+    "You keep the value inside `MaybeUninit` storage until all elements are written.",
+    "You call `assume_init` only after full initialization is complete.",
+    "You explain that reading the value early would treat uninitialized memory as a valid typed value."
+   ],
+   "hints": [
+    "The repair is usually about order, not about adding more unsafe.",
+    "A valid `T` exists only when every invariant of `T` is already true."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Decide whether the function should be safe or unsafe",
+   "objective": "Separate APIs whose callers must uphold invariants from APIs whose callees can enforce them internally.",
+   "starterPrompt": "Audit `fn view<'a>(ptr: *const u8, len: usize) -> &'a [u8]`. Decide whether it should remain safe, become `unsafe fn`, or be replaced by a different signature altogether.",
+   "prompts": [
+    "Can the function verify the pointer is valid for an arbitrary `'a`?",
+    "Is the returned lifetime actually tied to a real owner?",
+    "Would a signature based on `&[u8]` or an owned buffer express the truth more honestly?"
+   ],
+   "acceptanceCriteria": [
+    "You explain why the callee cannot manufacture an arbitrary valid lifetime from a raw pointer.",
+    "You propose a more honest API shape, not only a slogan about safety.",
+    "You distinguish caller-held obligations from callee-enforced checks clearly."
+   ],
+   "hints": [
+    "If the type claims more than the implementation can prove, the API is lying.",
+    "Raw pointers plus arbitrary returned references are where lifetime fiction becomes dangerous quickly."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Wrap an FFI boundary without exporting C mistakes",
+   "objective": "Design a Rust-facing wrapper around a C API while keeping the rest of the system in ordinary safe Rust.",
+   "starterPrompt": "A C library returns `*const c_char` error messages and `*mut Record` results. Design the Rust wrapper layer for a service that parses input, calls the library, retries failures, and eventually frees native resources.",
+   "prompts": [
+    "Where does unsafe live: in every caller, or in one adapter layer?",
+    "How do you translate nullability, ownership transfer, and string validity into Rust types?",
+    "What is the plan for cleanup and for preventing unwinding assumptions from staying fuzzy at the boundary?"
+   ],
+   "acceptanceCriteria": [
+    "You isolate unsafe code in one adapter or wrapper layer.",
+    "You translate raw pointer contracts into Rust concepts such as `Option`, `Result`, owned types, or borrowed views with clear lifetimes.",
+    "You describe who owns native resources and who releases them.",
+    "You mention at least one failure mode involving invalid strings, null pointers, or mismatched cleanup."
+   ],
+   "hints": [
+    "Good wrapper layers convert C contracts into Rust truths early.",
+    "If the rest of the codebase still manipulates raw pointers directly, the boundary is probably too wide."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What does an `unsafe` block let you do, and what does it not excuse?",
+  "Why is a data race undefined behavior in Rust rather than merely an unlucky concurrency bug?",
+  "What is the difference between a raw pointer and a reference in terms of promises made to the optimizer?",
+  "Why is `MaybeUninit<T>` the right model for not-yet-valid storage?",
+  "When should an API be `unsafe fn` instead of a safe function with internal unsafe code?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Exercise 3",
+  "filename": "write_magic_lab.rs",
+  "runKey": "ch08_ex_write_magic",
+  "expectedOutput": "short = Err(\"buffer too small\")\nvalue = Ok(())\nbuf = RST!",
+  "initialCode": "fn write_magic(buf: &mut [u8]) -> Result<(), &'static str> {\n    let ptr = buf.as_mut_ptr();\n\n    unsafe {\n        ptr.add(0).write(82);\n        ptr.add(1).write(83);\n        ptr.add(2).write(84);\n        ptr.add(3).write(33);\n    }\n\n    Ok(())\n}\n\nfn main() {\n    let mut short = vec![0u8; 3];\n    let mut ok = vec![0u8; 4];\n\n    println!(\"short = {:?}\", write_magic(&mut short));\n    println!(\"value = {:?}\", write_magic(&mut ok));\n    println!(\"buf = {}\", std::str::from_utf8(&ok).unwrap());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 04 through 07",
+  "Opening scenario",
+  "A useful rule before writing unsafe code",
+  "Mental model",
+  "Core concepts",
+  "What Rust considers undefined behavior",
+  "Safe Rust vs unsafe Rust",
+  "The role of unsafe blocks",
+  "Raw pointers and aliasing rules",
+  "Data races and UB",
+  "Uninitialized memory and MaybeUninit<T>",
+  "FFI-related UB",
+  "Auditing unsafe code",
+  "Writing safe abstractions over unsafe internals",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: a safe slice API over raw-pointer writes",
+  "Example 2: build initialized bytes with `MaybeUninit`",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Unsafe Rust is justified only when a small boundary must enforce invariants the compiler cannot verify. This chapter defines the audit obligations for raw pointers, initialization, aliasing, FFI, and safe wrappers.",
+  "Ownership, borrowing, struct layout, vector invalidation, and move versus clone decisions all lead here. Unsafe Rust is not a separate language. It is the place where those earlier rules stop being compiler guarantees and start becoming explicit human obligations.",
+  "A packet-processing service validates fixed headers, calls a native library, and reuses buffers on a measured hot path. The business requirement is a narrow unsafe boundary with written invariants for pointer validity, initialization, aliasing, thread safety, and safe wrapper beh",
+  "The picture to hold in your head is a containment boundary. Almost everything you write is ordinary safe Rust, where the compiler proves memory safety. A few operations cannot be proven that way, so they live inside an explicit region with a written invariant. Cross that line cor",
+  "Treat the list below as the operational map, not as a claim of complete exhaustiveness. The key idea is that UB is exactly where the optimizer is allowed to assume the impossible states cannot occur, so reasoning based on what the hardware happens to do no longer holds.",
+  "Safe Rust rules out use-after-free, double-free, and data races in ordinary code. References, ownership transfer, `Send`, `Sync`, and borrowing rules do most of the structural work long before a test suite runs.",
+  "Unsafe Rust keeps the same language around you, but it permits operations the compiler cannot fully verify. The rest of the code still obeys ordinary Rust rules. The unsafe block is the proof boundary, not a local switch to “anything goes.”",
+  "`unsafe` grants specific capabilities. It does not disable ownership, type checking, or syntax rules, and it does not make UB acceptable. It simply says: the compiler cannot prove this, so a human must.",
+  "The practical consequence is simple: a tiny unsafe block with a precise `// SAFETY:` comment is usually a better design than a large region whose real invariants are only understood after several meetings.",
+  "The thing to watch is the asymmetry between a raw pointer and a reference. A raw pointer is just an address with no promises attached, so making one and doing arithmetic on it is always safe. A reference is an address plus a contract the optimizer relies on: `&T` promises the dat",
+  "`*const T` and `*mut T` may be null, dangling, misaligned, or aliased. That is why creating them is safe but dereferencing them is not. Raw pointers are representation tools, not evidence that a memory access is valid.",
+  "References are stronger than raw pointers because they promise something to the optimizer. Turning a raw pointer back into `&T` or `&mut T` means you are reintroducing those promises. If exclusive mutation is not actually exclusive, the resulting reference is invalid even if the ",
+  "In Rust, a data race is not merely a bug; it is undefined behavior. Safe Rust prevents it by construction through ownership transfer, borrowing rules, and `Send`/`Sync` requirements at thread boundaries. Unsafe code can still create conflicting unsynchronized accesses. That is wh",
+  "The shape to keep in mind is a one-way ratchet. Storage starts in a not-yet-valid state, you write every required byte or field exactly once, and only at the end do you assert that it now holds a real value. The error to avoid is calling assume_init while the storage is still par",
+  "Uninitialized memory is not a valid value of any type. Reading it as a real `T` is UB. The same is true for constructing invalid bit patterns for types that have invariants, such as references, many enums, and `bool`.",
+  "MaybeUninit<T> is the sanctioned way to represent storage that does not yet contain a valid `T`. Write every required field or element first. Only then call assume_init. The type exists so the invalid state is modeled explicitly rather than hidden behind fake values.",
+  "The useful framing for a C boundary is a translation layer with a single direction of travel. Raw C values come in as pointers, status codes, and lifetime-free buffers; you translate each into a Rust type that carries the guarantee, and from there inward everything is ordinary sa",
+  "Inward of the wrapper, those three translated values converge into ordinary safe Rust:",
+  "If the callee can check bounds, maintain ownership, and prevent aliasing mistakes, keep the public API safe and isolate the raw operation internally. This is the common pattern for slices, small buffer wrappers, parsers, and data-structure internals.",
+  "If correctness depends on facts the callee cannot validate, such as a pointer being valid for a chosen lifetime or a caller-controlled aliasing guarantee, make that obligation explicit with `unsafe fn` and document the preconditions precisely.",
+  "Almost nobody meets unsafe Rust without a prior model of how memory safety works in another language. The useful thing to know is which part of that model transfers and which part will quietly mislead you. The shift is rarely about syntax. It is about where the proof of safety li",
+  "Unsafe Rust is a cost, not a shortcut. Use it where the representation win is real, document the invariant where reviewers can see it, and keep the surface area small enough that future maintainers can still re-derive the proof.",
+  "The caller gets a safe function. Bounds and exclusivity are enforced before the raw-pointer write loop begins.",
+  "What to look at: every check that makes the unsafe write legal happens before the loop. The bounds test and the exclusive &mut [u8] borrow turn the caller-facing function into a safe one, so the raw-pointer write at the center inherits an already-proven invariant rather than asse",
+  "The public function is safe because it can check bounds and it borrows the slice as &mut [u8], which already gives exclusive access.",
+  "The only unsafe step is pointer arithmetic plus write. Everything around it exists to make that one step justified.",
+  "Overwriting with the raw-pointer write method (.write()) is fine here because the element type is u8. For a drop-carrying type such as String, skipping the old destructor would matter.",
+  "The storage starts explicitly uninitialized, each byte is written once, and `assume_init` appears only after the invariant is fully true.",
+  "What to look at: the order of operations. The array is declared as uninitialized storage, each slot is written exactly once, and only the final assume_init turns the storage into a real value. Trace the diagram and confirm that no read happens on any branch before the last write.",
+  "All four elements must be written before the array becomes a real [u8; 4]."
+ ],
+ "codeSamples": {
+  "unsafe_rust_fill_window": "fn fill_window(buf: &mut [u8], start: usize, len: usize, value: u8) {\n    assert!(start <= buf.len());\n    assert!(start + len <= buf.len());\n\n    let ptr = buf.as_mut_ptr();\n\n    for offset in 0..len {\n        unsafe {\n            // SAFETY:\n            // - `buf` is exclusively borrowed for the duration of the call.\n            // - bounds were checked above, so `start + offset` is in-bounds.\n            // - overwriting initialized `u8` values is fine because `u8` has no drop glue.\n            ptr.add(start + offset).write(value);\n        }\n    }\n}\n\nfn main() {\n    let mut packet = String::from(\"header:0000\").into_bytes();\n    fill_window(&mut packet, 7, 4, 57);\n\n    println!(\"{}\", std::str::from_utf8(&packet).unwrap());\n}",
+  "unsafe_rust_maybe_uninit": "use std::mem::MaybeUninit;\n\nfn build_header(tag: u8, size: u8) -> [u8; 4] {\n    let mut bytes = MaybeUninit::<[u8; 4]>::uninit();\n    let ptr = bytes.as_mut_ptr() as *mut u8;\n\n    unsafe {\n        // SAFETY:\n        // - each element is written exactly once before `assume_init`.\n        // - no reads occur before initialization completes.\n        ptr.add(0).write(tag);\n        ptr.add(1).write(size);\n        ptr.add(2).write(tag ^ size);\n        ptr.add(3).write(255);\n        bytes.assume_init()\n    }\n}\n\nfn main() {\n    let header = build_header(7, 10);\n    println!(\"{:?}\", header);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch33",
+ "num": 33,
+ "title": "Performance-Oriented Rust",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Separate benchmarking, profiling, tracing, and production observability",
+   "objective": "Choose the measurement tool that matches the actual performance question.",
+   "starterPrompt": "You need to compare two parsing functions, explain a latency regression inside one of them, understand where request time is spent across queueing and IO, and confirm whether the regression matters in the live service.",
+   "prompts": [
+    "Which question wants a benchmark?",
+    "Which question wants a profile?",
+    "Which question wants tracing?",
+    "Which question wants production metrics or logs?"
+   ],
+   "acceptanceCriteria": [
+    "You map each question to a distinct tool with a workload-based reason.",
+    "You avoid treating a benchmark result as a complete production diagnosis.",
+    "You explain at least one way profiling and tracing answer different questions."
+   ],
+   "hints": [
+    "A benchmark compares alternatives under controlled input.",
+    "A trace shows timeline and causality across boundaries."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find allocation pressure and hidden clones in a hot path",
+   "objective": "Read a request loop and identify where ownership choices add heap traffic.",
+   "starterPrompt": "A request filter clones route strings into a temporary vector, formats a label per item, and pushes one record at a time into a dynamically growing output buffer.",
+   "prompts": [
+    "Which values only needed borrowed access?",
+    "Which allocation could be preplanned from a real bound?",
+    "Which clone is semantically real and which only papers over an API-shape problem?",
+    "What would you measure after the refactor to confirm the change helped?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one unnecessary clone and one avoidable growth pattern.",
+    "You propose a borrowed read path and one preallocation repair.",
+    "You mention at least one follow-up metric such as allocation count, latency, or bytes allocated per request."
+   ],
+   "hints": [
+    "Look for helpers that take ownership only to read.",
+    "Look for vectors or strings that grow in obviously bounded loops."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Write a benchmark plan for an allocation-heavy function",
+   "objective": "Design a benchmark that compares alternatives without confusing it with profiling or production tuning.",
+   "starterPrompt": "You are comparing two versions of a log-enrichment function: one clone-heavy and one borrow-first with preallocation.",
+   "prompts": [
+    "Specify the fixed input shape and size distribution.",
+    "State that the benchmark runs in release mode.",
+    "Define what you will record: wall-clock time, allocations, output count, or all three.",
+    "Describe how you will keep the compiler from optimizing the whole function away when appropriate."
+   ],
+   "acceptanceCriteria": [
+    "Your benchmark plan compares the same logical workload under two implementations.",
+    "You name at least one release-build requirement and one measurement target.",
+    "You distinguish the later profiling step from the benchmark step.",
+    "You avoid claiming a speedup before the plan has been executed."
+   ],
+   "hints": [
+    "A good benchmark plan makes the input and stop condition boring.",
+    "If the result is unused, dead-code elimination can fake a win."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Refactor storage to improve locality",
+   "objective": "Replace an indirection-heavy dense layout with a flatter one that matches the access pattern.",
+   "starterPrompt": "You inherit a dense heatmap stored as `Vec<Vec<u64>>`, and the hot loop walks every row in full on every request.",
+   "prompts": [
+    "What does one flat `Vec<u64>` plus `rows` and `cols` remove from the memory-access pattern?",
+    "Which helper methods should expose rows as borrowed slices instead of reconstructing vectors?",
+    "How does this change your reasoning about bounds checks in the inner loop?",
+    "What measurement would you take before and after the refactor?"
+   ],
+   "acceptanceCriteria": [
+    "You replace nested ownership with one flat owner for the dense case.",
+    "You mention locality or cache behavior explicitly.",
+    "You explain how row views or chunks make inner-loop bounds reasoning simpler.",
+    "You mention at least one before-and-after measurement target."
+   ],
+   "hints": [
+    "The point is not only fewer allocations. It is also more predictable traversal.",
+    "Chunked slice iteration often gives the optimizer a better proof story than ad hoc indexing."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Compare iterator and loop implementations responsibly",
+   "objective": "Avoid folklore by designing a fair comparison between two equivalent hot loops.",
+   "starterPrompt": "You have one implementation written as an iterator chain and one as an explicit `for` loop over the same slice.",
+   "prompts": [
+    "How will you keep the logical work identical between the two versions?",
+    "What would make the comparison unfair, such as extra allocation or a changed branch structure in only one variant?",
+    "Would you inspect generated code or profile data before drawing conclusions from the benchmark alone?",
+    "How would you report the result without claiming one style is globally faster?"
+   ],
+   "acceptanceCriteria": [
+    "You keep the workload and output identical between variants.",
+    "You mention at least one unfair comparison trap.",
+    "You include at least one follow-up inspection step such as profiling or generated-code review.",
+    "You report the result as workload-specific rather than as a universal rule."
+   ],
+   "hints": [
+    "The style difference should be the variable, not the data shape or allocation pattern.",
+    "Iterator versus loop is a measurement question, not a religion."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose release settings and performance review policy for a service",
+   "objective": "Make build mode, profile settings, and runtime observability part of the performance design.",
+   "starterPrompt": "You are shipping a latency-sensitive binary with one hot parser, one CPU-heavy enrichment step, and an operator requirement that crash behavior remain explicit.",
+   "prompts": [
+    "Which release-build command should every performance run use?",
+    "Which profile settings would you consider, and what tradeoff does each one carry?",
+    "When might `panic = \"abort\"` be acceptable, and when would it be the wrong contract?",
+    "Which live signals would you require before trusting the optimized build in production?"
+   ],
+   "acceptanceCriteria": [
+    "You name release mode explicitly for measurement.",
+    "You justify at least two profile settings or profile decisions with tradeoffs.",
+    "You explain `panic = \"abort\"` as a binary contract choice rather than a free speed flag.",
+    "You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate."
+   ],
+   "hints": [
+    "Compiler flags are workload tools, not trophies.",
+    "A good performance review says what changed in both build behavior and runtime behavior."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is performance work usually clearer after ownership boundaries become honest?",
+  "What is the practical difference between reducing allocations and reducing branch misses?",
+  "Why are slice-based and chunk-based loops often easier to optimize than index-heavy loops?",
+  "When is a clone economically justified even in performance-sensitive code?",
+  "What does release mode change, and what questions does it still not answer by itself?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Allocation-aware hot-route filter",
+  "filename": "hot_routes_lab.rs",
+  "runKey": "ch33_ex_hot_routes",
+  "expectedOutput": "hot = 2\nfirst = /search\ncapacity ok = true",
+  "initialCode": "#[derive(Debug)]\nstruct Request<'a> {\n    route: &'a str,\n    bytes: usize,\n}\n\nfn hot_routes<'a>(requests: &'a [Request<'a>], min_bytes: usize) -> Vec<&'a str> {\n    let mut out = Vec::new();\n\n    for request in requests {\n        if request.bytes > min_bytes {\n            out.push(request.route);\n        }\n    }\n\n    out\n}\n\nfn main() {\n    let requests = [\n        Request {\n            route: \"/health\",\n            bytes: 128,\n        },\n        Request {\n            route: \"/search\",\n            bytes: 900,\n        },\n        Request {\n            route: \"/checkout\",\n            bytes: 512,\n        },\n        Request {\n            route: \"/metrics\",\n            bytes: 64,\n        },\n    ];\n\n    let hot = hot_routes(&requests, 512);\n\n    println!(\"hot = {}\", hot.len());\n    println!(\"first = {}\", hot.first().copied().unwrap_or(\"none\"));\n    println!(\"capacity ok = {}\", hot.capacity() >= requests.len());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 10, 18, 22, 27, and 32",
+  "Opening scenario",
+  "The review order, in words",
+  "Mental model",
+  "Core concepts",
+  "The four costs worth tracking",
+  "Allocation awareness",
+  "Cache locality and branch prediction",
+  "Static dispatch and inlining",
+  "Iterator performance, bounds checks, and unnecessary clones",
+  "Picking the right measuring tool",
+  "Release builds and compiler flags",
+  "How performance thinking shifts by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: allocation-aware filtering without route clones",
+  "Example 2: row-major scanning for predictable locality",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Performance work starts with allocation, data movement, cache behavior, and measurement. This chapter turns Rust optimization into a repeatable review process tied to workload evidence.",
+  "Chapter 10 covered arrays, slices, and vectors as layout choices. Chapter 18 covered generics and monomorphization. Chapter 22 covered multithreading costs and ownership across workers. Chapter 27 covered IO and batching. Chapter 32 covered flat buffers and communication-heavy HP",
+  "A request-processing service regressed after a refactor that was meant to improve readability. p99 latency climbed, heap traffic rose, and queue wait that had been invisible became a line on the dashboard. Nobody changed an algorithm; the team changed where data was owned and cop",
+  "That last clause is the whole chapter. The fastest way to waste a week is to start by rewriting the inner loop. The reliable path is to ask the questions in order, let each one rule out a class of explanation, and only descend to instruction-level work once the evidence points th",
+  "Before any technique, fix the frame. Rust does not make programs fast; it removes whole categories of accidental cost and then hands you a clear view of the cost that remains. The phrase &ldquo;zero-cost abstraction&rdquo; is often misread as &ldquo;zero work.&rdquo; It means the",
+  "Almost every Rust performance problem reduces to one of four costs. Keeping the list short is the point: when latency regresses, you walk these four in order and ask which one the change touched. Most regressions announce themselves here long before you need a profiler.",
+  "Allocation is the cost most engineers underestimate because no single call looks expensive. The damage is cumulative: a per-request String here, a clone() there, a Vec that grows by reallocating instead of being sized once, and suddenly the allocator is on your hot path and your ",
+  "A useful correction for senior engineers is this: ownership clarity and performance clarity often improve together. The cleanest API shape frequently allocates less because the borrow or owned boundary is now explicit instead of accidental.",
+  "Two data shapes can hold identical values and run at very different speeds. The difference is what the hardware sees while it walks them. A single flat allocation lets the prefetcher pull the next cache line before you ask for it; a structure made of many small allocations forces",
+  "The same values stored as a graph of small allocations look very different to the hardware:",
+  "Generics and trait objects are the two ways Rust calls behavior you do not know concretely at the call site, and they sit at opposite ends of the cost spectrum. A generic function is monomorphized: the compiler stamps out a separate copy per concrete type, so each copy sees an ex",
+  "Dynamic dispatch puts a vtable on the same path, and the indirection is where the optimizer loses sight of the target:",
+  "There is a persistent folklore that iterator chains are slow and hand-written index loops are fast. The truth is closer to the reverse, and the reason is bounds checks. When you index a slice manually with a data-dependent index, the compiler must insert a check that the index is",
+  "The four tools below are not a hierarchy where one replaces the others; they answer four different questions, and a confident answer from the wrong tool is how teams optimize code that was never on the critical path. Match the tool to the question first. The diagram is that mappi",
+  "The other two questions are about timeline and real load, and they map to two more tools:",
+  "Do not claim a speedup without workload context. A cleaner benchmark is not a substitute for profiling, and a flatter profile is not a substitute for production latency or throughput data.",
+  "Measure performance in release mode. Debug builds are for fast iteration and diagnostics, not for trustworthy throughput or latency numbers. The first repair for “Rust is slow” is often simply --release.",
+  "Release profile settings are workload tradeoffs. More optimization or LTO may help hot binaries, but it also affects compile time, binary size, and sometimes panic behavior.",
+  "Senior engineers do not arrive at Rust as blank slates. The useful question is not which crate replaces which library; it is which of your instincts still hold and which one quietly leads you wrong. Each card names the mental-model shift for one background.",
+  "These are the habits that keep a service fast without a heroics phase. None of them is a micro-optimization; each one shapes the data and the API so the expensive cost is paid once, at a boundary you chose, instead of silently on every request.",
+  "Each of these is a true story that started with a reasonable-sounding sentence. The common thread is declaring victory from one number while a different number quietly got worse, or reaching for a lower-level change before the evidence pointed there.",
+  "The most common performance mistake in senior Rust code is not “using iterators.” It is skipping the step where the team states what is actually expensive and how that expense will be measured.",
+  "Both examples are small on purpose. Each one is a single design decision from the sections above, made concrete and runnable. Read the flow diagram first, then the code, then press Run and confirm the output before changing anything — the point is to see the cost decision in the ",
+  "The function preallocates once, borrows route labels from the input slice, and keeps the hot path allocation-light.",
+  "What to look at: the return type is Vec<&str>, not Vec<String>. The function never copies a route; it borrows each label out of the input and hands back views that live exactly as long as the input slice. The one allocation in the whole function is the result vector, and Vec::wit",
+  "`Vec::with_capacity` makes the result budget visible instead of relying on repeated growth.",
+  "The output stores `&str` views because the result only needs to live as long as the input slice.",
+  "The loop does one clear threshold test and pushes only on the hot predicate.",
+  "The grid stays flat and contiguous. Row sums are derived with chunked iteration instead of nested owners or scattered indexing.",
+  "What to look at: the grid is one Vec<u32>, not a Vec<Vec<u32>>. The rows are not separate allocations; they are slices carved out of the same flat buffer by chunks(self.cols). That single choice is what keeps the scan contiguous and lets the compiler drop bounds checks, because t"
+ ],
+ "codeSamples": {
+  "performance_allocation_borrowed_filter": "#[derive(Debug)]\nstruct Request<'a> {\n    route: &'a str,\n    bytes: usize,\n}\n\nfn hot_routes<'a>(requests: &'a [Request<'a>], min_bytes: usize) -> Vec<&'a str> {\n    let mut out = Vec::with_capacity(requests.len());\n\n    for request in requests {\n        if request.bytes >= min_bytes {\n            out.push(request.route);\n        }\n    }\n\n    out\n}\n\nfn main() {\n    let requests = [\n        Request {\n            route: \"/health\",\n            bytes: 128,\n        },\n        Request {\n            route: \"/search\",\n            bytes: 900,\n        },\n        Request {\n            route: \"/checkout\",\n            bytes: 512,\n        },\n        Request {\n            route: \"/metrics\",\n            bytes: 64,\n        },\n    ];\n\n    let hot = hot_routes(&requests, 512);\n\n    println!(\"hot = {}\", hot.len());\n    println!(\"first = {}\", hot.first().copied().unwrap_or(\"none\"));\n    println!(\"capacity ok = {}\", hot.capacity() >= requests.len());\n}",
+  "performance_row_major_scan": "#[derive(Debug)]\nstruct Grid {\n    rows: usize,\n    cols: usize,\n    data: Vec<u32>,\n}\n\nimpl Grid {\n    fn row_sums(&self) -> Vec<u32> {\n        debug_assert_eq!(self.data.len(), self.rows * self.cols);\n        self.data\n            .chunks(self.cols)\n            .map(|row| row.iter().copied().sum())\n            .collect()\n    }\n\n    fn total(&self) -> u32 {\n        self.data.iter().copied().sum()\n    }\n}\n\nfn main() {\n    let grid = Grid {\n        rows: 2,\n        cols: 4,\n        data: vec![1_u32, 2, 3, 4, 5, 6, 7, 8],\n    };\n\n    let sums = grid.row_sums();\n\n    println!(\"row0 = {}\", sums[0]);\n    println!(\"row1 = {}\", sums[1]);\n    println!(\"total = {}\", grid.total());\n}"
+ },
+ "labReferenceSolution": null
+}

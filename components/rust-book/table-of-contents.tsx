@@ -99,6 +99,7 @@ export function TableOfContents() {
             const chapterCompleted = isChapterCompleted(chapterIndex)
             const { completed, total } = getChapterProgress(chapterIndex)
             const startPageIndex = globalPageIndex
+            const isPart = chapter.id.startsWith("part-")
 
             return (
               <div key={chapter.id} className="mb-1">
@@ -107,8 +108,8 @@ export function TableOfContents() {
                   onClick={() => toggleChapter(chapterIndex)}
                   className={cn(
                     "w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors",
-                    "hover:bg-muted/80",
-                    chapterCompleted && "bg-primary/5"
+                    isPart ? "mt-3 bg-primary/10 hover:bg-primary/15 border border-primary/20" : "hover:bg-muted/80",
+                    !isPart && chapterCompleted && "bg-primary/5"
                   )}
                 >
                   {/* Expand/Collapse Icon */}
@@ -136,22 +137,26 @@ export function TableOfContents() {
                   <div className="flex-1 min-w-0">
                     <div className={cn(
                       "font-semibold text-sm",
-                      chapterCompleted ? "text-primary" : "text-foreground"
+                      isPart ? "text-primary uppercase tracking-wide" : chapterCompleted ? "text-primary" : "text-foreground"
                     )}>
                       {chapter.title}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {completed}/{total} pages completed
-                    </div>
+                    {!isPart && (
+                      <div className="text-xs text-muted-foreground">
+                        {completed}/{total} pages completed
+                      </div>
+                    )}
                   </div>
 
                   {/* Progress Indicator */}
-                  <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden shrink-0">
-                    <div 
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${(completed / total) * 100}%` }}
-                    />
-                  </div>
+                  {!isPart && (
+                    <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden shrink-0">
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{ width: `${(completed / total) * 100}%` }}
+                      />
+                    </div>
+                  )}
                 </button>
 
                 {/* Pages */}

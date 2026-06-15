@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Languages, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -153,15 +154,19 @@ const lifetimeIssueCards = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Think of Rust async as futures and poll-driven state machines rather than as a direct translation of coroutine handles. The comparison teaches suspension, but the Rust surface is much more explicit about ownership and executor boundaries.",
+    body: "C++20 coroutines give you the right starting intuition: a function that can suspend and resume. The shift is that Rust has no ambient coroutine machinery and no caller-provided promise type. The unit of work is a value implementing one trait, Future, and nothing runs until an executor calls poll on it.",
   },
   {
     title: "C# background",
-    body: "The sharpest correction is laziness. In C#, the async method usually starts work immediately. In Rust, calling the async function returns a future value that will do nothing until polled.",
+    body: "The sharpest correction is laziness. A C# async method usually begins executing the moment you call it, and the Task is already in flight. In Rust, calling an async fn only constructs a future; if you never await or spawn it, it is dead code that does nothing.",
   },
   {
     title: "Go background",
-    body: "Rust async is not goroutines with harder syntax. Goroutines are scheduled units of execution. Futures are lazy descriptions of work. Use OS threads or later async runtimes when the execution model truly calls for them.",
+    body: "Rust async is not goroutines with stricter syntax. A goroutine is a scheduled unit of execution that runs the instant you launch it; a future is an inert description of work. There is also no hidden runtime: you choose and start an executor explicitly, and Send bounds at spawn boundaries are visible in the type, not assumed.",
+  },
+  {
+    title: "Python background",
+    body: "Python coroutines are also lazy until awaited, so the laziness feels familiar. The shift is that Rust has no single implicit event loop and no GIL: a future may be polled on any worker thread, so anything you hold across .await must satisfy ownership and Send rules the interpreter never forced on you.",
   },
 ]
 
@@ -271,13 +276,22 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">The problem async is solving</h3>
           <p className="text-sm text-muted-foreground leading-6">
             You are refactoring a service that performs request parsing, several outbound RPCs, cache lookups, and a final
-            database write. The threads chapter already taught you not to spray OS threads at every waiting socket. Async
-            now looks attractive, but it also brings harder questions. Which values stay borrowed only locally? Which values
-            must become owned before a task is spawned? What happens if one outbound request times out and the rest of the
-            fan-out should stop? Rust&apos;s async story is strong precisely because it does not hide those questions.
+            database write. Most of that wall-clock time is spent waiting on sockets, not burning CPU. The threads chapter
+            already taught you not to dedicate one OS thread to every waiting connection: threads have stack and scheduler
+            cost, and ten thousand mostly-idle threads is a poor use of the machine. Async is the alternative. It lets a
+            single thread hold thousands of in-flight operations and only do work for the ones that are actually ready to
+            make progress.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            That efficiency is not free, and the price is paid in questions the runtime makes you answer explicitly. Which
+            values stay borrowed only locally, and which must become owned before a task is spawned? What happens to the
+            other outbound requests if one of them times out and the fan-out should stop? Who is responsible for cleanup
+            when work is cancelled halfway through? In a thread-per-request model many of these answers are implicit in the
+            stack; in async they become part of your types. Rust&apos;s async story holds up in production precisely because
+            it refuses to hide them.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
@@ -293,8 +307,11 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+            <h3 className="text-lg font-semibold text-foreground">Three ideas to anchor the rest of the chapter</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            If you keep only three things in mind, keep these. Everything later in the chapter is a consequence of them.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -305,6 +322,33 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Languages className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Async exists in C++, C#, Go, and Python too, so you already have an instinct for it. Each of those instincts is
+            right about something and wrong about something else when applied to Rust. The corrections below are the
+            mental-model shifts that matter most before you write any code.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm text-muted-foreground leading-6">
+              The thread that runs through all four: in Rust, calling an async function produces a value and starts nothing.
+              Execution, thread placement, and cancellation are decisions made by the executor and visible in your types,
+              not conveniences supplied by an ambient runtime.
+            </p>
+          </div>
+        </section>
+
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
@@ -312,20 +356,19 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Coroutines vs futures</h4>
+            <h4 className="font-semibold text-foreground mb-3">Coroutines are the intuition, futures are the mechanism</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              &ldquo;Coroutine&rdquo; is a fine word for the shape of the code: a function that can pause in the middle and
+              pick up later. But coroutine is not what Rust actually exposes. What you get is a plain value that implements
+              the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Future</code> trait, and the only way
+              it ever runs is for an executor to call <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">poll</code>{" "}
+              on it. Keeping that distinction sharp explains almost every surprise newcomers hit.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {coroutineVsFutureCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
                   <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
                 </div>
               ))}
             </div>
@@ -343,12 +386,20 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
             </div>
 
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
-              <h5 className="font-medium text-foreground mb-2">`async fn` and `.await`</h5>
+              <h5 className="font-medium text-foreground mb-2">How <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">async fn</code> and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> fit together</h5>
               <p className="text-sm text-muted-foreground leading-6 mb-3">
                 An <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">async fn</code> is sugar for a
                 function that returns an opaque future. Inside that future, each <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code>{" "}
-                pauses the current future until the awaited future becomes ready.
+                is a place where the current future may hand control back to the executor instead of blocking the thread.
+                Read the listing below as three phases: the call builds a future, the executor drives it, and the first{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> is the seam where waiting
+                turns into a return of <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pending</code>{" "}
+                rather than a blocked thread.
               </p>
+              <MermaidDiagram
+                chart={`flowchart TD\n  Call["load_user(id)"] -->|builds, runs nothing| Fut[Future value]\n  Fut -->|executor polls| Body[Run until first .await]\n  Body -->|fetch_row not ready| Pending[Return Pending]\n  Pending -->|IO ready, waker fires| Resume[Resume after .await]\n  Resume --> Done[Return Ready User]`}
+                caption="Calling the async fn only builds the future. The executor polls it, the body runs up to fetch_row().await, yields Pending, and resumes from there once the row is ready."
+              />
               <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                 <code className="font-mono text-foreground">{`async fn load_user(id: UserId) -> Result<User, LoadError> {
     let row = fetch_row(id).await?;
@@ -356,14 +407,29 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
 }`}</code>
               </pre>
               <p className="mt-3 text-sm text-muted-foreground leading-6">
-                The operational point is simple: no thread is blocked by the syntax itself. The current future yields
-                `Pending`, and some executor decides when to poll it again.
+                The operational point is simple: no thread is blocked by the syntax itself. At{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> the current future yields{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pending</code>, the executor is free to
+                run other tasks, and it polls this one again only after a waker signals that{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">fetch_row</code> can make progress.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">State machines generated by the compiler</h4>
+            <h4 className="font-semibold text-foreground mb-3">What the compiler builds from your async function</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The single most useful model of async Rust is this: the compiler rewrites your function into one enum-shaped
+              state machine. Each <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> becomes a
+              variant, the variant holds exactly the locals that must survive that suspension, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">poll</code> is a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">match</code>{" "}
+              that advances from one variant to the next. The diagram shows the shape for{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">load_user</code> above.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Start\n  Start --> AwaitingRow: poll, begin fetch_row\n  AwaitingRow --> AwaitingRow: poll returns Pending\n  AwaitingRow --> Done: row ready, parse_user\n  Done --> [*]: return Ready\n  note right of AwaitingRow: stores id and the fetch_row future`}
+              caption="Each .await is a state. The AwaitingRow variant carries the locals that must outlive suspension, and poll moves Start to AwaitingRow to Done."
+            />
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {compilerStatePoints.map((point) => (
                 <li key={point}>{point}</li>
@@ -372,13 +438,24 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 A useful senior-level translation is this: an async function is ordinary Rust control flow lowered into one
-                enum-like state machine plus the locals it must keep alive between polls.
+                enum-like state machine plus the locals it must keep alive between polls. Once you see it that way, the
+                lifetime and Send rules later in this chapter stop being surprises and start being consequences.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Why async Rust involves Pin</h4>
+            <h4 className="font-semibold text-foreground mb-3">Why poll takes a pinned reference</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Here is the one subtle part. The state machine the compiler generates can hold a reference into itself, for
+              example a borrow of one local that lives across an <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code>.
+              Such a self-referential value would be corrupted if it were moved in memory, because the internal pointer
+              would still point at the old address. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin</code>{" "}
+              is the type-system promise that, once polling has begun, the future will not move. That is why{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">poll</code> takes{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin&lt;&amp;mut Self&gt;</code> and not a
+              plain mutable reference.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {pinCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -404,7 +481,14 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Executors and reactors</h4>
+            <h4 className="font-semibold text-foreground mb-3">Who actually runs the future: executors and reactors</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A future is inert, so something has to drive it. In production that something is a runtime, and a runtime is
+              really two cooperating parts. The executor is the scheduler that decides which ready task to poll next; the
+              reactor (or IO driver) is the part that watches the operating system for readiness and fires the waker that
+              makes a sleeping task ready again. The two cards name the pieces; the sequence below shows how one waiting
+              operation travels between them.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {runtimeCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -413,21 +497,27 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
                 </div>
               ))}
             </div>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{`call async fn
-  -> get Future
-executor polls Future
-  -> Future hits .await
-  -> returns Pending
-reactor notices IO readiness
-  -> wakes task
-executor polls again
-  -> Future resumes from saved state`}</code>
-            </pre>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant App as Your code\n  participant Ex as Executor\n  participant Fut as Future\n  participant Re as Reactor / OS\n  App->>Ex: spawn(future)\n  Ex->>Fut: poll(cx)\n  Fut->>Re: register interest, store waker\n  Fut-->>Ex: Poll::Pending\n  Note over Ex: run other tasks meanwhile\n  Re-->>Ex: IO ready, call waker\n  Ex->>Fut: poll(cx) again\n  Fut-->>Ex: Poll::Ready(value)`}
+              caption="The executor polls, the future parks itself with the reactor and returns Pending, and a readiness event wakes the task so the executor polls it to completion."
+            />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Cancellation</h4>
+            <h4 className="font-semibold text-foreground mb-3">Cancellation means dropping the future</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              In a thread, cancellation is awkward because you cannot safely stop a thread at an arbitrary instruction. In
+              async Rust it is the opposite: a future only advances when polled, so to cancel it you simply stop polling it
+              and drop it. A timeout, a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">select!</code>{" "}
+              that picks the other branch, or a parent task that finishes will all drop the loser. The catch is that the
+              future stops at whatever <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> it
+              was parked on, and only its destructors run. Anything that needed a second{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> to finish is left undone.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Running\n  Running --> Suspended: hits .await, Pending\n  Suspended --> Running: polled again\n  Running --> Completed: returns Ready\n  Suspended --> Dropped: timeout or select, no more polls\n  Dropped --> [*]: only Drop impls run\n  Completed --> [*]`}
+              caption="A suspended future is cancelled by being dropped instead of polled again. Cleanup is whatever runs in Drop; logic past the await point never executes."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {cancellationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -445,7 +535,18 @@ executor polls again
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Structured concurrency patterns</h4>
+            <h4 className="font-semibold text-foreground mb-3">Keeping child tasks tied to a parent scope</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Back to the opening service: one request fans out to several outbound calls and then joins their results.
+              Structured concurrency is the discipline of making the parent own that whole fan-out, so that the children
+              cannot outlive it. The parent waits for all of them, surfaces the first failure, and drops the rest, which (as
+              the cancellation section just showed) is how you cancel them. The alternative, detaching tasks and forgetting
+              them, is easy to type and hard to operate.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  P[Parent request task] --> A[child: pricing RPC]\n  P --> B[child: inventory RPC]\n  P --> C[child: cache lookup]\n  A --> J{Join all}\n  B --> J\n  C --> J\n  J -->|all ok| R[Combine results]\n  J -->|one fails| X[Drop siblings, propagate error]`}
+              caption="The parent owns every child. Join collects all results, or the first failure drops the remaining siblings and the error flows back up one scope."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {structuredConcurrencyCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -463,7 +564,16 @@ executor polls again
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Async traits and their limitations</h4>
+            <h4 className="font-semibold text-foreground mb-3">Async methods in traits, and where they get sharp</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              You will want async methods on traits the moment you have a repository or service seam with more than one
+              implementation. Recent stable Rust supports <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">async fn</code>{" "}
+              in traits directly, which covers most generic, statically dispatched code. The edge appears at runtime
+              polymorphism: a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{"dyn Trait"}</code> with an
+              async method has to erase the returned future type, which is where boxing, object safety, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code> bounds come back into the
+              design.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {asyncTraitCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -475,7 +585,16 @@ executor polls again
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Common async lifetime issues</h4>
+            <h4 className="font-semibold text-foreground mb-3">Where lifetimes bite in async code</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Almost every async error message that mentions lifetimes or <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code>{" "}
+              is the state-machine model from earlier coming back to collect. A borrow held across an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.await</code> becomes a field of the future
+              and therefore lives as long as the future does; a future handed to{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">spawn</code> may be moved across threads and
+              must be <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send + &apos;static</code>. The
+              recurring fix is the same one from Chapter 1: own the data before it crosses the boundary.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {lifetimeIssueCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -549,6 +668,16 @@ executor polls again
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              Watch the loop, not the syntax: each printed{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">poll = pending</code> is one trip around{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">block_on</code>, and the future only
+              returns its label after it has been polled enough times to advance through its states.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Build["build_label()"] -->|lazy future| Loop[block_on loop]\n  Loop -->|poll| Pend1[Pending: print pending]\n  Pend1 -->|poll| Pend2[Pending: print pending]\n  Pend2 -->|poll| Ready["Ready: label = billing:/ready"]`}
+              caption="build_label returns a lazy future; the block_on loop polls it repeatedly, printing pending until the state machine reaches Ready."
+            />
             <RustCodeEditor
               code={codes.async_rust_async_fn_await_block_on}
               onChange={(newCode) => updateCode("async_rust_async_fn_await_block_on", newCode)}
@@ -606,6 +735,17 @@ executor polls again
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              Follow the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Stage</code> field and the
+              retry counter: the future stays in <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Waiting</code>{" "}
+              and returns <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pending</code> while retries
+              remain, then transitions to <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Ready</code>.
+              This is exactly the machine the compiler wrote for you in Example 1, only spelled out by hand.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Waiting\n  Waiting --> Waiting: poll, retries left, return Pending\n  Waiting --> Ready: retries exhausted\n  Ready --> [*]: return Ready connected`}
+              caption="The hand-written poll matches on Stage. Waiting decrements retries and returns Pending; once they hit zero it moves to Ready and returns the value."
+            />
             <RustCodeEditor
               code={codes.async_rust_manual_future_state_machine}
               onChange={(newCode) => updateCode("async_rust_manual_future_state_machine", newCode)}
@@ -681,589 +821,3 @@ executor polls again
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch24-coroutines-futures-and-async-rust-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Separate coroutines, futures, tasks, and threads",
-    objective: "Practice naming the execution model correctly before you choose a runtime primitive.",
-    starterPrompt:
-      "Classify four concepts: a lazily created future returned by `async fn`, a runtime-owned scheduled task, an OS thread doing blocking work, and a Go-style goroutine comparison term.",
-    prompts: [
-      "Which one is only a description of work until polled?",
-      "Which one is actually scheduled by an executor?",
-      "Which one is scheduled by the operating system directly?",
-      "Which comparison term is useful historically but not Rust's primary runtime abstraction?",
-    ],
-    acceptanceCriteria: [
-      "You identify the future as lazy and poll-driven.",
-      "You distinguish runtime tasks from OS threads clearly.",
-      "You explain that coroutines are a comparison aid while futures are Rust's operational async model.",
-    ],
-    hints: [
-      "Ask what starts immediately and what only becomes work once something polls it.",
-      "Rust's async vocabulary is precise for a reason.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Trace an async function as a state machine",
-    objective: "Practice narrating what the compiler-generated future must store and when it may return `Pending`.",
-    starterPrompt:
-      "Read an `async fn` that awaits two subfutures and then formats a result string. Explain the states you expect the compiler to generate.",
-    prompts: [
-      "Which locals must survive across the first `.await`?",
-      "Which locals must survive across the second `.await`?",
-      "At what points can the future legitimately return `Poll::Pending`?",
-      "What does the final `Poll::Ready` contain?",
-    ],
-    acceptanceCriteria: [
-      "You describe at least three stages: before first await, between awaits, and ready.",
-      "You identify one local that must be stored across suspension.",
-      "You explain `Pending` as a suspension protocol event, not as failure.",
-    ],
-    hints: [
-      "Imagine the compiler lowering the function into an enum plus captured locals.",
-      "The state machine only stores what must survive to the next poll.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Drive a tiny future intentionally",
-    objective: "Implement or repair a small manual future or mini-executor so you can see the poll protocol directly.",
-    starterPrompt:
-      "Build a tiny future that yields `Pending` at least once, then becomes ready, and drive it with a small `block_on`-style loop or manual poll loop.",
-    prompts: [
-      "Keep the future state explicit.",
-      "Use a no-op waker or another minimal wake path only for the local demo.",
-      "Print enough information to make each state transition visible.",
-    ],
-    acceptanceCriteria: [
-      "Your future implements `Future` plausibly.",
-      "The polling loop distinguishes `Pending` and `Ready` explicitly.",
-      "The output makes the state transition visible to the reader.",
-    ],
-    hints: [
-      "This is not about building a production runtime.",
-      "The goal is to make the protocol concrete enough to reason about later.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Fix a Send-bound problem in spawned async code",
-    objective: "Repair a spawned future boundary that captures non-Send or non-'static state.",
-    starterPrompt:
-      "A task-spawning boundary requires `Future<Output = ()> + Send + 'static`, but the current future captures `Rc<String>` from a local scope.",
-    prompts: [
-      "Should the repair be an owned `String` clone, an `Arc<String>`, or a different redesign?",
-      "Which part of the requirement comes from cross-thread movement and which part comes from lifetime?",
-      "What boundary becomes clearer once the spawned task owns Send-safe data?",
-    ],
-    acceptanceCriteria: [
-      "You remove the `Rc<T>` cross-thread capture problem.",
-      "You explain the `Send` and `'static` requirement accurately.",
-      "Your repair moves or shares data in a way another senior engineer could review quickly.",
-    ],
-    hints: [
-      "The compiler is forcing you to choose an honest ownership boundary.",
-      "The fix is not automatically `Arc`. It is whichever Send-safe owned boundary fits the design.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Model cancellation and cleanup explicitly",
-    objective: "Repair a future so cancellation by drop still releases or records the state that matters.",
-    starterPrompt:
-      "A future acquires request-local cleanup state only after its first await, so dropping it early leaves no cleanup story at all.",
-    prompts: [
-      "Which cleanup object or state should exist before the first suspension point?",
-      "Should the future rely on `Drop`, explicit cancellation tokens, or a narrower scope?",
-      "What makes the pre-await state cancellation-safe?",
-    ],
-    acceptanceCriteria: [
-      "You move or design cleanup so early cancellation still has a coherent story.",
-      "You explain cancellation as drop-based by default.",
-      "You identify one reason a half-mutated shared state before await is dangerous.",
-    ],
-    hints: [
-      "If the future can be dropped while pending, ask what work already became the future's responsibility.",
-      "A small guard object is often clearer than a late cleanup branch.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose structured concurrency for request fan-out",
-    objective: "Design a request-scoped async boundary that owns child lifetime, cancellation, and result joining explicitly.",
-    starterPrompt:
-      "You are designing `parse -> call profile service -> call pricing service -> call inventory service -> merge -> persist`, with request cancellation and a deadline.",
-    prompts: [
-      "Which child work items should be joined as a group rather than detached?",
-      "How should cancellation propagate when one child fails or the parent times out?",
-      "Which data should become owned before the fan-out?",
-      "What observability hooks would you add around timeouts, retries, and cancellations?",
-    ],
-    acceptanceCriteria: [
-      "You keep child task lifetime owned by the parent request scope.",
-      "You describe one explicit cancellation propagation rule.",
-      "You choose owned data before the fan-out boundary where appropriate.",
-      "You mention at least one production signal such as timeout count, cancellation count, or in-flight task count.",
-    ],
-    hints: [
-      "Detached work is cheap to start and expensive to operate.",
-      "The cleanest answer sounds like one parent scope controlling several owned child futures.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why does calling an `async fn` not start work immediately in Rust?",
-  "What does `Pin<&mut Self>` on `Future::poll` tell you about the general future model?",
-  "Why do spawned tasks often require `Send + 'static` futures?",
-  "What is the default cancellation mechanism for a future in Rust?",
-  "Why is structured concurrency usually calmer than request-scoped fire-and-forget tasks?",
-  "What ownership mistake often hides behind async lifetime errors?",
-]
-
-const workingLoop = [
-  "Ask what is only a future value and what is actually scheduled work.",
-  "Before each `.await`, ask what state would be left behind if the future were dropped there.",
-  "Before each spawn, ask which captured values must become owned and Send-safe.",
-  "Keep the parent request or job scope responsible for joining child work unless detached lifetime is genuinely intended.",
-]
-
-export function PageCh24CoroutinesFuturesAndAsyncRustExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 47
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 24 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice async Rust as an ownership and scheduling discipline: trace state machines, repair Send-bound spawn
-          failures, and make cancellation behavior explicit.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an async boundary review. The strongest answer does not say only “make it async.” It
-                says what is lazy, what gets scheduled, what may be dropped, what must be owned before spawn, and how
-                cancellation leaves the system in a coherent state.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(46)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 24
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Async drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Fix a Send-bound spawn problem"
-          description={
-            <>
-              Repair the starter so the spawned future captures a Send-safe owned boundary instead of
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Rc&lt;String&gt;</code>.
-              A common repair is
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Arc&lt;String&gt;</code>,
-              but another Send-safe owned boundary is also valid if the contract stays honest.
-            </>
-          }
-          filename="send_bound_spawn_lab.rs"
-          runKey="ch24_ex_send_bound_spawn"
-          expectedOutput={"spawned = true\nshared = cfg-v1"}
-          helperText={
-            <>
-              Tip: this page uses a tiny std-only <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">spawn_send</code>{" "}
-              boundary so the Send rule stays visible without a full runtime dependency. The real lesson is the boundary,
-              not the helper.
-            </>
-          }
-          initialCode={`use std::future::Future;\nuse std::rc::Rc;\n\nfn spawn_send<F>(future: F)\nwhere\n    F: Future<Output = ()> + Send + 'static,\n{\n    drop(future);\n}\n\nfn main() {\n    let shared = Rc::new(String::from(\"cfg-v1\"));\n    let worker = Rc::clone(&shared);\n\n    spawn_send(async move {\n        let text = std::future::ready(worker.as_str()).await;\n        let _ = text.len();\n    });\n\n    println!(\"spawned = true\");\n    println!(\"shared = {}\", shared);\n}`}
-        />
-
-        <RustPracticeCard
-          title="Runnable lab · Cancellation with explicit cleanup"
-          description={
-            <>
-              Repair the starter so a future cancelled after its first poll still drops a cleanup guard with the request ID.
-              The checker expects explicit cancellation by drop and explicit cleanup output.
-            </>
-          }
-          filename="cancellation_cleanup_lab.rs"
-          runKey="ch24_ex_cancellation_cleanup"
-          expectedOutput={"cancelled = true\ncleanup = dropped request-7"}
-          helperText={
-            <>
-              Tip: if the cleanup guard is created only after the first
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">.await</code>,
-              early cancellation has nothing to drop. Move the responsibility earlier, then drop the pending future on
-              purpose.
-            </>
-          }
-          initialCode={`use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\nstruct YieldOnce {\n    yielded: bool,\n}\n\nimpl Future for YieldOnce {\n    type Output = ();\n\n    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        if self.yielded {\n            Poll::Ready(())\n        } else {\n            self.yielded = true;\n            Poll::Pending\n        }\n    }\n}\n\nstruct Cleanup {\n    request_id: &'static str,\n}\n\nimpl Drop for Cleanup {\n    fn drop(&mut self) {\n        println!(\"cleanup = skipped\");\n    }\n}\n\nasync fn request(request_id: &'static str) {\n    YieldOnce { yielded: false }.await;\n    let _cleanup = Cleanup { request_id };\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn cancel_after_one_poll<F>(future: F)\nwhere\n    F: Future<Output = ()>,\n{\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut future = Box::pin(future);\n\n    let _ = Future::poll(future.as_mut(), &mut cx);\n    println!(\"cancelled = false\");\n}\n\nfn main() {\n    cancel_after_one_poll(request(\"request-7\"));\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to narrate a small async future as a state machine, repair spawned
-            futures that capture the wrong ownership shape, explain cancellation as drop-based by default, and choose
-            structured concurrency patterns that keep task lifetime and failure handling inside one parent scope.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch24_coroutines_futures_and_async_rust/async_fn_and_manual_block_on.rs`
-```rust
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
-
-struct YieldOnce {
-    value: &'static str,
-    yielded: bool,
-}
-
-impl YieldOnce {
-    fn new(value: &'static str) -> Self {
-        Self {
-            value,
-            yielded: false,
-        }
-    }
-}
-
-impl Future for YieldOnce {
-    type Output = &'static str;
-
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.yielded {
-            Poll::Ready(self.value)
-        } else {
-            self.yielded = true;
-            Poll::Pending
-        }
-    }
-}
-
-async fn build_label(service: &'static str, route: &'static str) -> String {
-    let left = YieldOnce::new(service).await;
-    let right = YieldOnce::new(route).await;
-    format!("{}:{}", left, right)
-}
-
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
-fn block_on<F: Future>(future: F) -> F::Output {
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut cx = Context::from_waker(&waker);
-    let mut future = Box::pin(future);
-
-    loop {
-        match future.as_mut().poll(&mut cx) {
-            Poll::Ready(value) => return value,
-            Poll::Pending => println!("poll = pending"),
-        }
-    }
-}
-
-fn main() {
-    let label = block_on(build_label("billing", "/ready"));
-    println!("label = {}", label);
-}
-````
-
-### File: `examples/ch24_coroutines_futures_and_async_rust/manual_future_state_machine.rs`
-```rust
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
-
-#[derive(Debug, Clone, Copy)]
-enum Stage {
-    Start,
-    Waiting,
-    Done,
-}
-
-struct Handshake {
-    stage: Stage,
-    remaining_polls: u8,
-}
-
-impl Future for Handshake {
-    type Output = &'static str;
-
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.stage {
-            Stage::Start => {
-                self.stage = Stage::Waiting;
-                Poll::Pending
-            }
-            Stage::Waiting if self.remaining_polls > 0 => {
-                self.remaining_polls -= 1;
-                Poll::Pending
-            }
-            Stage::Waiting => {
-                self.stage = Stage::Done;
-                Poll::Ready("connected")
-            }
-            Stage::Done => Poll::Ready("connected"),
-        }
-    }
-}
-
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
-fn main() {
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut cx = Context::from_waker(&waker);
-    let mut future = Box::pin(Handshake {
-        stage: Stage::Start,
-        remaining_polls: 1,
-    });
-
-    loop {
-        match future.as_mut().poll(&mut cx) {
-            Poll::Pending => {
-                println!("pending stage = {:?}", future.as_ref().get_ref().stage);
-                println!("pending retries = {}", future.as_ref().get_ref().remaining_polls);
-            }
-            Poll::Ready(value) => {
-                println!("ready = {}", value);
-                break;
-            }
-        }
-    }
-}
-````
-
-### File: `examples/ch24_coroutines_futures_and_async_rust/send_bound_spawn_boundary.rs`
-```rust
-use std::future::Future;
-use std::sync::Arc;
-
-fn spawn_send<F>(future: F)
-where
-    F: Future<Output = ()> + Send + 'static,
-{
-    drop(future);
-}
-
-fn main() {
-    let shared = Arc::new(String::from("cfg-v1"));
-    let worker = Arc::clone(&shared);
-
-    spawn_send(async move {
-        let text = std::future::ready(worker.as_str()).await;
-        let _ = text.len();
-    });
-
-    println!("spawned = true");
-    println!("shared = {}", shared.as_str());
-}
-````
-
-### File: `examples/ch24_coroutines_futures_and_async_rust/cancellation_drop_guard.rs`
-```rust
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
-
-struct YieldOnce {
-    yielded: bool,
-}
-
-impl Future for YieldOnce {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.yielded {
-            Poll::Ready(())
-        } else {
-            self.yielded = true;
-            Poll::Pending
-        }
-    }
-}
-
-struct Cleanup {
-    request_id: &'static str,
-}
-
-impl Drop for Cleanup {
-    fn drop(&mut self) {
-        println!("cleanup = dropped {}", self.request_id);
-    }
-}
-
-async fn request(request_id: &'static str) {
-    let _cleanup = Cleanup { request_id };
-    YieldOnce { yielded: false }.await;
-}
-
-struct NoopWake;
-
-impl Wake for NoopWake {
-    fn wake(self: Arc<Self>) {}
-}
-
-fn cancel_after_one_poll<F>(future: F)
-where
-    F: Future<Output = ()>,
-{
-    let waker = Waker::from(Arc::new(NoopWake));
-    let mut cx = Context::from_waker(&waker);
-    let mut future = Box::pin(future);
-
-    if let Poll::Pending = Future::poll(future.as_mut(), &mut cx) {
-        println!("cancelled = true");
-        drop(future);
-    }
-}
-
-fn main() {
-    cancel_after_one_poll(request("request-7"));
-}
-````

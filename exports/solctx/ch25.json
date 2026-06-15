@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch25",
+ "num": 25,
+ "title": "Tokio",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Place each stage on the right Tokio surface",
+   "objective": "Decide whether a unit of work belongs inline, on tokio::spawn, or on spawn_blocking, and explain why.",
+   "starterPrompt": "The chapter's ingress service has four stages: awaiting a TCP read, summing a batch of u32 values, ticking a time::interval, and reading a filesystem snapshot. Classify each one against the chapter's decision tree.",
+   "prompts": [
+    "For each stage, say whether it mostly waits on IO or mostly computes.",
+    "Map each stage to one of: stays inline, goes to tokio::spawn, or goes to spawn_blocking.",
+    "Explain what specifically goes wrong if the CPU sum is left on an IO worker.",
+    "State why the interval is a runtime wakeup rather than a background thread or a busy loop."
+   ],
+   "acceptanceCriteria": [
+    "The TCP read and the interval tick are identified as waiting work that stays on the async workers, not blocking work.",
+    "The u32 sum is identified as CPU-heavy work that belongs on spawn_blocking, and the filesystem snapshot is identified as blocking work that also belongs on the blocking pool.",
+    "The answer states that CPU work left on an IO worker monopolizes that worker between await points and stalls unrelated tasks.",
+    "The answer notes that time::interval is driven by the timer driver as a wakeup, so it consumes no thread while idle."
+   ],
+   "hints": [
+    "The chapter's rule: work that mostly waits stays inline or on tokio::spawn; work that mostly computes goes to spawn_blocking.",
+    "A task that never reaches an await point holds its worker thread for the whole computation."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the accept loop's select! race",
+   "objective": "Read the graceful-shutdown accept loop and predict how a normal accept and a shutdown signal each flow through the same select!.",
+   "starterPrompt": "Study Example 2's server task, where each loop turn runs tokio::select! over shutdown_rx.changed() and listener.accept(). Walk through both branches without running the code.",
+   "prompts": [
+    "Describe what the accept branch does when listener.accept() resolves with Ok((stream, _peer)).",
+    "Explain why the shutdown branch checks both changed.is_err() and *shutdown_rx.borrow().",
+    "State what value the server task breaks with, and what the printed accepted count means.",
+    "Explain why per-connection work is handled with tokio::spawn(handle(stream)) rather than awaited inline in the loop."
+   ],
+   "acceptanceCriteria": [
+    "The reader explains that the accept branch increments accepted and spawns a separate task to handle the connection, keeping admission in the listener.",
+    "The reader explains that changed() resolving with an error means every sender was dropped, and borrow() re-checks because a watch can carry values other than the stop sentinel.",
+    "The reader states the loop breaks with the accepted count and that this count reflects connections admitted before the stop signal won the race.",
+    "The reader explains that spawning the handler keeps the accept loop free to race the next connection against the stop signal instead of blocking on one client."
+   ],
+   "hints": [
+    "select! evaluates both branches each turn and proceeds with whichever future resolves first.",
+    "A dropped watch sender and an explicit send(true) both need to be treated as 'stop' by the shutdown branch."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Bound the producer with a capacity-one channel",
+   "objective": "Use a bounded mpsc to turn an unbounded producer into one that paces itself against the consumer.",
+   "starterPrompt": "Starting from Example 1's shape, write an async producer and consumer connected by mpsc::channel::<Vec<u32>>(1) so that a full queue makes the producer's send().await suspend until the consumer drains an item.",
+   "prompts": [
+    "Create the channel with an explicit capacity of 1 and move tx into the producer task.",
+    "Have the producer send two Vec<u32> batches with send().await and unwrap the results.",
+    "In the consumer, drive a time::interval, tick once per received batch, and offload the per-batch sum to spawn_blocking.",
+    "Return (batches, total) from the consumer and print buffer, batches, and total."
+   ],
+   "acceptanceCriteria": [
+    "The channel is constructed with capacity 1 so the second send().await cannot complete until the consumer has received the first batch.",
+    "The CPU sum runs inside tokio::task::spawn_blocking and its result is awaited, not computed on the async worker.",
+    "The consumer's recv() loop ends when the producer drops tx, after which the consumer returns its accumulated (batches, total).",
+    "The program prints batches = 2 and total = 15 for the batches [1,2,3] and [4,5]."
+   ],
+   "hints": [
+    "send on a full bounded channel does not error; it awaits until there is room.",
+    "The recv loop terminates naturally once every sender handle has been dropped."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Add a watch-based stop signal to an accept loop",
+   "objective": "Wire a watch channel and select! into a server task so the accept loop drains cleanly on a stop signal.",
+   "starterPrompt": "Given a bound TcpListener, write a server task that loops over tokio::select! racing a watch shutdown receiver against listener.accept(), and have the outer code send the stop signal after its clients finish.",
+   "prompts": [
+    "Create the signal with watch::channel(false) and move the receiver into the server task.",
+    "In each loop turn, select! over shutdown_rx.changed() and listener.accept().",
+    "On the accept branch, count the connection and spawn the handler; on the shutdown branch, break out of the loop.",
+    "After the clients complete, call shutdown_tx.send(true) and await the server task to recover the accepted count."
+   ],
+   "acceptanceCriteria": [
+    "The server task owns the listener and the watch receiver, and the loop body is a single tokio::select! over the two branches.",
+    "The shutdown branch breaks on either a changed() error or a true value read through borrow(), and the accept branch spawns connection handling separately.",
+    "The outer code sends the stop signal exactly once after its work is done, then awaits the server handle.",
+    "The accepted count returned by the server task equals the number of connections admitted before the stop signal won the race."
+   ],
+   "hints": [
+    "watch::channel returns a (Sender, Receiver); the receiver's changed() future completes when the value is updated or all senders drop.",
+    "Breaking out of the loop with a value lets the spawned task's JoinHandle yield the accepted count."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Stop a CPU stage from starving the IO workers",
+   "objective": "Diagnose and fix a service that runs CPU-heavy work directly on a Tokio worker thread.",
+   "starterPrompt": "A consumer task receives batches over a channel and computes a sum with batch.into_iter().sum() directly inline, then awaits the next item; under load the whole service goes mysteriously slow even though every individual operation looks cheap. Refactor it.",
+   "prompts": [
+    "Identify why running the sum inline holds the worker thread across what should be an await point.",
+    "Explain how this interacts with the multithread runtime stealing work across the pool.",
+    "Refactor the sum to run behind tokio::task::spawn_blocking and await its JoinHandle.",
+    "Argue why simply calling tokio::spawn on the sum would not fix the underlying problem."
+   ],
+   "acceptanceCriteria": [
+    "The diagnosis states that the inline sum runs on an IO worker with no intervening await, so that worker cannot service other ready tasks until it finishes.",
+    "The fix moves the CPU step to spawn_blocking and awaits its result, keeping the async workers free for waiting work.",
+    "The answer explains that tokio::spawn still schedules the CPU work onto the same IO worker pool, so it does not isolate the CPU cost.",
+    "The refactored consumer preserves the original output, computing the same totals as before."
+   ],
+   "hints": [
+    "The chapter calls putting CPU work on IO workers the single most common way to make a Tokio service slow.",
+    "spawn_blocking moves work onto a dedicated blocking pool; tokio::spawn does not."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design backpressure and shutdown for an ingress service",
+   "objective": "Specify the queue bounds, task ownership, and cancellation policy for a Tokio service so capacity is explicit rather than emergent.",
+   "starterPrompt": "Design the runtime shape for the chapter's ingress service: it accepts TCP traffic, sends owned jobs through an internal queue to a processing stage, reads filesystem snapshots, and must shut down without losing in-flight work.",
+   "prompts": [
+    "Decide between the multithread and current-thread runtime for this service and justify the choice.",
+    "Specify where bounded channels sit and what a full queue should do to the upstream producer.",
+    "Describe the shutdown sequence using a watch signal and select! so the accept loop stops admitting and drains in-flight work.",
+    "State which stages move to spawn_blocking and why spawning more tasks is not a substitute for concurrency control."
+   ],
+   "acceptanceCriteria": [
+    "The design chooses the multithread runtime for a Send-task service and explains the work-stealing benefit, or justifies current-thread for a small or non-Send case.",
+    "Internal queues are bounded so a full queue makes send await and pushes backpressure upstream, with capacity stated as an explicit policy.",
+    "The shutdown plan races a watch stop signal against accept in a select!, stops admission first, then lets spawned connection tasks finish before exit.",
+    "The CPU-heavy and filesystem stages are placed on the blocking pool, and the design notes that spawning faster than downstream finishes is queue growth, not throughput."
+   ],
+   "hints": [
+    "Bounding the queue makes the slowdown policy explicit instead of discovering it later from a memory graph.",
+    "Separating connection tasks from listener ownership keeps admission, draining, and metrics easy to reason about."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What are the four moving parts the #[tokio::main] macro hides, and how do the IO driver and timer driver keep the scheduler from blocking on IO or time?",
+  "When should a service use the multithread runtime versus the current-thread runtime, and what does work-stealing buy a Send-task workload?",
+  "Why does a bounded mpsc with an explicit capacity provide backpressure, and what does send().await do when the channel is full?",
+  "What distinguishes work that belongs on tokio::spawn from work that belongs on spawn_blocking, and what happens when CPU-heavy work runs on an IO worker?",
+  "In the graceful-shutdown accept loop, why does the shutdown branch treat both a changed() error and a true watch value as a stop, and why is per-connection work spawned rather than awaited inline?"
+ ],
+ "lab": {
+  "title": "Runnable lab · bounded-queue backpressure with an isolated CPU stage",
+  "filename": "bounded_queue_backpressure_lab.rs",
+  "runKey": "ch25_ex_backpressure",
+  "expectedOutput": "buffer = 1\nbatches = 2\ntotal = 15",
+  "helperText": "This models Example 1's pipeline in plain std: a capacity-1 sync_channel couples producer and consumer, and the per-batch sum stands in for the chapter's spawn_blocking CPU step. Fill in cpu_subtotal so the totals are correct.",
+  "initialCode": "use std::sync::mpsc::sync_channel;\nuse std::thread;\n\nfn cpu_subtotal(batch: Vec<u32>) -> u32 {\n    // TODO: sum the batch and return the subtotal.\n    // This stands in for the chapter's spawn_blocking CPU step,\n    // which must not run on an async worker.\n    let _ = batch;\n    0\n}\n\nfn main() {\n    // A capacity of one couples producer and consumer: the second\n    // send cannot complete until the consumer has taken the first batch.\n    let capacity = 1;\n    let (tx, rx) = sync_channel::<Vec<u32>>(capacity);\n\n    let producer = thread::spawn(move || {\n        tx.send(vec![1_u32, 2, 3]).unwrap();\n        tx.send(vec![4_u32, 5]).unwrap();\n    });\n\n    let consumer = thread::spawn(move || {\n        let mut batches = 0_u32;\n        let mut total = 0_u32;\n        while let Ok(batch) = rx.recv() {\n            let subtotal = cpu_subtotal(batch);\n            total += subtotal;\n            batches += 1;\n        }\n        (batches, total)\n    });\n\n    producer.join().unwrap();\n    let (batches, total) = consumer.join().unwrap();\n\n    println!(\"buffer = {}\", capacity);\n    println!(\"batches = {}\", batches);\n    println!(\"total = {}\", total);\n}\n"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 22, 23, and 24",
+  "Opening scenario",
+  "Repository note",
+  "Mental model",
+  "Core concepts",
+  "What the runtime is made of",
+  "Tasks and scheduling",
+  "Tokio channels",
+  "Graceful shutdown",
+  "Backpressure",
+  "How this lands by background",
+  "Production Tokio patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: bounded channel, interval pacing, and spawn_blocking",
+  "Example 2: TCP accept loop with graceful shutdown",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Tokio provides the runtime layer for network services, timers, tasks, and blocking work isolation. This chapter covers backpressure, task ownership, shutdown, and runtime configuration.",
+  "Chapter 22 established OS-thread boundaries and message passing. Chapter 23 covered synchronization and visibility. Chapter 24 explained futures, async fn, and Pin. Tokio turns those concepts into an operational runtime for production services.",
+  "An ingress service accepts TCP traffic, sends owned jobs through internal queues, reads filesystem snapshots, handles UDP health messages, and must shut down without losing in-flight work. The business requirement is to use Tokio where work is waiting, isolate blocking or CPU-hea",
+  "The in-browser editor simulates output so you can focus on runtime shape. In a real Cargo project, the Tokio dependency normally enables the runtime, macros, time, net, fs, sync, and signal features used by this chapter.",
+  "The runtime macro on main hides four moving parts. The thing to notice in the diagram below is that the scheduler never blocks waiting for IO or time: the IO driver and the timer driver turn external events into wakeups and feed ready tasks back to the scheduler, while genuinely ",
+  "The usual default for a service is the multithread runtime, because it can schedule Send tasks across a pool of worker threads and steal work to keep them busy. A current-thread runtime is still the right choice when the application is small, embedded, or deliberately built aroun",
+  "A task is one future scheduled by the runtime. It is cheap enough to use widely, but not free enough to spray without a policy. A task that never reaches an await point monopolizes its worker thread, and a service that spawns without bounds builds its own backlog and memory press",
+  "The decision tree is short. Work that mostly waits on IO stays inline or goes to tokio::spawn; work that mostly computes goes to spawn_blocking. Putting CPU work on the IO workers is the single most common way to make a Tokio service mysteriously slow.",
+  "A common production mistake is to reach for tokio::spawn when the real problem was concurrency control. Spawning faster than downstream work can finish is not throughput. It is queue growth with nicer syntax.",
+  "A bounded mpsc is one of the simplest backpressure tools in Tokio. If a producer should slow down when the consumer falls behind, make the capacity explicit so a full queue makes send await, instead of discovering the policy later from a memory graph.",
+  "The shape to keep in mind is a small state machine: the accept loop races a stop signal against the next connection, and once the signal wins, the service moves to draining before it exits.",
+  "Almost no one meets Tokio with an empty mental model; they arrive with async habits from another ecosystem. The useful thing to know is which of those habits transfer and which one will quietly mislead you. The shift is rarely about API names. It is about where the runtime stops ",
+  "Tokio is excellent at waiting and multiplexing. It is not a free pass to ignore CPU budgets, queue budgets, cancellation, or ownership. The runtime gets calmer when those policies are explicit in the design.",
+  "The queue is bounded, so producer speed has a budget. The async side waits on the channel and the timer, and the CPU step moves to the blocking pool explicitly.",
+  "Read the pipeline before the code: items flow producer to bounded channel to consumer, the consumer paces itself on a timer, and the only CPU-heavy step is pushed across the blocking boundary so it never holds an async worker. Watch how a channel capacity of one is what couples p",
+  "A capacity of one forces producer and consumer speed to meet, instead of buffering without limit.",
+  "Async waiting stays on the workers; the CPU subtotal step moves behind spawn_blocking.",
+  "The interval is a runtime wakeup, not a background thread and not a busy loop.",
+  "The listener owns admission, per-connection work is spawned deliberately, and a watch signal stops the accept loop cleanly before process exit.",
+  "The key moment is the race inside the accept loop: each turn waits on both the next connection and the stop signal at once, and whichever resolves first decides what happens. Follow the messages below to see how a normal accept and a shutdown signal flow through the same loop.",
+  "Bind plus accept is the core server loop. Admission is an explicit task, not implicit magic.",
+  "A watch channel carries the stop signal into the loop, and select! makes that branch visible in code. changed() also resolves with an error when every sender is dropped, so the branch treats that as a stop; the borrow() re-check exists because a watch can carry values other than ",
+  "Connection tasks are separate from listener ownership, which keeps admission, draining, and metrics easier to reason about.",
+  "The repository also includes standalone Rust source under examples/ch25_tokio/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to build a small Tokio TCP service, add graceful shutdown with explicit cancellation signals, and separate blocking CPU work with spawn_blocking."
+ ],
+ "codeSamples": {
+  "tokio_tasks_backpressure_spawn_blocking": "use tokio::sync::mpsc;\nuse tokio::time::{self, Duration};\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Vec<u32>>(1);\n\n    let producer = tokio::spawn(async move {\n        tx.send(vec![1_u32, 2, 3]).await.unwrap();\n        tx.send(vec![4_u32, 5]).await.unwrap();\n    });\n\n    let consumer = tokio::spawn(async move {\n        let mut interval = time::interval(Duration::from_millis(10));\n        let mut batches = 0_u32;\n        let mut total = 0_u32;\n\n        while let Some(batch) = rx.recv().await {\n            interval.tick().await;\n\n            let subtotal = tokio::task::spawn_blocking(move || batch.into_iter().sum::<u32>())\n                .await\n                .unwrap();\n\n            total += subtotal;\n            batches += 1;\n        }\n\n        (batches, total)\n    });\n\n    producer.await.unwrap();\n    let (batches, total) = consumer.await.unwrap();\n\n    println!(\"buffer = 1\");\n    println!(\"batches = {}\", batches);\n    println!(\"total = {}\", total);\n}",
+  "tokio_tcp_graceful_shutdown": "use tokio::io::{AsyncReadExt, AsyncWriteExt};\nuse tokio::sync::watch;\n\nasync fn handle(mut stream: tokio::net::TcpStream) -> std::io::Result<()> {\n    stream.write_all(b\"pong\\\\n\").await?;\n    Ok(())\n}\n\n#[tokio::main]\nasync fn main() -> std::io::Result<()> {\n    let listener = tokio::net::TcpListener::bind(\"127.0.0.1:0\").await?;\n    let addr = listener.local_addr()?;\n    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);\n\n    let server = tokio::spawn(async move {\n        let mut accepted = 0_usize;\n\n        loop {\n            tokio::select! {\n                changed = shutdown_rx.changed() => {\n                    if changed.is_err() || *shutdown_rx.borrow() {\n                        break accepted;\n                    }\n                }\n                result = listener.accept() => {\n                    match result {\n                        Ok((stream, _peer)) => {\n                            accepted += 1;\n                            tokio::spawn(handle(stream));\n                        }\n                        Err(_e) => {\n                            break accepted;\n                        }\n                    }\n                }\n            }\n        }\n    });\n\n    let client_a = tokio::spawn(async move {\n        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();\n        let mut buf = [0_u8; 5];\n        stream.read_exact(&mut buf).await.unwrap();\n        String::from_utf8_lossy(&buf).trim().to_string()\n    });\n\n    let client_b = tokio::spawn(async move {\n        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();\n        let mut buf = [0_u8; 5];\n        stream.read_exact(&mut buf).await.unwrap();\n        String::from_utf8_lossy(&buf).trim().to_string()\n    });\n\n    let a = client_a.await.unwrap();\n    let b = client_b.await.unwrap();\n\n    shutdown_tx.send(true).unwrap();\n    let accepted = server.await.unwrap();\n\n    println!(\"accepted = {}\", accepted);\n    println!(\"client_a = {}\", a);\n    println!(\"client_b = {}\", b);\n    Ok(())\n}"
+ },
+ "labReferenceSolution": "use std::sync::mpsc::sync_channel;\nuse std::thread;\n\nfn cpu_subtotal(batch: Vec<u32>) -> u32 {\n    // The CPU-heavy step, isolated from the receive loop just as the\n    // chapter pushes it behind spawn_blocking off the async workers.\n    batch.into_iter().sum()\n}\n\nfn main() {\n    // A capacity of one couples producer and consumer: the second\n    // send cannot complete until the consumer has taken the first batch.\n    let capacity = 1;\n    let (tx, rx) = sync_channel::<Vec<u32>>(capacity);\n\n    let producer = thread::spawn(move || {\n        tx.send(vec![1_u32, 2, 3]).unwrap();\n        tx.send(vec![4_u32, 5]).unwrap();\n    });\n\n    let consumer = thread::spawn(move || {\n        let mut batches = 0_u32;\n        let mut total = 0_u32;\n        while let Ok(batch) = rx.recv() {\n            let subtotal = cpu_subtotal(batch);\n            total += subtotal;\n            batches += 1;\n        }\n        (batches, total)\n    });\n\n    producer.join().unwrap();\n    let (batches, total) = consumer.join().unwrap();\n\n    println!(\"buffer = {}\", capacity);\n    println!(\"batches = {}\", batches);\n    println!(\"total = {}\", total);\n}\n"
+}

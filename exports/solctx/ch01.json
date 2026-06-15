@@ -1,0 +1,177 @@
+{
+ "chapterKey": "ch01",
+ "num": 1,
+ "title": "Why Rust Feels Different",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Translate a familiar lifecycle pattern into Rust",
+   "objective": "Map one resource-management idea from C++, C#, or Go to idiomatic Rust ownership and cleanup semantics.",
+   "starterPrompt": "Choose one familiar lifecycle pattern and restate it as a Rust ownership design for a resource owner named `Session` or `LogWriter`.",
+   "prompts": [
+    "Start from a single owner that is responsible for cleanup.",
+    "Decide which methods should take `&self`, which should take `&mut self`, and which should consume `self`.",
+    "Explain where deterministic cleanup happens and why it does not depend on a garbage collector or inheritance."
+   ],
+   "acceptanceCriteria": [
+    "Your design identifies a single owner responsible for cleanup.",
+    "You explain why borrowed methods do or do not allow mutation.",
+    "Cleanup is deterministic and does not rely on a garbage collector or inheritance."
+   ],
+   "hints": [
+    "Think in terms of a struct plus methods, not a class hierarchy.",
+    "If cleanup must always happen, describe the role of Drop even if you do not fully implement it yet."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the zero-cost part and the real runtime cost",
+   "objective": "Identify which parts of a Rust abstraction are compile-time structure and which parts still do real work at runtime.",
+   "starterPrompt": "Study an iterator-based function that filters high-priority jobs from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
+   "prompts": [
+    "Call out which parts are likely monomorphized or optimized as abstraction structure.",
+    "List the runtime work that still exists: iteration, branching, cache behavior, and any downstream materialization cost.",
+    "Explain where dynamic dispatch would appear if the return type changed to a trait object."
+   ],
+   "acceptanceCriteria": [
+    "You identify iterator adapters and impl Iterator as abstraction mechanisms that do not imply dynamic dispatch by default.",
+    "You name the runtime work that still exists: iteration, branching, cache behavior, and any downstream allocation if materialized.",
+    "You explain that a trait object would opt into dynamic dispatch."
+   ],
+   "hints": [
+    "Separate 'how the code is expressed' from 'what the machine still has to do.'",
+    "Look for where values are actually stored, allocated, or compared."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Make fallibility explicit instead of implicit",
+   "objective": "Replace a sentinel-value style API with Rust’s explicit Option and Result modeling.",
+   "starterPrompt": "Implement `parse_limit(input: Option<&str>) -> Result<usize, &'static str>` so missing input uses the default value `100`, `\"0\"` is invalid, non-numeric input is invalid, and valid positive integers return `Ok(limit)`.",
+   "prompts": [
+    "Do not use `panic!`, `unwrap`, or sentinel values such as `-1`.",
+    "Keep the failure mode explicit in the type system so callers cannot ignore it accidentally."
+   ],
+   "acceptanceCriteria": [
+    "The function returns Result<usize, &'static str> exactly.",
+    "Missing input becomes the default value without error.",
+    "Invalid input is represented as an Err, not as a magic number or log-only failure."
+   ],
+   "hints": [
+    "Handle Option first, then parse the string branch.",
+    "The type system should make invalid states harder to ignore at call sites."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Interpret three compiler diagnostics and propose repairs",
+   "objective": "Practice reading Rust diagnostics as ownership and concurrency design feedback.",
+   "starterPrompt": "For each diagnostic, explain the rule Rust is enforcing, sketch the likely shape of the buggy code, and propose one or two valid repair strategies.",
+   "prompts": [
+    "E0382: borrow of moved value: request",
+    "E0499: cannot borrow buffer as mutable more than once at a time",
+    "E0277: Rc<String> cannot be sent between threads safely"
+   ],
+   "acceptanceCriteria": [
+    "Your explanation of E0382 mentions ownership transfer and alternatives such as borrowing, returning ownership, or intentional cloning.",
+    "Your explanation of E0499 mentions exclusive mutable access and proposes scope shortening or data-structure redesign.",
+    "Your explanation of E0277 mentions thread-safety trait bounds and distinguishes Rc from thread-safe sharing approaches such as Arc."
+   ],
+   "hints": [
+    "Focus on the violated rule first, then the syntax.",
+    "A good repair changes ownership shape before reaching for shared mutable state."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design a worker pipeline with explicit ownership boundaries",
+   "objective": "Choose Rust-native boundaries for parsing, validation, dispatch, and cross-thread communication in a production-style service.",
+   "starterPrompt": "You are designing an ingestion service with the flow `socket bytes -> parse -> validate -> route to workers -> emit metrics`.",
+   "prompts": [
+    "At what boundary do bytes become owned domain values?",
+    "What data is borrowed only locally?",
+    "What types are allowed to cross thread boundaries?",
+    "Where do you use `Result` or enums to represent failure and state?"
+   ],
+   "acceptanceCriteria": [
+    "You place ownership boundaries before cross-thread or queued work.",
+    "You avoid defaulting to a single global `Arc<Mutex<HashMap<...>>>` as the first design move.",
+    "You make error handling explicit with Result, enums, or both.",
+    "You justify at least one tradeoff involving performance, safety, or maintainability."
+   ],
+   "hints": [
+    "Prefer message passing of owned work items over broad shared mutability.",
+    "If you need sharing, explain why the sharing is semantically real rather than just convenient."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why does Rust often feel harder at API boundaries than inside small local functions?",
+  "What is the practical difference between a generic function using traits and a trait object?",
+  "Name one category of bug Rust usually catches at compile time and one category it cannot remove from runtime reality.",
+  "Why is 'just clone it' sometimes correct and sometimes a design smell?",
+  "How would you explain `Send` and `Sync` to a teammate coming from Go or C#?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Exercise 3",
+  "filename": "parse_limit_lab.rs",
+  "runKey": "ch01_ex_parse_limit",
+  "expectedOutput": "default = Ok(100)\nzero = Err(\"limit must be greater than 0\")\nvalue = Ok(25)",
+  "helperText": "Tip: keep the type as Result<usize, &'static str>, handle None first, then validate and parse the Some branch.",
+  "initialCode": "fn parse_limit(input: Option<&str>) -> Result<usize, &'static str> {\n    match input {\n        None => Ok(100),\n        Some(raw) => match raw.parse::<usize>() {\n            Ok(0) => Err(\"limit must be greater than 0\"),\n            Ok(limit) => Ok(limit),\n            Err(_) => Err(\"invalid number\"),\n        },\n    }\n}\n\nfn main() {\n    println!(\"default = {:?}\", parse_limit(None));\n    println!(\"zero = {:?}\", parse_limit(Some(\"0\")));\n    println!(\"value = {:?}\", parse_limit(Some(\"25\")));\n}"
+ },
+ "proseHeadings": [
+  "Opening scenario",
+  "What Rust is asking you to state up front",
+  "A reading checklist",
+  "Mental model",
+  "Core concepts",
+  "Rust’s core promise: control without unsafety by default",
+  "Zero-cost abstractions in practice",
+  "The senior-developer Rust learning curve",
+  "Rust compared with C++, C#, and Go",
+  "what changes by background",
+  "Why this feels slower before it feels faster",
+  "Compile-time guarantees vs runtime checks",
+  "Reading compiler errors productively",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: iterator pipeline with no extra abstraction tax",
+  "Example 2: ownership handoff into a worker thread",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Production Rust is valuable because ownership, failure handling, concurrency, and deployment rules become explicit contracts that teams can review before release.",
+  "A payments platform is moving latency-sensitive services to Rust after repeated incidents in resource ownership, failure recovery, and concurrent state updates. The business requirement is direct: make ownership, mutation authority, and fallibility explicit enough for release rev",
+  "Rust is not “C++ with a stricter compiler,” “C# without a GC,” or “Go with harder syntax.” The operational model is different: values have owners, borrows describe temporary access, and APIs must state whether they transfer responsibility, share read access, or require exclusive ",
+  "Rust wants C-like control over layout, allocation, and destruction while keeping memory unsafety out of ordinary code. Safe Rust rules out use-after-free, double-free, and data races in the safe subset. When low-level work truly needs escape hatches, you use unsafe in small, audi",
+  "“Zero-cost” does not mean “free magic.” It means abstractions do not inherently add overhead relative to a hand-written equivalent. Iterator pipelines, enums, and generics often compile to code close to an explicit loop. Traits become dynamic only when you opt into trait objects;",
+  "The learning curve is mostly architectural, not syntactic. Rust pushes design choices earlier: where is ownership transferred, which references may outlive which scopes, which types are allowed across threads, and where should cloning be explicit? Later chapters go deeper on borr",
+  "The most useful comparison is not syntax. It is where each language places trust: C++ trusts discipline around aliasing, C# trusts a managed runtime, Go trusts a runtime plus simplified concurrency primitives, and Rust spends more compile time to reduce what must be trusted in pr",
+  "Typical repair:",
+  "A borrow-checker error is not an obstacle to work around. It is exposing an ownership protocol you have not stated clearly enough yet. Treat that as design feedback, especially in production code.",
+  "This reads like high-level code, but the abstraction can still compile down close to an ordinary loop.",
+  "Quick check: press Run first to confirm the baseline output, then change the threshold or input data and see how the pipeline stays readable while remaining executable.",
+  "Iterator adapters, closure types, and the final return type describe structure. In ordinary generic code, that structure does not imply a heap allocation or a vtable lookup.",
+  "The CPU still walks the slice, evaluates the predicate, branches, and counts matches. Zero-cost abstractions remove abstraction tax, not the cost of real work.",
+  "Moving the job into the closure makes the lifetime and thread boundary explicit.",
+  "Quick check: reproduce the expected output, then change the job name or move more data into the closure to explore how ownership makes the thread boundary explicit.",
+  "The move closure consumes captured non-Copy data so the worker owns what it needs. That makes the handoff explicit instead of leaving lifetime questions to convention.",
+  "Queues, threads, and async tasks are ownership boundaries. Borrow locally when you can, but hand off owned work items when execution may outlive the current scope.",
+  "The companion exercise page contains exercises for warm-up comprehension, code reading, implementation, debugging, and production design. One exercise explicitly asks you to interpret three compiler diagnostics and propose repairs.",
+  "Chapter 02 turns this intuition into an operational model: values, bindings, moves, drops, stack versus heap-backed ownership, and why lifetimes are about borrowed references rather than object survival."
+ ],
+ "codeSamples": {
+  "why_rust_pipeline": "fn critical_count(readings: &[i32], threshold: i32) -> usize {\n    readings\n        .iter()\n        .copied()\n        .filter(|reading| *reading >= threshold)\n        .count()\n}\n\nfn main() {\n    let readings = vec![42, 87, 91, 63, 99];\n    let count = critical_count(&readings, 80);\n    println!(\"critical count = {}\", count);\n}",
+  "why_rust_thread_handoff": "use std::thread;\n\nfn main() {\n    let job = String::from(\"rebuild-search-index\");\n\n    let handle = thread::spawn(move || {\n        println!(\"worker started: {}\", job);\n    });\n\n    handle.join().unwrap();\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,0 +1,229 @@
+"use client"
+
+// Chapter 35 · exercise workbook page (ch35-performance-profiling-exercises).
+// Exercise data consumed by the workbook PDF builder
+// (exports/extract_chapter_prose.py reads the const blocks and the
+// RustPracticeCard below). Not yet wired into app navigation; wiring
+// requires lockstep edits to types.ts / index.ts / index.tsx.
+// Intended component name: PageCh35PerformanceProfilingExercises
+
+export {}
+
+/*
+interface Exercise {
+  number: number
+  kind: string
+  title: string
+  objective: string
+  starterPrompt: string
+  prompts?: string[]
+  acceptanceCriteria: string[]
+  hints: string[]
+}
+
+const exercises: Exercise[] = [
+  {
+    number: 1,
+    kind: "warm-up comprehension",
+    title: "Match the question to the instrument",
+    objective: "Recall how each profiling question maps to the tool that answers it with the least distortion.",
+    starterPrompt: "The chapter argues that the whole toolkit fans out from one decision: what kind of answer do you need? For each question below, name the instrument the chapter would reach for and say why the others would distort the answer.",
+    prompts: [
+      "Which tool answers \"is version B actually faster than version A under a fixed workload?\"",
+      "Which tool answers \"where is compute time concentrating in this running binary?\"",
+      "Why is a CPU sampler the wrong first instrument when an async task takes 200ms of wall time but almost no CPU?",
+    ],
+    acceptanceCriteria: [
+      "A benchmark (Criterion) is named for the version-versus-version comparison, and a CPU sampler is named for finding the hot compute path.",
+      "The answer explains that a sampler only sees code that runs often enough to be caught between samples, so it misses time spent enqueued, waiting on a permit, or parked.",
+      "The answer states that for an async wall-time gap the right signal is tracing spans around each transition, not CPU samples.",
+      "Each choice is justified by the question being asked rather than by which tool happens to be open.",
+    ],
+    hints: [
+      "The chapter's rule is to walk the decision diagram from the question, not from the tool you already have open.",
+      "Sampling perturbs the program little but only sees frequently-run code; a benchmark compares, it does not explain why.",
+    ],
+  },
+  {
+    number: 2,
+    kind: "code reading",
+    title: "Trace the hottest-stage reduction",
+    objective: "Read the chapter's hottest_stage listing and explain the single reduction that mirrors what a flame graph shows.",
+    starterPrompt: "Study the hottest_stage function over &[StageSample], where each StageSample has a name and a micros count. Hand-trace it on the chapter's sample data (parse=180, serialize=620, lock_wait=40) without running it.",
+    prompts: [
+      "What does the iter().map(...).sum() line compute, and what is its value for the sample data?",
+      "What does max_by_key(|sample| sample.micros) return, and why is .copied().unwrap() safe here?",
+      "State the three values the function returns as a tuple, in order.",
+      "Explain why this max-over-stages reduction is the same question a flame graph answers visually.",
+    ],
+    acceptanceCriteria: [
+      "The total is correctly computed as 840 microseconds and identified as the sum of all stage micros.",
+      "max_by_key is identified as selecting the StageSample with the largest micros, returning serialize at 620.",
+      "The returned tuple is given as (\"serialize\", 620, 840) in name, hottest-micros, total order.",
+      "The answer connects \"reduce a list of timings to one named winner\" with \"the flame graph points at the widest stack.\"",
+    ],
+    hints: [
+      "max_by_key on a non-empty slice yields Some, so unwrap cannot panic on this input.",
+      "StageSample derives Copy, which is why .copied() turns &StageSample into an owned value cheaply.",
+    ],
+  },
+  {
+    number: 3,
+    kind: "implementation",
+    title: "Report each stage as a share of wall time",
+    objective: "Extend the per-stage decomposition into a percentage breakdown so the widest layer is obvious before any tuning.",
+    starterPrompt: "Reuse the StageSample idea from the chapter and implement fn share_of_total(samples: &[StageSample]) -> Vec<(&'static str, u64)>, returning each stage name paired with its integer percentage of the summed micros (truncated, not rounded).",
+    prompts: [
+      "Compute the total micros once, then map each sample to (name, sample.micros * 100 / total).",
+      "Take samples by shared slice &[StageSample]; do not require ownership of a Vec.",
+      "Use integer arithmetic only and multiply before dividing to avoid losing the fraction.",
+      "Decide what your function returns when the slice is empty and document that choice.",
+    ],
+    acceptanceCriteria: [
+      "The signature is exactly fn share_of_total(samples: &[StageSample]) -> Vec<(&'static str, u64)>.",
+      "For parse=180, serialize=620, lock_wait=40 the result is [(\"parse\", 21), (\"serialize\", 73), (\"lock_wait\", 4)].",
+      "Percentages are computed as micros * 100 / total using integer math with multiplication before division.",
+      "The empty-slice case is handled without dividing by zero (for example by returning an empty Vec).",
+    ],
+    hints: [
+      "180 * 100 / 840 truncates to 21; doing the divide first would collapse it to 0.",
+      "A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec.",
+    ],
+  },
+  {
+    number: 4,
+    kind: "implementation",
+    title: "Measure fixed per-crossing overhead",
+    objective: "Model the chapter's highest-leverage WASM/FFI experiment: subtract a noop call from a real call to isolate the per-crossing cost.",
+    starterPrompt: "The chapter says the single best experiment for a boundary is to compare a noop call against the real call; the difference is your fixed per-crossing overhead. Implement fn crossing_overhead(noop_ns: u64, real_ns: u64, calls: u64) -> (u64, u64) returning (per_call_overhead_ns, total_overhead_ns).",
+    prompts: [
+      "Define per-call overhead as real_ns saturating-subtract noop_ns so a noisy noop above the real call cannot underflow.",
+      "Compute total overhead as per-call overhead multiplied by calls.",
+      "Return both numbers as a (u64, u64) tuple in the documented order.",
+      "Explain, in one sentence in a comment, why a large per-crossing overhead argues for a batched API.",
+    ],
+    acceptanceCriteria: [
+      "The signature is exactly fn crossing_overhead(noop_ns: u64, real_ns: u64, calls: u64) -> (u64, u64).",
+      "For noop_ns=30, real_ns=110, calls=1_000_000 it returns (80, 80_000_000).",
+      "The subtraction uses saturating_sub (or an equivalent guard) so noop_ns greater than real_ns yields 0 rather than wrapping.",
+      "A comment states that high fixed overhead favors crossing once with a batch over tuning the callee.",
+    ],
+    hints: [
+      "u64 subtraction wraps on underflow in release builds unless you guard it; saturating_sub returns 0 instead.",
+      "The noop isolates the marshalling and call cost so the difference is the crossing, not the kernel.",
+    ],
+  },
+  {
+    number: 5,
+    kind: "debugging or refactoring",
+    title: "Fix a lock metric that hides contention",
+    objective: "Correct a measurement that conflates hold time with wait time, the two halves of lock cost the chapter insists on separating.",
+    starterPrompt: "A teammate reports a single lock_cost_us per lock and concludes a hot lock is fine because its number is small. The number is hold time only; wait time across blocked threads is never recorded. Refactor the metric so the two halves are measured separately.",
+    prompts: [
+      "Replace the single field with a struct carrying hold_us (time the guard is held doing work) and wait_us (time other threads spend blocked).",
+      "Write fn classify(hold_us: u64, wait_us: u64) -> &'static str returning \"contention\" when wait_us exceeds hold_us and \"hold\" otherwise.",
+      "Explain why a lock held briefly but acquired constantly shows low hold_us yet high wait_us.",
+      "Note which redesigns the chapter says to try before reaching for lock-free structures.",
+    ],
+    acceptanceCriteria: [
+      "Hold time and wait time are stored and reported as two separate fields rather than one combined number.",
+      "classify returns \"contention\" for (hold_us=5, wait_us=900) and \"hold\" for (hold_us=900, wait_us=5).",
+      "The explanation ties high wait_us with low hold_us to a frequently-acquired short critical section.",
+      "The answer names narrowing shared state, shortening critical sections, or giving a subsystem its own owner before going lock-free.",
+    ],
+    hints: [
+      "The two halves fail in opposite ways, so a single averaged number erases exactly the signal you need.",
+      "A hot lock is often an ownership problem hiding underneath, not only a synchronization one.",
+    ],
+  },
+  {
+    number: 6,
+    kind: "design or production scenario",
+    title: "Resolve the p99 regression argument",
+    objective: "Design a decompose-first profiling plan that settles a cross-team latency dispute before anyone rewrites code.",
+    starterPrompt: "After a release, p99 latency climbed and three engineers each point at a different signal: a CPU flame graph, growing queue depth, and slightly worse serialization timings. Write the plan that splits one slow request's wall time into its layers before any function is rewritten.",
+    prompts: [
+      "List the layers a slow request's wall time must be split into and the instrument that measures each.",
+      "State the order of operations: decompose into layers, find the widest, then confirm with a sampler or trace.",
+      "Describe one guard against blaming the first recognizable function (for example serialize sitting above an allocation and copy).",
+      "Define the one-question, one-build, one-recorded-workload discipline you will hold the team to.",
+    ],
+    acceptanceCriteria: [
+      "The plan enumerates CPU compute, queue wait, lock blocking, IO, serialization, and boundary-crossing overhead as the layers, each paired with a fitting instrument.",
+      "The sequence is decompose first, point at the widest layer, then confirm the call stack with a sampler or trace, not optimize-on-sight.",
+      "The plan warns that a wide serialize stack may really be the allocation and copy beneath it, and that an IO path's real cost is often queue time, not CPU samples.",
+      "The plan fixes scope to one bounded question, one release build with usable symbols, and one recorded representative workload.",
+    ],
+    hints: [
+      "The chapter's core move is decompose, then point at the widest layer; the widest stage is only the first suspect.",
+      "Release build, symbols good enough for stacks, representative input, one bounded question at a time.",
+    ],
+  },
+]
+
+const reviewQuestions = [
+  "Why does choosing a profiling instrument start from the question you need answered rather than from the tool you already have open?",
+  "What does the x-axis of a flame graph represent, and why is reading it as a timeline a mistake?",
+  "What is the tradeoff between sampling and instrumentation, and when does each one mislead you?",
+  "Why can a CPU profiler tell only part of the story for an async task that takes 200ms of wall time but almost no CPU?",
+  "What are the two halves of lock cost that must be measured separately, and how does each one fail differently?",
+]
+
+const workingLoop = [
+  "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
+  "Write the smallest version that compiles, then make it correct.",
+  "Check each acceptance criterion explicitly before moving on.",
+  "Name one tradeoff or failure mode your solution accepts.",
+]
+
+<RustPracticeCard
+  title={"Runnable lab · Decompose wall time, then name the dominant layer"}
+  filename="dominant_layer_lab.rs"
+  runKey="ch35_ex_dominant"
+  expectedOutput={"dominant = cpu\nwall us = 800\ndominant share = 51"}
+  helperText={"Mirror the chapter's pipeline decomposition: sum the per-layer micros into wall time, find the layer that owns the most time, and report its integer percentage share. Fill in the dominant-layer reduction where marked."}
+  initialCode={`#[derive(Debug)]
+struct PipelineStats {
+    cpu_us: u64,
+    io_wait_us: u64,
+    lock_wait_us: u64,
+    serialize_us: u64,
+}
+
+fn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {
+    [
+        ("cpu", stats.cpu_us),
+        ("io", stats.io_wait_us),
+        ("lock", stats.lock_wait_us),
+        ("serialize", stats.serialize_us),
+    ]
+}
+
+fn wall_time(stats: &PipelineStats) -> u64 {
+    layers(stats).iter().map(|(_, value)| value).sum()
+}
+
+fn dominant(stats: &PipelineStats) -> (&'static str, u64) {
+    // TODO: return the (name, micros) of the layer that owns the most time.
+    // Scan layers(stats) and pick the entry with the largest micros value.
+    ("none", 0)
+}
+
+fn main() {
+    let stats = PipelineStats {
+        cpu_us: 410,
+        io_wait_us: 120,
+        lock_wait_us: 90,
+        serialize_us: 180,
+    };
+
+    let wall = wall_time(&stats);
+    let (name, micros) = dominant(&stats);
+    let share = micros * 100 / wall;
+
+    println!("dominant = {}", name);
+    println!("wall us = {}", wall);
+    println!("dominant share = {}", share);
+}`}
+/>
+*/

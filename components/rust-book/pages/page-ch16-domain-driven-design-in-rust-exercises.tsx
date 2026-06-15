@@ -1,0 +1,271 @@
+"use client"
+
+// Chapter 16 · exercise workbook page (ch16-domain-driven-design-in-rust-exercises).
+// Exercise data consumed by the workbook PDF builder
+// (exports/extract_chapter_prose.py reads the const blocks and the
+// RustPracticeCard below). Not yet wired into app navigation; wiring
+// requires lockstep edits to types.ts / index.ts / index.tsx.
+// Intended component name: PageCh16DomainDrivenDesignInRustExercises
+
+export {}
+
+/*
+interface Exercise {
+  number: number
+  kind: string
+  title: string
+  objective: string
+  starterPrompt: string
+  prompts?: string[]
+  acceptanceCriteria: string[]
+  hints: string[]
+}
+
+const exercises: Exercise[] = [
+  {
+    number: 1,
+    kind: "warm-up comprehension",
+    title: "Place each building block inside the aggregate boundary",
+    objective: "Recall how entities, value objects, aggregate roots, and repositories nest in a Rust domain model.",
+    starterPrompt: "Using the chapter's order platform, classify OrderId, Quantity, MoneyCents, Sku, Order, and the repository seam as entity, value object, aggregate root, or repository, and state who owns whom.",
+    prompts: [
+      "Name which of the listed types are value objects and why they reject invalid state at construction.",
+      "Identify the aggregate root and explain what consistency boundary it guards.",
+      "State the single rule the chapter gives for which type the repository is allowed to load and save.",
+      "Explain why Order having an OrderId makes it an entity rather than a value object.",
+    ],
+    acceptanceCriteria: [
+      "Quantity, MoneyCents, and Sku are named as value objects and OrderId/CustomerId as identifiers, while Order is named as the aggregate root.",
+      "The answer states that the root owns the value objects and order lines inside its boundary.",
+      "The answer states that the repository loads and saves the whole aggregate through the root, not individual lines.",
+      "The distinction between entity (has identity) and value object (defined only by its value) is stated correctly.",
+    ],
+    hints: [
+      "The chapter describes the four pieces as nesting into one shape: value objects owned by the root, repository as the only door.",
+      "A type with an id field that two otherwise-identical instances would still differ by is an entity.",
+    ],
+  },
+  {
+    number: 2,
+    kind: "code reading",
+    title: "Trace the order state machine through submit and add_line",
+    objective: "Read the Order aggregate and predict how the Draft/Submitted state machine accepts or rejects operations.",
+    starterPrompt: "Read the ddd_order_aggregate listing and trace a sequence that adds two lines, calls submit, then calls add_line again. Predict every Result and the final total_cents.",
+    prompts: [
+      "State what submit returns when called on an order with no lines.",
+      "State what add_line returns after the order has moved to Submitted, and which DomainError variant it produces.",
+      "Compute total_cents for lines of (qty 2, 1500) and (qty 3, 400).",
+      "Explain why Quantity::new and Sku::new are checked before a line ever reaches add_line.",
+    ],
+    acceptanceCriteria: [
+      "submit on an empty order is identified as Err(DomainError::EmptyOrder).",
+      "add_line after submission is identified as Err(DomainError::CannotModifySubmittedOrder).",
+      "total_cents is computed as 4200.",
+      "The answer notes that value-object constructors reject local errors first, so add_line only ever receives valid Quantity and Sku values.",
+    ],
+    hints: [
+      "Draft permits add_line; Submitted rejects it. submit is the only transition.",
+      "total_cents folds qty.get() as u64 times unit_price.get() across the lines.",
+    ],
+  },
+  {
+    number: 3,
+    kind: "implementation",
+    title: "Add a Sku newtype with a validating constructor",
+    objective: "Encode a domain identifier as a newtype whose constructor refuses invalid values.",
+    starterPrompt: "Implement struct Sku(String) with fn new(value: &str) -> Result<Sku, DomainError> that rejects an empty or whitespace-only code, matching the chapter's primitive-obsession guidance.",
+    prompts: [
+      "Reject value when value.trim().is_empty() with the EmptySku error variant.",
+      "Store the owned String only after validation succeeds.",
+      "Add an as_str accessor that borrows the inner string without cloning.",
+      "Explain in one sentence what swapped-parameter bug the newtype prevents at call sites.",
+    ],
+    acceptanceCriteria: [
+      "Sku::new returns Err(DomainError::EmptySku) for \"\" and \"   \" and Ok for \"BOOK-1\".",
+      "The successful path constructs Sku(value.to_string()) only after the trim check passes.",
+      "The accessor returns &str borrowed from the inner field rather than a cloned String.",
+      "The explanation names that distinct newtypes stop a raw String customer code from being passed where a product Sku is expected.",
+    ],
+    hints: [
+      "The chapter's constructor returns Result and validates before constructing.",
+      "as_str can return &self.0 with the lifetime tied to &self.",
+    ],
+  },
+  {
+    number: 4,
+    kind: "implementation",
+    title: "Define a Repository trait and an in-memory implementation",
+    objective: "Express the repository seam as a trait and back it with a HashMap to keep persistence out of the domain.",
+    starterPrompt: "Define trait OrderRepository with save(&mut self, order: Order) and find(&self, id: OrderId) -> Option<&Order>, then implement it over a HashMap<OrderId, Order>.",
+    prompts: [
+      "Give the trait two methods: save that takes ownership of the aggregate and find that returns a borrowed Option.",
+      "Implement the trait for a struct wrapping HashMap<OrderId, Order>.",
+      "Store and look up entries keyed by the order's OrderId.",
+      "State why the domain code depends on the trait rather than on the concrete HashMap store.",
+    ],
+    acceptanceCriteria: [
+      "The trait declares save(&mut self, order: Order) and find(&self, id: OrderId) -> Option<&Order>.",
+      "The implementation inserts by order.id and returns self.map.get(&id) from find.",
+      "OrderId derives the Eq and Hash needed to be a HashMap key.",
+      "The answer states that depending on the trait lets infrastructure be swapped without touching aggregate logic.",
+    ],
+    hints: [
+      "find returning Option<&Order> avoids cloning the aggregate on every read.",
+      "The chapter keeps repositories as trait seams so the core never names a concrete database type.",
+    ],
+  },
+  {
+    number: 5,
+    kind: "debugging or refactoring",
+    title: "Move a leaked invariant back onto the aggregate",
+    objective: "Refactor an anaemic model whose invariant lives in a handler back into the aggregate method where it belongs.",
+    starterPrompt: "You are given an anaemic Order with public fields whose submit-when-empty check lives in an application handler. Refactor so the empty-order rule lives on Order::submit and the fields are private.",
+    prompts: [
+      "Identify the rule currently enforced outside the aggregate and the bug that occurs if a second caller forgets it.",
+      "Move the is_empty check into submit so it returns Err(DomainError::EmptyOrder).",
+      "Make the lines and status fields private so callers cannot mutate them directly.",
+      "Show that the handler now calls order.submit()? and contains no domain rule.",
+    ],
+    acceptanceCriteria: [
+      "The empty-order check is relocated from the handler into Order::submit.",
+      "lines and status are private and only changed through aggregate methods.",
+      "The refactored handler contains no business rule, only a call to submit and error propagation.",
+      "The answer explains that an anaemic model lets every caller re-implement (and forget) the invariant.",
+    ],
+    hints: [
+      "The chapter's rule: the rule stays on the model, not in a handler comment.",
+      "Private fields plus methods are how Rust gives behavior near state without inheritance.",
+    ],
+  },
+  {
+    number: 6,
+    kind: "design or production scenario",
+    title: "Choose between sync and async repositories for an event-sourced aggregate",
+    objective: "Decide on repository shapes and ownership for a persistence boundary that performs IO and may suspend.",
+    starterPrompt: "The Account aggregate is event-sourced and rehydrated by folding its event stream. Design the repository interface for loading and appending events when the store is a remote database accessed asynchronously.",
+    prompts: [
+      "Decide whether load should return a borrowed slice or owned Vec<AccountEvent>, and justify it against the IO/suspension rule.",
+      "Sketch the async trait method signatures for load_events and append_events.",
+      "Explain how rehydrate consumes the loaded events to rebuild current state and set version.",
+      "Describe one projection or migration cost the team accepts by choosing event sourcing.",
+    ],
+    acceptanceCriteria: [
+      "The design returns owned data (Vec<AccountEvent> or an owned projection) from the async load, citing that IO may suspend.",
+      "The async signatures take &self and return a Result over owned data rather than a borrow tied to the store.",
+      "The answer states that rehydrate applies each event in order and that version follows the applied stream length.",
+      "At least one accepted cost (projection rebuilds or event-schema migration) is named.",
+    ],
+    hints: [
+      "The production rule: if the repository method performs IO and may suspend, return owned data or an owned projection.",
+      "Rehydration is a fold; there is no stored balance to read, only events to replay.",
+    ],
+  },
+]
+
+const reviewQuestions = [
+  "Why does Rust enforce a domain model through types that refuse invalid values rather than through a base class or runtime framework?",
+  "When should an invalid state be encoded in a value-object type versus checked in an aggregate method?",
+  "What does primitive obsession cost a domain, and how do newtypes such as OrderId and Sku address it?",
+  "What does it mean to say a rich model in Rust puts behavior near state and invariants without inheritance?",
+  "In an event-sourced aggregate, how is current state derived from the event stream, and what does the version count track?",
+]
+
+const workingLoop = [
+  "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
+  "Write the smallest version that compiles, then make it correct.",
+  "Check each acceptance criterion explicitly before moving on.",
+  "Name one tradeoff or failure mode your solution accepts.",
+]
+
+<RustPracticeCard
+  title={"Runnable lab · aggregate invariants on an order"}
+  filename="order_aggregate_lab.rs"
+  runKey="ch16_ex_order_aggregate"
+  expectedOutput={"lines = 2\ntotal cents = 4200\nstate = submitted\nsubmit ok = true\nlocked after submit = true\nzero qty rejected = true"}
+  helperText={"Complete Order::submit so it refuses an empty order and otherwise moves to Submitted, and Order::total_cents so it folds quantity times unit price across the lines. The Quantity value object already rejects zero at construction."}
+  initialCode={`#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Quantity(u32);
+
+impl Quantity {
+    fn new(value: u32) -> Result<Self, DomainError> {
+        if value == 0 {
+            return Err(DomainError::InvalidQuantity);
+        }
+        Ok(Self(value))
+    }
+
+    fn get(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+enum DomainError {
+    InvalidQuantity,
+    EmptyOrder,
+    CannotModifySubmittedOrder,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OrderStatus {
+    Draft,
+    Submitted,
+}
+
+#[derive(Debug)]
+struct Order {
+    status: OrderStatus,
+    lines: Vec<(Quantity, u64)>,
+}
+
+impl Order {
+    fn new() -> Self {
+        Self { status: OrderStatus::Draft, lines: Vec::new() }
+    }
+
+    fn add_line(&mut self, qty: Quantity, unit_price_cents: u64) -> Result<(), DomainError> {
+        if self.status == OrderStatus::Submitted {
+            return Err(DomainError::CannotModifySubmittedOrder);
+        }
+        self.lines.push((qty, unit_price_cents));
+        Ok(())
+    }
+
+    fn submit(&mut self) -> Result<(), DomainError> {
+        // TODO: reject an empty order with DomainError::EmptyOrder,
+        // otherwise move the status to Submitted and return Ok(()).
+        self.status = OrderStatus::Submitted;
+        Ok(())
+    }
+
+    fn total_cents(&self) -> u64 {
+        // TODO: sum qty.get() as u64 * unit_price_cents over every line.
+        0
+    }
+
+    fn status(&self) -> &'static str {
+        match self.status {
+            OrderStatus::Draft => "draft",
+            OrderStatus::Submitted => "submitted",
+        }
+    }
+}
+
+fn main() {
+    let mut order = Order::new();
+    order.add_line(Quantity::new(2).unwrap(), 1500).unwrap();
+    order.add_line(Quantity::new(3).unwrap(), 400).unwrap();
+
+    let submitted = order.submit().is_ok();
+    let blocked = order.add_line(Quantity::new(1).unwrap(), 100).is_err();
+    let zero_qty = Quantity::new(0).is_err();
+
+    println!("lines = {}", order.lines.len());
+    println!("total cents = {}", order.total_cents());
+    println!("state = {}", order.status());
+    println!("submit ok = {}", submitted);
+    println!("locked after submit = {}", blocked);
+    println!("zero qty rejected = {}", zero_qty);
+}`}
+/>
+*/

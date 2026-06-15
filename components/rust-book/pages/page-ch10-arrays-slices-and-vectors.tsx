@@ -6,6 +6,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -27,15 +28,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "`[T; N]` is closest to `std::array<T, N>`, `&[T]` is conceptually like `std::span<T>`, and `Vec<T>` is much like `std::vector<T>`. The big Rust difference is that borrow lifetimes and structural mutation rules stay visible in ordinary APIs.",
+    body: "The shapes map almost one to one: array to std::array, slice to std::span, vector to std::vector. The shift is that borrow lifetimes and resize rules become compiler-checked instead of team discipline, so a slice held across a push is a build error, not a dangling-pointer bug found in production.",
   },
   {
     title: "C# background",
-    body: "Rust arrays and slices overlap with `T[]` and `Span<T>` in spirit, but ownership stays explicit. `Vec<T>` is not a GC-backed list. It is an owned buffer with allocation and growth costs you should reason about directly.",
+    body: "A vector is not a GC-backed List. It is an owned heap buffer you allocate, grow, and drop deterministically. The new question is who owns the buffer right now, and whether a function needs that ownership or only a Span-like view over it.",
   },
   {
     title: "Go background",
-    body: "Rust slices are also views into contiguous storage, but the ownership boundary is sharper. A `Vec<T>` is the owner, and algorithms that only need a view should usually say so with `&[T]` rather than forcing callers to hand over a growable vector.",
+    body: "Rust slices are also pointer-and-length views into contiguous storage, but there is no hidden append-reallocates-or-aliases surprise. Ownership is explicit: the vector owns the buffer, a slice only borrows it, and the borrow checker forbids reading a slice whose backing buffer just moved.",
+  },
+  {
+    title: "Python background",
+    body: "A list mixes growth, dynamic typing, and reference semantics. Rust splits those apart: the element type is fixed and contiguous, the vector owns its buffer by value, and passing a slice copies no data and shares no ownership the way passing a list reference does.",
   },
 ]
 
@@ -196,12 +201,14 @@ export function PageCh10ArraysSlicesAndVectors() {
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
-            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-              <li>Is the length part of the invariant, or only a runtime fact?</li>
-              <li>Does the algorithm need ownership, or only a contiguous borrowed view?</li>
-              <li>If ownership is required, will the buffer grow enough that capacity planning matters?</li>
-              <li>If tiny hot collections dominate, do the measurements justify an inline-first representation?</li>
-            </ol>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the diagram top to bottom: each question narrows the choice to one storage shape before you write a
+              single line. The same four questions drive every example in this chapter.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q1{Is length part of the type invariant?} -->|yes| Arr["Array  T;N"]\n  Q1 -->|no| Q2{Need ownership or just a view?}\n  Q2 -->|view only| Slice["Slice  and T"]\n  Q2 -->|own it| Q3{Will it grow at runtime?}\n  Q3 -->|yes| Vec["Vec T"]\n  Q3 -->|no, fixed runtime size| Box["Boxed slice  Box T"]\n  Vec --> Q4{Tiny and hot, proven by profiling?}\n  Q4 -->|yes| Inline["Inline-first small buffer"]\n  Q4 -->|no| Keep["Plain Vec T is the default"]`}
+              caption="Length in the type means an array; a borrowed view means a slice; runtime ownership means a vector, with inline-first reserved for profiled hot paths."
+            />
           </div>
         </section>
 
@@ -289,14 +296,23 @@ export function PageCh10ArraysSlicesAndVectors() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;T&gt;</code> internals
+              How a <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;T&gt;</code> is laid out in memory
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The thing to notice is that the vector value itself is tiny and lives wherever you put it (stack, struct,
+              another vector). It is three words: a pointer, a length, and a capacity. The elements live somewhere else,
+              in one contiguous heap allocation that the vector owns.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart LR\n  subgraph Owner[Vec value - 3 words]\n    P[ptr]\n    L[len = 3]\n    C[cap = 4]\n  end\n  P --> E0\n  subgraph Heap[Heap buffer - capacity 4]\n    E0[elem 0]\n    E1[elem 1]\n    E2[elem 2]\n    E3[spare slot]\n  end\n  Slice[and T view] -. ptr + len .-> E0`}
+              caption="The owner is three words; the elements sit in one heap allocation. len marks how many are live, cap marks how many fit, and a slice is just a borrowed pointer-and-length into the same buffer."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
-                  A vector is a small owner value that manages a heap buffer plus two counters: length and capacity. The
-                  elements live contiguously in the owned buffer. Moving the vector value moves ownership of the buffer; it
-                  does not itself imply moving all elements at that moment.
+                  Because the owner is so small, moving the vector value moves only those three words. Ownership of the
+                  buffer transfers, but the elements are not copied or re-touched at the move. This is why returning a
+                  vector from a function is cheap even when it holds millions of elements.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
@@ -405,16 +421,25 @@ export function PageCh10ArraysSlicesAndVectors() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            The three shapes have close analogues in most languages, so the syntax is rarely the hard part. The mental
+            shift is that ownership and resize rules are now part of the type system, which changes how you read an API
+            signature and which mistakes the compiler catches for you.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -484,6 +509,14 @@ export function PageCh10ArraysSlicesAndVectors() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: three different owners all reach the same function through one <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&amp;[u64]</code> parameter.
+              The array, the vector borrow, and a sub-slice converge to the same borrowed view, so no caller is forced to allocate or give up ownership.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A["fixed: array u64;4"] -->|and fixed| S["and u64 slice"]\n  V["dynamic: Vec u64"] -->|and dynamic| S\n  Sub["any sub-slice"] -->|and v 1..3| S\n  S --> F["tail_sum reads contiguous view"]\n  F --> R["u64 result"]`}
+              caption="One slice parameter accepts an array, a vector borrow, or a sub-slice; the function never learns or cares which owner it came from."
+            />
             <RustCodeEditor
               code={codes.arrays_slices_vectors_slice_api}
               onChange={(newCode) => updateCode("arrays_slices_vectors_slice_api", newCode)}
@@ -539,6 +572,14 @@ export function PageCh10ArraysSlicesAndVectors() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the capacity is reserved once from a real bound (the result can never be longer than the
+              input), and then the loop only filters and pushes. The diagram is the pipeline; the listing fills in the arithmetic.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  In["ids: and u32 slice"] --> Cap["Vec::with_capacity(ids.len())"]\n  Cap --> Loop{for each id}\n  Loop -->|id is even| Push["push id * 10"]\n  Loop -->|id is odd| Skip["skip"]\n  Push --> Loop\n  Skip --> Loop\n  Loop -->|done| Out["return owned Vec u32"]`}
+              caption="Reserve once from a bound that cannot be exceeded, then filter-and-push without further reallocation; the helper hands back an owned vector the caller keeps."
+            />
             <RustCodeEditor
               code={codes.arrays_slices_vectors_capacity}
               onChange={(newCode) => updateCode("arrays_slices_vectors_capacity", newCode)}
@@ -605,7 +646,7 @@ export function PageCh10ArraysSlicesAndVectors() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>Use arrays when size is part of the invariant, slices when the algorithm needs a view, and vectors when the code needs owned growth.</li>
-            <li>`Vec<T>` is an owner of contiguous storage with separate logical length and allocation capacity.</li>
+            <li>A <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;T&gt;</code> is an owner of contiguous storage with separate logical length and allocation capacity.</li>
             <li>Slice-first APIs are usually the most flexible and honest public contract for contiguous read or write algorithms.</li>
             <li>Preallocation helps when the bound is real. Exact growth strategy is not something production code should assume.</li>
             <li>Contiguous storage buys locality for scans and batch work, but middle insertions, stable-address needs, and inline-first tricks all carry tradeoffs.</li>
@@ -615,382 +656,3 @@ export function PageCh10ArraysSlicesAndVectors() {
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch10-arrays-slices-and-vectors-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose array, slice, vector, or inline-first storage from the workload",
-    objective: "Practice selecting the right contiguous-storage tool from semantics rather than habit.",
-    starterPrompt:
-      "Choose a representation for each case: a 16-byte protocol header, a read-only checksum helper, a dynamically accumulated retry batch, and a tiny hot list of usually three tags.",
-    prompts: [
-      "Which case has compile-time fixed length as part of the invariant?",
-      "Which case only needs a borrowed view?",
-      "Which case truly needs owned growth?",
-      "Which case might justify an inline-first representation only after profiling?",
-    ],
-    acceptanceCriteria: [
-      "You choose `[T; N]` for the semantically fixed-size case.",
-      "You choose `&[T]` or `&mut [T]` for the borrowed-algorithm case.",
-      "You choose `Vec<T>` for the owned growable batch.",
-      "You treat inline-first storage as conditional on measurement rather than as a default style choice.",
-    ],
-    hints: [
-      "Start with ownership and size invariants before talking about performance.",
-      "A good answer separates API shape from storage shape.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Read `len` and `capacity` operationally",
-    objective: "Explain what a vector knows now versus what it can hold before another allocation may be needed.",
-    starterPrompt:
-      "Review a small helper that builds a `Vec<u64>` with `with_capacity(1024)`, pushes 600 items, and logs both `len()` and `capacity()`.",
-    prompts: [
-      "What does `len()` tell you exactly?",
-      "What does `capacity()` tell you exactly?",
-      "Why is `capacity() == 1024` not a portable design assumption for every vector in the system?",
-    ],
-    acceptanceCriteria: [
-      "You explain `len()` as the count of logically present initialized elements.",
-      "You explain `capacity()` as allocation budget before the next growth step may be needed.",
-      "You explicitly reject using an exact growth factor or exact capacity folklore as a correctness assumption.",
-    ],
-    hints: [
-      "One number is occupancy. The other is allocation slack.",
-      "The language contract is not 'trust whatever a blog post said about growth factors.'",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Write the function over slices, not vectors",
-    objective: "Design an algorithm around a borrowed contiguous view so callers keep control over storage.",
-    starterPrompt:
-      "Implement `fn window_sum(values: &[u32]) -> u32` so it sums the provided window and works for both an array subslice and a vector subslice.",
-    prompts: [
-      "Keep the parameter type exactly as `&[u32]`.",
-      "Do not allocate a new vector just to sum.",
-      "Use either iterator-style code or a small explicit loop.",
-    ],
-    acceptanceCriteria: [
-      "The function signature stays `fn window_sum(values: &[u32]) -> u32`.",
-      "The function returns `54` for `&fixed[2..5]` and `18` for `&dynamic[..3]` in the lab.",
-      "The implementation does not require ownership of a `Vec<u32>`.",
-    ],
-    hints: [
-      "The whole point is that callers may have arrays, vectors, or subslices and the function should not care.",
-      "A reduction over a slice is usually one line in Rust.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Benchmark preallocation versus push-only growth honestly",
-    objective: "Measure whether capacity planning changes your workload enough to matter.",
-    starterPrompt:
-      "Build a small benchmark harness that pushes the same number of elements into two vectors: one created with `Vec::new()` and one created with `Vec::with_capacity(n)`.",
-    prompts: [
-      "Run the same workload many times in release mode.",
-      "Keep the pushed element type and loop shape identical between the two variants.",
-      "Record at least wall-clock timing and final capacity for both runs.",
-    ],
-    acceptanceCriteria: [
-      "Your harness compares the same workload under two allocation strategies.",
-      "You run it under conditions that reduce obvious noise, such as repeated iterations and release settings.",
-      "You report observations rather than assuming preallocation always matters equally.",
-      "You call out one tradeoff: simpler code, allocation count, or realistic workload fidelity.",
-    ],
-    hints: [
-      "A benchmark is only useful if the workload is actually comparable.",
-      "Do not confuse a toy microbenchmark with a production decision, but do use it to validate intuition.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Repair a structural-mutation bug without changing the API lie",
-    objective: "Fix code that keeps a borrowed slice alive while reshaping the underlying vector.",
-    starterPrompt:
-      "A helper takes `let hot = &buffer[..4];`, then `buffer.push(99);`, then still reads from `hot`. Refactor the flow without pretending the original borrow should survive structural mutation.",
-    prompts: [
-      "Can the borrowed work happen earlier?",
-      "Should the code copy a tiny fixed header into an array before the push if it truly needs that data later?",
-      "Would two phases make the buffer and borrow lifetime easier to review?",
-    ],
-    acceptanceCriteria: [
-      "Your repair ends the active borrow before structural mutation, or copies the tiny truly-needed subset into independent storage deliberately.",
-      "You explain the failure in terms of borrowing a view into storage that may change, not in terms of compiler stubbornness.",
-      "You do not keep the old slice alive across the vector growth path.",
-    ],
-    hints: [
-      "A slice is a view into existing storage, not a durable reservation of future layout.",
-      "If later code really needs a tiny fixed piece, a small copied array may be the honest repair.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose the right contiguous-storage design for three real workloads",
-    objective: "Make explicit tradeoffs among fixed shape, borrowed view, owned growth, inline-first storage, and locality.",
-    starterPrompt:
-      "You are designing three subsystems: a packet parser with fixed headers, a metrics engine that scans rolling numeric windows, and a request pipeline that accumulates retryable jobs.",
-    prompts: [
-      "Which subsystem wants arrays because the bound is semantically fixed?",
-      "Which subsystem wants slice-first APIs because the caller already owns the data?",
-      "Which subsystem wants owned vectors and where does preallocation make sense?",
-      "Would any subsystem justify an inline-first representation, and what measurement would have to prove it first?",
-    ],
-    acceptanceCriteria: [
-      "You name one concrete representation for each subsystem and justify it with workload shape.",
-      "You discuss locality or contiguous scans for at least one subsystem.",
-      "You justify at least one preallocation decision with a real upper bound rather than a guess.",
-      "You keep inline-first storage as a measured optimization rather than a stylistic preference.",
-    ],
-    hints: [
-      "Do not answer only with type names. Explain the operational reason each choice fits.",
-      "A strong answer mentions shape, ownership, mutation, and locality together.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "When is `[T; N]` the right type rather than `Vec<T>`?",
-  "Why is `&[T]` usually a better function parameter than `&Vec<T>`?",
-  "What is the practical difference between `len()` and `capacity()`?",
-  "Why should production code avoid depending on a specific vector growth factor?",
-  "What workload characteristics make contiguous storage especially attractive?",
-]
-
-const workingLoop = [
-  "State whether the algorithm needs fixed shape, borrowed access, or owned growth.",
-  "Write the narrowest honest API shape first, usually `&[T]` or `&mut [T]` for pure algorithms.",
-  "If allocation behavior matters, decide whether you have a real upper bound before reaching for preallocation.",
-  "If a fancy representation appears, name the measured problem it solves before keeping it.",
-]
-
-export function PageCh10ArraysSlicesAndVectorsExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 19
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 10 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice the contiguous-storage decisions that shape serious Rust code: fixed arrays, slice-first APIs, vector
-          capacity planning, and workload-driven representation choices.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an API and representation review. The right answer is not “always use slices” or
-                “always preallocate.” The right answer is the narrowest honest shape for the workload plus a clear story
-                about ownership, locality, and allocation.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(18)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 10
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Storage drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Slice-first implementation"
-          description={
-            <>
-              Implement{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">window_sum</code> over a slice so the
-              same function works for an array window and a vector window. The checker expects the exact signature{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">fn window_sum(values: &[u32]) -&gt; u32</code>.
-            </>
-          }
-          filename="window_sum_lab.rs"
-          runKey="ch10_ex_window_sum"
-          expectedOutput={"fixed = 54\ndynamic = 18"}
-          helperText={
-            <>
-              Tip: keep the parameter as a slice and sum what you were handed. The caller already decided whether the
-              backing storage is an array, a vector, or a subslice of either.
-            </>
-          }
-          initialCode={`fn window_sum(values: &[u32]) -> u32 {\n    values[0]\n}\n\nfn main() {\n    let fixed = [4_u32, 8, 15, 16, 23, 42];\n    let dynamic = vec![3_u32, 6, 9, 12];\n\n    println!("fixed = {}", window_sum(&fixed[2..5]));\n    println!("dynamic = {}", window_sum(&dynamic[..3]));\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to choose among arrays, slices, vectors, and inline-first storage
-            from workload shape, write slice-first functions without narrowing callers unnecessarily, and discuss vector
-            capacity planning with concrete operational language instead of folklore.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch10_arrays_slices_and_vectors/slice_first_api.rs`
-````
-fn tail_sum(values: &[u64], take: usize) -> u64 {
-    let start = values.len().saturating_sub(take);
-    values[start..].iter().copied().sum()
-}
-
-fn main() {
-    let fixed = [3_u64, 5, 8, 13];
-    let dynamic = vec![1_u64, 2, 3, 4, 5, 6];
-
-    println!("fixed tail = {}", tail_sum(&fixed, 2));
-    println!("dynamic tail = {}", tail_sum(&dynamic, 3));
-}
-````
-
-### File: `examples/ch10_arrays_slices_and_vectors/vec_capacity_and_growth.rs`
-````
-fn collect_even_scaled(ids: &[u32]) -> Vec<u32> {
-    let mut out = Vec::with_capacity(ids.len());
-
-    for &id in ids {
-        if id % 2 == 0 {
-            out.push(id * 10);
-        }
-    }
-
-    out
-}
-
-fn main() {
-    let ids = [10_u32, 11, 12, 13, 14];
-    let mut out = collect_even_scaled(&ids);
-
-    println!("len = {}", out.len());
-    println!("can fit two more = {}", out.len() + 2 <= out.capacity());
-
-    out.extend([200, 220]);
-    println!("last = {}", out.last().copied().unwrap());
-}
-````

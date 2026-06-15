@@ -1,0 +1,215 @@
+{
+ "chapterKey": "ch51",
+ "num": 51,
+ "title": "Zero-Knowledge Proofs for Rust Engineers",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Separate public inputs, private witnesses, and proofs",
+   "objective": "Practice saying which data the verifier may know, which data must stay private, and which artifact is only the proof.",
+   "starterPrompt": "Classify one proof-backed billing flow with a public credit limit, a public committed digest, private line items, and one proof sent to a verifier API.",
+   "prompts": [
+    "Which fields are public inputs the verifier is expected to see?",
+    "Which fields are witness-only and should never cross the verification boundary?",
+    "Which artifact is the proof, and which artifacts are proving or verification keys?",
+    "Which fields would still be safe to log at the verifier boundary, and which would not?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish public statement data from witness data clearly.",
+    "You name the proof as a separate artifact instead of treating it like the witness itself.",
+    "You identify at least one logging or transport consequence of that separation."
+   ],
+   "hints": [
+    "Ask what the verifier is supposed to learn by design.",
+    "If the verifier sees raw private inputs, the system may still be correct but it is no longer zero-knowledge in the intended sense."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Refactor an API workflow so proving and verification are isolated",
+   "objective": "Read one service path and explain why the prover boundary should not look like the verifier boundary.",
+   "starterPrompt": "A request handler currently derives the witness, generates the proof inline, verifies it again locally, and stores both proof and witness in the same outbound record.",
+   "prompts": [
+    "Which steps belong in a proving worker or background lane rather than in the request handler?",
+    "Which boundary should receive only statement plus proof artifact?",
+    "Which artifact custody mistake makes private witness data too easy to leak or over-retain?",
+    "What metric would tell you the inline proving path is already hurting the API edge?"
+   ],
+   "acceptanceCriteria": [
+    "You move at least one heavy step out of the request handler.",
+    "You separate verifier input from witness input explicitly.",
+    "You identify one privacy or retention problem in the original workflow.",
+    "You mention at least one latency or queue signal that the repaired design should expose."
+   ],
+   "hints": [
+    "The verifier should not need the witness.",
+    "The fact that the server can verify locally does not mean the same process should always do both jobs inline."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Define typed proving and verification requests",
+   "objective": "Design Rust types that force the prover and verifier boundaries to stay honest.",
+   "starterPrompt": "Create one `ProofRequest`, one `VerificationRequest`, and one `ProofArtifact` shape for a service that proves a public total is below a public limit without revealing the hidden addends.",
+   "prompts": [
+    "Keep witness fields only in the proving request.",
+    "Keep verifier-facing types free of witness material.",
+    "Carry a circuit ID or protocol version explicitly.",
+    "Add one place for public statement fields such as total and limit."
+   ],
+   "acceptanceCriteria": [
+    "The proving and verification structs are distinct.",
+    "The verification path does not require witness-only fields.",
+    "You include one version or circuit-identity field.",
+    "The design is small enough that another engineer could review it quickly."
+   ],
+   "hints": [
+    "If one struct is doing every job, the boundary is probably too wide.",
+    "Versioning belongs on artifacts and requests early, not only after the first migration pain."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair transcript and serialization bugs before proofs go cross-service",
+   "objective": "Fix the integration mistakes that let a prover and verifier disagree even though both local components 'work.'",
+   "starterPrompt": "One service serializes public inputs through a map with unstable key order, another service changed the transcript domain string during a refactor, and verification now fails intermittently across deployments.",
+   "prompts": [
+    "Which part of the system needs canonical ordering or stable field layout?",
+    "Why is a changed transcript domain string a protocol break rather than a cosmetic edit?",
+    "Which CI or contract test should fail before rollout next time?",
+    "What artifact should carry the protocol or circuit version explicitly?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one canonical serialization repair and one domain-separation repair.",
+    "You explain why the issue is a protocol-compatibility bug rather than only a runtime bug.",
+    "You propose at least one drift-prevention check in CI or contract tests."
+   ],
+   "hints": [
+    "A prover and verifier that hash the same fields in different order are not interoperable.",
+    "Domain strings are part of the transcript contract, not a free rename surface."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Threat-model a proof-backed API or game mechanic",
+   "objective": "Make privacy, integrity, denial-of-service, and operator risks explicit before the system ships.",
+   "starterPrompt": "Design a threat model for one proof-backed API or game mechanic where clients submit proofs to unlock rewards or verify hidden state transitions.",
+   "prompts": [
+    "What must remain private, and what can still leak through public inputs or metadata?",
+    "Which attack path is resource exhaustion: giant artifacts, repeated invalid proofs, or expensive witness requests?",
+    "Which trust assumption would you call out explicitly: setup artifacts, circuit correctness, key distribution, or transcript policy?",
+    "What telemetry would let operators see an attack or misconfiguration early?"
+   ],
+   "acceptanceCriteria": [
+    "You describe at least one privacy risk, one integrity risk, and one denial-of-service risk.",
+    "You separate cryptographic assumptions from Rust implementation or deployment assumptions.",
+    "You mention at least two observability hooks such as verification failure rate, artifact size, or proving queue age."
+   ],
+   "hints": [
+    "A proof-backed design can still leak metadata or fall over under load.",
+    "Threat models are strongest when they include both adversarial and operator-failure cases."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Plan witness generation, artifact custody, and hardware lanes for a proof workflow",
+   "objective": "Turn one abstract proving story into an operable Rust system with explicit artifacts and specialized execution boundaries.",
+   "starterPrompt": "You are integrating a proof workflow that may involve an external circuit DSL or ML proof toolchain, witness files, proving parameters, GPU acceleration, and a lightweight verifier service.",
+   "prompts": [
+    "Where does circuit or model compilation end and witness generation begin?",
+    "Which artifacts should be cached, versioned, or content-addressed: circuit ID, proving key, verification key, witness schema, proof blob?",
+    "Which stage might justify GPU acceleration, and how would you isolate that boundary from the API edge?",
+    "Which rollout or testing rule would you require before several teams depend on the verifier output?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish compiled circuit or model artifacts from witness generation and proof artifacts.",
+    "You name at least three explicit artifacts and one versioning or custody rule.",
+    "You isolate the heavy proving lane from the lightweight verifier lane.",
+    "You mention at least one testing or rollout gate for mixed deployments."
+   ],
+   "hints": [
+    "This is where external ecosystems such as ZoKrates or EZKL still need ordinary systems design.",
+    "A good answer makes artifact ownership boring enough that operations and incident response stay possible."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why should witness generation and verification usually live at different service boundaries?",
+  "What makes transcript domain separation a protocol rule instead of one local implementation detail?",
+  "Why is a proof artifact not the same thing as a witness or proving key?",
+  "What does zero knowledge fail to protect if public inputs or metadata are already too revealing?",
+  "Why should large proof systems still be reviewed for ordinary Rust concerns such as queues, logging, unsafe wrappers, and resource limits?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Keep verification separate from the witness",
+  "filename": "proof_boundary_lab.rs",
+  "runKey": "ch51_ex_proof_boundary",
+  "expectedOutput": "verified = true\npublic total = 45\nproof bytes = 96",
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Statement {\n    public_total: u64,\n    public_limit: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct Witness {\n    left: u64,\n    right: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofArtifact {\n    public_total: u64,\n    public_limit: u64,\n    proof_bytes_len: usize,\n}\n\nfn prove(statement: Statement, witness: Witness) -> Result<ProofArtifact, &'static str> {\n    if witness.left + witness.right != statement.public_total {\n        return Err(\"sum constraint failed\");\n    }\n\n    if statement.public_total > statement.public_limit {\n        return Err(\"limit violated\");\n    }\n\n    Ok(ProofArtifact {\n        public_total: statement.public_total,\n        public_limit: statement.public_limit,\n        proof_bytes_len: 96,\n    })\n}\n\nfn verify(_statement: Statement, _proof: ProofArtifact) -> bool {\n    false\n}\n\nfn main() {\n    let statement = Statement {\n        public_total: 45,\n        public_limit: 50,\n    };\n    let witness = Witness { left: 20, right: 25 };\n    let proof = prove(statement, witness).unwrap();\n\n    println!(\"verified = {}\", verify(statement, proof));\n    println!(\"public total = {}\", statement.public_total);\n    println!(\"proof bytes = {}\", proof.proof_bytes_len);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 37, 38, and 43",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "The seven things a proof system actually traffics in",
+  "What zero knowledge does and does not guarantee",
+  "SNARKs, STARKs, commitments, hashes, and circuits at a pragmatic level",
+  "Encoding computations as constraints",
+  "Rust integration patterns for proof generation and verification boundaries",
+  "Serialization, transcript handling, deterministic inputs, and domain separation",
+  "Performance, memory, and hardware considerations",
+  "Security review checklist and production caveats",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: keep statement, witness, and proof artifact separate",
+  "Example 2: domain-separated transcripts and deterministic public inputs",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A zero-knowledge proof lets one party convince another that a statement is true without revealing why it is true. For a Rust engineer the cryptography is rarely the hard part to ship. The hard part is the systems shape: a public statement, private witness custody, versioned artif",
+  "Chapter 19 established canonical serialization and transport DTO discipline. Chapter 37 covered heavy accelerator lanes and their integration costs. Chapter 38 covered commitments, Merkle trees, and proof artifacts. Chapter 43 covered observability for specialized worker boundari",
+  "Picture a service that has to vouch for a number it is not allowed to disclose. A lender wants to confirm that a customer’s committed order total stays under their published credit limit without seeing the line items. A risk team wants to prove a score was computed from an approv",
+  "The pipeline below is the spine of the whole chapter. Read it left to right and notice where the boundary flips: everything up to and including the prover holds the secret witness, and from the proof artifact onward only public data crosses. That single handoff is what every desi",
+  "Before any crate names or APIs, three ideas reorganize how you reason about this topic. Each one is a place where the obvious intuition from ordinary backend work quietly leads you wrong, and each one shows up later as a concrete type or service boundary.",
+  "When people say \"the ZK part\" they usually mean a tangle of seven distinct objects. The reason integrations rot is that teams keep them implicit and let two of them merge. The fastest way to stay sane is to give each one a name and a home in your type system, exactly as you would",
+  "It is worth being blunt about the boundaries of the guarantee, because \"zero knowledge\" sounds like it solves more than it does. The math protects one thing well: a verifier can be convinced of a statement without learning the witness, provided the proving system is sound and the",
+  "You do not need to derive these systems to integrate them well, but you do need a working sense of the tradeoffs they push onto your service. The choice between a SNARK and a STARK is rarely about elegance; it shows up in your design as proof size on the wire, verifier cost, and ",
+  "Engineers coming from C++, C#, or Go usually expect the cost model of the original function to carry over. It does not. A simple sum is cheap in constraints because it maps almost directly onto field arithmetic. Range checks, hashes, Merkle paths, and non-native field arithmetic ",
+  "Look at the small example below before reading the listing. It proves that two private amounts sum to a public total, stay under a limit, and match a public commitment. Watch the right-hand column of the diagram: the addition stays cheap, but the innocent-looking total <= limit a",
+  "The other two rows look just as innocent in source, but each expands into a gadget that dominates the same total cost:",
+  "The subtlety is intentional. Inequality and hashing are written as a single line each, but neither is one cheap primitive inside most proving systems. They expand into gadgets with real prover and verifier cost, which is exactly why estimating circuit size from the source listing",
+  "The single most important architectural decision is to stop treating proving and verifying as two ends of one function. They want to live on different machines, scale on different curves, and fail in different ways. The diagram shows the topology that keeps working whether the un",
+  "The load-bearing design rule is simple: proving and verification are different service shapes. The prover should own witness generation and heavy compute. The verifier should own public inputs and a small proof check. That split stays valuable even if the underlying ecosystem is ",
+  "Most non-cryptographic proof failures trace back to this section. Prover and verifier must agree, byte for byte, on what was hashed and in what order, and they must derive their challenges from the same transcript. A transcript is just the running record of public values and mess",
+  "Teams new to this work tend to budget for the prover and forget everything around it. In practice the cost is spread across the pipeline, and the surprise is usually that witness preparation, not the prover itself, is the first thing to fall over. Read these four notes as a profi",
+  "A proof-backed system has two review surfaces that are easy to confuse, and confusing them is how sound cryptography still ships an insecure service. One surface is the cryptography: soundness, the trusted-setup or transparency story, circuit correctness, transcript construction.",
+  "The cryptography is the same regardless of where you came from, but the instinct that misleads you is not. Each of these backgrounds brings one habit that helps here and one that quietly works against you. Read the card for your starting language as a mental-model adjustment, not",
+  "None of these patterns are exotic. They are the same separation-of-concerns and versioning discipline you would apply to any pipeline that crosses a trust boundary, applied here to the specific artifacts a proof system produces. The thread running through all of them is to keep t",
+  "Each of these is a real way teams have shipped a proof-backed system that looked correct and was not. They cluster around two illusions: that a proof equals privacy, and that a passing verification equals a correct circuit. Hold both of those suspect.",
+  "The biggest production mistake is often not “the prover was slow.” It is that the team never made witness generation, transcript policy, proving artifacts, and verifier integration reviewable as separate things.",
+  "The runnable examples model proof boundaries and transcript discipline without depending on one specific proving crate. They are intentionally about systems shape rather than real cryptography, so a browser demo cannot mislead you into thinking it produced a sound proof. What the",
+  "Before you read the code, fix the one rule it enforces in your head: the witness never appears in any type the verifier touches. Follow the data in the diagram below. The witness flows only into the prover; the verifier is handed a statement and a proof and nothing else. If you e",
+  "Public values belong in the verifier-facing boundary and can be logged or routed more broadly.",
+  "Private inputs stay proving-side only. If they appear in your verification DTOs, the design already drifted.",
+  "The proof is its own typed artifact. Treat it like versioned transport data, not like a hidden field on a witness struct.",
+  "The transcript here is intentionally simple and not cryptographic. The behavior to watch is the branching shown below: the same public inputs under the same domain string must converge on one challenge, while a different domain must land on a different one. The first property giv",
+  "The same public inputs and same domain should yield the same verifier-visible transcript state.",
+  "Different protocol domains should not accidentally share challenge space or artifact interpretation.",
+  "Public input ordering and transcript rules are protocol compatibility decisions between prover and verifier."
+ ],
+ "codeSamples": {
+  "zkp_statement_witness_proof": "#[derive(Debug, Clone, Copy)]\nstruct Statement {\n    public_total: u64,\n    public_limit: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct Witness {\n    left: u64,\n    right: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofArtifact {\n    public_total: u64,\n    public_limit: u64,\n    proof_bytes_len: usize,\n}\n\nfn prove(statement: Statement, witness: Witness) -> Result<ProofArtifact, &'static str> {\n    if witness.left + witness.right != statement.public_total {\n        return Err(\"sum constraint failed\");\n    }\n\n    if statement.public_total > statement.public_limit {\n        return Err(\"public statement not admissible\");\n    }\n\n    Ok(ProofArtifact {\n        public_total: statement.public_total,\n        public_limit: statement.public_limit,\n        proof_bytes_len: 96,\n    })\n}\n\nfn verify(statement: Statement, proof: ProofArtifact) -> bool {\n    statement.public_total == proof.public_total\n        && statement.public_limit == proof.public_limit\n        && proof.proof_bytes_len > 0\n}\n\nfn main() {\n    let statement = Statement {\n        public_total: 45,\n        public_limit: 50,\n    };\n    let witness = Witness { left: 20, right: 25 };\n    let proof = prove(statement, witness).unwrap();\n\n    println!(\"public total = {}\", statement.public_total);\n    println!(\"proof bytes = {}\", proof.proof_bytes_len);\n    println!(\"verified = {}\", verify(statement, proof));\n}",
+  "zkp_transcript_domain_separation": "#[derive(Debug)]\nstruct Transcript {\n    domain: &'static str,\n    bytes: Vec<u8>,\n}\n\nimpl Transcript {\n    fn new(domain: &'static str) -> Self {\n        Self {\n            domain,\n            bytes: domain.as_bytes().to_vec(),\n        }\n    }\n\n    fn append_u64(&mut self, label: &str, value: u64) {\n        self.bytes.extend_from_slice(label.as_bytes());\n        self.bytes.extend_from_slice(&value.to_le_bytes());\n    }\n\n    fn challenge(&self) -> u64 {\n        self.bytes.iter().fold(1_469_598_103_934_665_603_u64, |acc, byte| {\n            acc.wrapping_mul(1_099_511_628_211).wrapping_add(*byte as u64)\n        })\n    }\n}\n\nfn challenge_for(domain: &'static str, public_total: u64, public_commitment: u64) -> u64 {\n    let mut transcript = Transcript::new(domain);\n    transcript.append_u64(\"public_total\", public_total);\n    transcript.append_u64(\"public_commitment\", public_commitment);\n    transcript.challenge()\n}\n\nfn main() {\n    let domain = \"billing-proof:v1\";\n    let prover_challenge = challenge_for(domain, 45, 9_001);\n    let verifier_challenge = challenge_for(domain, 45, 9_001);\n    let other_domain_challenge = challenge_for(\"inventory-proof:v1\", 45, 9_001);\n\n    println!(\"domain = {}\", domain);\n    println!(\"challenge match = {}\", prover_challenge == verifier_challenge);\n    println!(\"domain separation = {}\", prover_challenge != other_domain_challenge);\n}"
+ },
+ "labReferenceSolution": null
+}

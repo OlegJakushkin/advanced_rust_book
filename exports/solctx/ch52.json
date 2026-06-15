@@ -1,0 +1,216 @@
+{
+ "chapterKey": "ch52",
+ "num": 52,
+ "title": "ZoKrates Workflows and Ethereum Verifiers",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Split the ZoKrates workflow into build-time, release-time, and runtime responsibilities",
+   "objective": "Practice assigning each ZoKrates step to the right operational lane instead of letting the whole pipeline collapse into one opaque script.",
+   "starterPrompt": "Classify `compile`, `setup`, `compute-witness`, `generate-proof`, `export-verifier`, and `verify` across build-time, release-time, and runtime boundaries for one proof-backed service.",
+   "prompts": [
+    "Which steps happen once per circuit or release rather than once per request?",
+    "Which steps belong in a proving worker instead of a request handler?",
+    "Which steps can happen in CI or a controlled admin CLI lane rather than in build.rs?",
+    "Which step should stay verifier-side and witness-free?"
+   ],
+   "acceptanceCriteria": [
+    "You place compile, setup, witness generation, proof generation, export, and verification in distinct operational lanes.",
+    "You identify at least one step that should not run per request.",
+    "You explain why verifier input should exclude witness material."
+   ],
+   "hints": [
+    "Start by asking which artifact is expensive and which one is durable.",
+    "A good answer treats proof generation like a worker job, not like a tiny helper function."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Review a proof workflow for proof-friendly input modeling",
+   "objective": "Spot the places where transport-shaped data is being pushed into the ZoKrates boundary without enough normalization or commitment discipline.",
+   "starterPrompt": "A Rust API currently forwards raw JSON strings, variable-length lists, and unbounded notes fields directly into a proof step that is supposed to justify only one public total and one public limit.",
+   "prompts": [
+    "Which parts should become canonical numeric inputs before witness generation?",
+    "Which large or irregular fields should become commitments or stay witness-only?",
+    "Which fields should never become public verifier inputs just because they already existed in the HTTP payload?",
+    "Which tests would prove the normalization contract is stable across versions?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one field that should be normalized in Rust before the ZoKrates step.",
+    "You identify at least one field that should remain witness-only or become a commitment.",
+    "You mention at least one reproducibility or contract test for the mapping."
+   ],
+   "hints": [
+    "Transport convenience and proof convenience are rarely the same thing.",
+    "If the verifier does not need a field, it probably should not become a public input by accident."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Design a versioned artifact manifest for proof generation and verification",
+   "objective": "Build a small Rust-facing manifest that keeps circuit, keys, proof blobs, and verifier contract metadata attributable.",
+   "starterPrompt": "Design one `ArtifactManifest` or equivalent set of Rust types that names a circuit ID, proving key ID, verification key ID, proof path, and verifier contract path or address.",
+   "prompts": [
+    "Keep proving-side and verifying-side metadata distinguishable.",
+    "Include one protocol or circuit version field.",
+    "Decide which artifact fields are safe to expose to verifier callers and which are proving-only.",
+    "Think about retention policy and auditability while naming the fields."
+   ],
+   "acceptanceCriteria": [
+    "Your design names at least four distinct artifacts explicitly.",
+    "You include one version or circuit-identity field.",
+    "You separate at least one proving-only field from a verifier-facing field.",
+    "The resulting type set is small enough for another engineer to review quickly."
+   ],
+   "hints": [
+    "If one struct does every job, the custody model is probably too vague.",
+    "Versioning belongs on artifacts early, not after the first migration failure."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a verifier integration that leaks witness or mixes versions",
+   "objective": "Fix the most common production mistakes around verifier requests: witness exposure, wrong key pairing, or wrong contract version.",
+   "starterPrompt": "You inherit a verifier service that stores witness paths next to verifier request DTOs, chooses the verifier contract from a mutable config string at runtime, and sometimes pairs a new proof blob with an older verification key.",
+   "prompts": [
+    "Which fields should disappear from verifier-facing request types immediately?",
+    "How should contract address or path selection become versioned and explicit?",
+    "Which key or circuit mismatch should fail before any external verifier call is attempted?",
+    "Which log or trace fields belong on that failure path?"
+   ],
+   "acceptanceCriteria": [
+    "You remove at least one witness-related field from the verifier boundary.",
+    "You define one explicit version or key-matching rule.",
+    "You identify one preflight validation that should fail before a verifier call or transaction submit happens.",
+    "You mention at least one structured field such as circuit ID, key ID, or contract version."
+   ],
+   "hints": [
+    "If the verifier can see the witness path, the boundary is already too wide.",
+    "Version mismatch is a contract failure, not a 'maybe verify and see' runtime strategy."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Design reproducibility and negative tests for the proof pipeline",
+   "objective": "Turn proof generation and verification into a testable workflow rather than a one-off manual command sequence.",
+   "starterPrompt": "You want CI confidence that proof generation still works after refactors, and that wrong inputs, wrong versions, or wrong keys fail clearly rather than failing as one generic false result.",
+   "prompts": [
+    "Which artifact versions should be pinned in CI fixtures?",
+    "Which negative cases must exist: wrong public inputs, wrong verification key, wrong contract version, or wrong witness?",
+    "Where should you use native verification versus Ethereum-oriented verifier tests?",
+    "How would you keep the fixtures reproducible and reviewable over time?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least two positive and two negative workflow tests.",
+    "You separate native verify tests from contract or deploy-path tests.",
+    "You mention at least one artifact pinning or manifest rule that improves reproducibility.",
+    "You explain how failing cases become attributable rather than generic."
+   ],
+   "hints": [
+    "A fast native verify path is a good first CI gate, but it is not the same as a deploy-path test.",
+    "The best negative test is the one that tells you which contract or artifact drifted."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Plan audits, upgrades, and rollout for an Ethereum verifier integration",
+   "objective": "Make trusted setup, verifier deployment, dual-version rollout, and operational ownership explicit before the first circuit upgrade.",
+   "starterPrompt": "You are shipping a proof-backed service whose verifier contract lives in an Ethereum-oriented environment. A circuit update is coming, setup provenance matters, and operators want canary rollout plus rollback.",
+   "prompts": [
+    "Which audit surfaces exist separately: proving scheme assumptions, circuit logic, Rust artifact custody, and Solidity verifier deployment?",
+    "How will old and new verifier versions coexist during rollout?",
+    "Which artifact or address mapping must be published for operators and downstream consumers?",
+    "Which telemetry or failure rates gate promotion or trigger rollback?"
+   ],
+   "acceptanceCriteria": [
+    "You name at least three distinct audit or review surfaces.",
+    "You describe one mixed-version rollout or dual-verifier strategy.",
+    "You include at least one published artifact mapping such as circuit ID to contract address.",
+    "You mention at least two rollout signals such as verification failure rate, proving queue age, or contract-submit failure rate."
+   ],
+   "hints": [
+    "An upgrade is rarely just one code deploy. It is usually an artifact and contract migration too.",
+    "Keep the rollback story boring enough that another engineer can execute it under pressure."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why should compile and setup usually live in different operational lanes from witness generation and proof generation?",
+  "What makes a proof request different from a verifier request in Rust terms?",
+  "Why is contract or key version drift often a bigger operational risk than one single failed proof?",
+  "What does native verification prove, and what does it not prove about the Ethereum deployment path?",
+  "Why should generated verifier contracts still go through normal Solidity review and release discipline?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Build a verifier request without leaking witness material",
+  "filename": "verifier_request_boundary.rs",
+  "runKey": "ch52_ex_verifier_request",
+  "expectedOutput": "contract = contracts/AgeCheckVerifier.sol\npublic inputs = 2\nwitness included = false",
+  "initialCode": "#[derive(Debug, Clone)]\nstruct ProofBundle {\n    verifier_contract: String,\n    public_inputs: Vec<String>,\n    proof_path: String,\n    witness_path: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerificationRequest {\n    contract: String,\n    public_inputs_len: usize,\n    proof_path: String,\n    witness_included: bool,\n}\n\nfn to_verification_request(bundle: &ProofBundle) -> VerificationRequest {\n    VerificationRequest {\n        contract: String::new(),\n        public_inputs_len: 0,\n        proof_path: bundle.witness_path.clone(),\n        witness_included: true,\n    }\n}\n\nfn main() {\n    let bundle = ProofBundle {\n        verifier_contract: String::from(\"contracts/AgeCheckVerifier.sol\"),\n        public_inputs: vec![String::from(\"45\"), String::from(\"50\")],\n        proof_path: String::from(\"artifacts/proof.json\"),\n        witness_path: String::from(\"artifacts/witness\"),\n    };\n\n    let request = to_verification_request(&bundle);\n\n    println!(\"contract = {}\", request.contract);\n    println!(\"public inputs = {}\", request.public_inputs_len);\n    println!(\"witness included = {}\", request.witness_included);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 44, 46, 49, and 51",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "The seven stages: write, compile, setup, compute witness, generate proof, export verifier, verify",
+  "Shaping inputs so the proof program stays small",
+  "Connecting a generated verifier to an Ethereum system",
+  "Where each stage runs: admin lane, prover worker, and verifier",
+  "Who owns each artifact, and how long it should live",
+  "Testing the workflow in layers",
+  "Where the time and cost actually go",
+  "What to plan for before calling it production-ready",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: build a Rust orchestration plan around ZoKrates CLI stages",
+  "Example 2: convert a proof bundle into an Ethereum verifier call boundary",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Proof workflows need controlled source programs, setup material, witness custody, generated verifiers, and deployment tracking. This chapter covers ZoKrates and Ethereum verification as staged production artifacts.",
+  "Chapter 51 established the general ZKP mental model: statements, witnesses, constraints, transcripts, and proof artifacts. Chapter 44 covered packaging and custody of build outputs. Chapter 46 covered transport-facing contract boundaries, and Chapter 49 covered secure service bou",
+  "Picture a compliance service that has to prove a fact about a customer to a smart contract without ever revealing the underlying data. The classic example is an age check: the contract needs to be convinced that a person is over eighteen, but it must never see the birth date that",
+  "The work is less about cryptography than it looks. The cryptography lives inside ZoKrates. Your job, in Rust, is to manage everything around it: shaping proof-friendly inputs, driving the compile and setup stages, keeping witness data in custody, generating proofs in a worker, de",
+  "The shape to hold in your head is a one-directional pipeline. The source program is compiled once, a setup step derives a matched pair of keys, and then each proof flows from a private witness on the left toward a public verification on the right. Read the diagram left to right a",
+  "How this differs from Chapter 51: that chapter explained the proof-system concepts themselves, the statement, witness, constraints, and transcript. This chapter is concrete and operational. It treats ZoKrates as a tooling workflow and Rust as the orchestration, custody, and integ",
+  "Three ideas keep this work tractable. ZoKrates is a boundary you orchestrate rather than a library you embed. Proving and verifying are different shapes of service with different costs. And Ethereum integration is mostly artifact management plus a small amount of transport transl",
+  "Every ZoKrates project moves through the same seven stages, and the most useful thing you can do as the Rust engineer is to notice that they do not all belong in the same place. Writing and compiling the circuit are source-control concerns. Setup is a one-time, trust-sensitive ce",
+  "Stages assume default filenames unless overridden: out for the compiled program, proving.key and verification.key from setup, witness from compute-witness, and proof.json from generate-proof. Pass -i and -o when you want explicit per-circuit paths instead.",
+  "A circuit is not a general-purpose program. Every operation it performs becomes constraints, and constraints are what make proving expensive, so the data you feed a ZoKrates program should already be numeric, bounded, and canonical. The work of turning a messy HTTP body or a JSON",
+  "A common modeling repair is to let Rust do transport parsing, range normalization, hashing or commitment preparation, and only then hand canonical numeric or committed values into the ZoKrates program.",
+  "When a smart contract is the verifier, the boundary between your Rust services and the chain becomes the place where most mistakes happen. The cleanest layout keeps three responsibilities physically separate: a prover service that does the heavy work and emits a proof, a thin Rus",
+  "In practice Rust owns the contract address map, the public-input encoder, proof-blob transport, and the on-chain submission policy, including gas, confirmation, and retry. The Solidity verifier itself stays a generated contract artifact with its own toolchain and deployment revie",
+  "A common early mistake is to wire the whole workflow into one place, often a request handler or a build.rs step, because the prototype was small. The stages have genuinely different operational profiles, so they want different homes. Compile, setup, and export-verifier are infreq",
+  "Whatever lane a stage runs in, Rust ultimately shells out to the ZoKrates binary. The pattern is small but worth getting right: spawn the process, wait for it to finish, and translate a non-zero exit status into a proper Rust error instead of letting it pass silently. The helper ",
+  "The rule that follows from all of this: do not hide setup or proof generation inside a routine build.rs or a request-handler path. Those steps are too heavy, too stateful, and too security-sensitive to behave like ordinary compilation or a synchronous validation check.",
+  "The workflow leaves a trail of files behind it, and each one has a different secrecy level and a different custodian. The proving key is sensitive and access-controlled; the verification key is public and ships inside the deployed contract; the witness is the secret you went to a",
+  "Proof failures are notoriously opaque: a verifier returning false tells you nothing about which of a dozen moving parts drifted. The cure is to test in layers and to make failures specific. Unit-test the Rust input normalization on its own. Contract-test local verification agains",
+  "Most teams assume proof generation is the expensive part and stop measuring there. It is expensive, but the full picture is more interesting. Witness generation, especially when Rust is hashing large payloads or building Merkle paths first, can dominate before the prover even sta",
+  "In production, queue age for proof generation, witness build time, proof size, verifier-call latency, and contract or RPC failure rates matter at least as much as the cryptographic happy path.",
+  "A few concerns sit outside the happy path but decide whether the system is safe to run. If the proving scheme relies on a trusted setup, the provenance of that setup is part of your security model, not a footnote. An upgrade is rarely a single switch: a new circuit usually means ",
+  "Generated verifier contracts and setup artifacts are not production-safe merely because they came from a ZK toolchain. They still need ordinary release engineering, provenance, review, and rollback planning.",
+  "The hard part of this chapter is not the cryptography; it is resisting the instinct to fold a multi-stage, artifact-heavy pipeline into one tidy abstraction. What that instinct looks like depends on where you are coming from, so here is the mental-model shift for each starting po",
+  "The most expensive ZoKrates integration mistake is usually not one failed proof. It is a system that never made circuit version, key provenance, witness secrecy, and verifier deployment boundaries explicit enough for another engineer to operate safely.",
+  "These examples are intentionally Rust-facing orchestration and boundary examples. They do not pretend the verifier contract is handwritten Rust or that the witness belongs in every request type.",
+  "The point is not to run the commands in-browser. The point is that Rust can version, render, and own the pipeline explicitly before a CLI runner or service worker executes it.",
+  "What to look at: the code does not run any ZoKrates command. It builds a list of Invocation values, one per stage, each carrying its program, its arguments, and the artifact path it will produce. Follow plan_for: it derives a single artifacts/<circuit> base path and threads it th",
+  "The remaining stages round out the list, and two of them produce the concrete outputs a worker reads back:",
+  "Rust owns the sequence, arguments, and artifact paths even if ZoKrates performs the cryptographic work.",
+  "Compile, setup, proof, and verifier export are explicit stages instead of being hidden in one ad hoc shell script or request handler."
+ ],
+ "codeSamples": {
+  "zokrates_workflow_command_plan": "use std::path::PathBuf;\n\n#[derive(Debug, Clone)]\nstruct Invocation {\n    stage: &'static str,\n    program: &'static str,\n    args: Vec<String>,\n    artifact: PathBuf,\n}\n\nfn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {\n    let compiled = format!(\"artifacts/{}\", circuit);\n    vec![\n        Invocation {\n            stage: \"compile\",\n            program: \"zokrates\",\n            args: vec![\n                \"compile\".into(),\n                \"-i\".into(),\n                format!(\"{}.zok\", circuit),\n                \"-o\".into(),\n                compiled.clone(),\n            ],\n            artifact: PathBuf::from(&compiled),\n        },\n        Invocation {\n            stage: \"setup\",\n            program: \"zokrates\",\n            args: vec![\"setup\".into(), \"-i\".into(), compiled.clone()],\n            artifact: PathBuf::from(\"artifacts/proving.key\"),\n        },\n        Invocation {\n            stage: \"compute-witness\",\n            program: \"zokrates\",\n            args: {\n                let mut args = vec![\n                    \"compute-witness\".into(),\n                    \"-i\".into(),\n                    compiled.clone(),\n                    \"-a\".into(),\n                ];\n                args.extend(witness_args.iter().map(|value| value.to_string()));\n                args\n            },\n            artifact: PathBuf::from(\"artifacts/witness\"),\n        },\n        Invocation {\n            stage: \"generate-proof\",\n            program: \"zokrates\",\n            args: vec![\"generate-proof\".into(), \"-i\".into(), compiled.clone()],\n            artifact: PathBuf::from(\"artifacts/proof.json\"),\n        },\n        Invocation {\n            stage: \"export-verifier\",\n            program: \"zokrates\",\n            args: vec![\"export-verifier\".into(), \"-i\".into(), compiled.clone()],\n            artifact: PathBuf::from(\"artifacts/AgeCheckVerifier.sol\"),\n        },\n        Invocation {\n            stage: \"verify\",\n            program: \"zokrates\",\n            args: vec![\"verify\".into(), \"-i\".into(), compiled],\n            artifact: PathBuf::from(\"artifacts/verify.log\"),\n        },\n    ]\n}\n\nfn render(invocation: &Invocation) -> String {\n    format!(\"{} {}\", invocation.program, invocation.args.join(\" \"))\n}\n\nfn main() {\n    let plan = plan_for(\"age_check\", &[\"18\", \"21\"]);\n\n    println!(\"steps = {}\", plan.len());\n    println!(\"compile = {}\", render(&plan[0]));\n    println!(\"proof = {}\", render(&plan[3]));\n    println!(\"contract = {}\", plan[4].artifact.display());\n}",
+  "zokrates_ethereum_verifier_boundary": "#[derive(Debug, Clone)]\nstruct ProofBundle {\n    circuit_id: String,\n    verifier_contract: String,\n    public_inputs: Vec<String>,\n    proof_json_path: String,\n    witness_path: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerifierCall {\n    contract: String,\n    function: &'static str,\n    public_inputs_len: usize,\n    proof_source: String,\n}\n\nfn to_verifier_call(bundle: &ProofBundle) -> VerifierCall {\n    VerifierCall {\n        contract: bundle.verifier_contract.clone(),\n        function: \"verifyTx\",\n        public_inputs_len: bundle.public_inputs.len(),\n        proof_source: bundle.proof_json_path.clone(),\n    }\n}\n\nfn main() {\n    let bundle = ProofBundle {\n        circuit_id: String::from(\"age-check:v2\"),\n        verifier_contract: String::from(\"contracts/AgeCheckVerifier.sol\"),\n        public_inputs: vec![String::from(\"45\"), String::from(\"50\")],\n        proof_json_path: String::from(\"artifacts/proof.json\"),\n        witness_path: String::from(\"artifacts/witness\"),\n    };\n\n    let call = to_verifier_call(&bundle);\n    let witness_leaked = call.proof_source.contains(\"witness\");\n\n    println!(\"contract = {}\", call.contract);\n    println!(\"verifier fn = {}\", call.function);\n    println!(\"public inputs = {}\", call.public_inputs_len);\n    println!(\"witness leaked = {}\", witness_leaked);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch55",
+ "num": 55,
+ "title": "Smart Contracts in Rust: Solana, Sei, and Beyond",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Name the four questions every chain answers",
+   "objective": "Recall the chapter's four-question framework and the shared shell-around-a-pure-core model so the platform differences become a checklist rather than trivia.",
+   "starterPrompt": "The chapter argues that Solana, Sei (CosmWasm), and the EVM are three answers to the same four questions, and that the Rust you write to satisfy each is more alike than the platforms suggest. Restate that framing in your own words without copying the comparison table.",
+   "prompts": [
+    "List the four questions the chapter asks of any chain (state location, execution target, serialization, entry shape).",
+    "Describe the 'thin shell around a pure core' shape: what enters as untrusted bytes, what the handler operates on, and what is persisted.",
+    "Explain which part of a contract is chain-specific and which part is ordinary Rust.",
+    "Give one sentence on why the chapter calls the boundary format the contract's 'real public API'."
+   ],
+   "acceptanceCriteria": [
+    "The four questions are stated as: where state lives, what the code runs as, how data is serialized across the host boundary, and what shape the entry point has.",
+    "The answer identifies the handler as pure, deterministic Rust over owned domain types, with all chain-specific concerns confined to the shell.",
+    "The answer states that untrusted bytes are decoded into owned types, processed, then re-encoded into bytes the runtime persists.",
+    "The answer connects the boundary format to Chapter 19's lesson that a wire format is a versioned public contract."
+   ],
+   "hints": [
+    "The four facts are state model, execution target, serialization, and entry shape.",
+    "Everything chain-specific lives in the shell; the handler is the part you could lift unchanged to another platform."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the counter through the Solana account model",
+   "objective": "Read the chapter's Solana counter listing closely enough to explain why the program holds no state and how the account buffer carries it instead.",
+   "starterPrompt": "Study the smart_contract_solana_counter listing: an Account owns a [u8; 8] data buffer, and process_instruction borrows that buffer mutably, decodes a little-endian u64, applies an Instruction, and writes it back. Walk one full call through the code.",
+   "prompts": [
+    "Identify exactly where the counter value is stored across calls, and confirm process_instruction owns no persistent state of its own.",
+    "Explain what read_counter and write_counter stand in for, and why from_le_bytes / to_le_bytes appear instead of a real codec.",
+    "Trace the values for SetTo(41) followed by Increment and state what the final counter is.",
+    "Explain why process_instruction takes data: &mut [u8] rather than taking the Account by value."
+   ],
+   "acceptanceCriteria": [
+    "The answer states that state lives in account.data and that the program is stateless code the runtime calls with a mutable view of that buffer.",
+    "The answer identifies from_le_bytes / to_le_bytes as a hand-rolled, Borsh-style little-endian codec standing in for a real serializer.",
+    "The trace yields after_set = 41, after_increment = 42, and final counter = 42.",
+    "The answer explains that borrowing the buffer mutably lets the program mutate persisted state without owning it, matching Solana's external-account model."
+   ],
+   "hints": [
+    "Follow the bytes: the account buffer is the only thing that survives between two calls to process_instruction.",
+    "A mutable borrow of the buffer is how the runtime lends the program write access to account data it does not own."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Add a Decrement instruction with a floor at zero",
+   "objective": "Extend the chapter's instruction set while keeping the stateless decode-apply-encode entry point and avoiding an unsigned underflow.",
+   "starterPrompt": "Starting from the smart_contract_solana_counter model, add an Instruction::Decrement variant. Decrementing a counter already at 0 must not panic or wrap to u64::MAX; it must saturate at 0.",
+   "prompts": [
+    "Add the Decrement variant to the Instruction enum.",
+    "Handle it in process_instruction so the decode, apply, and write-back structure is unchanged.",
+    "Use a saturating or checked operation so subtracting below zero floors at 0 rather than wrapping.",
+    "Demonstrate it: SetTo(1), then two Decrement calls, and confirm the counter reads 0."
+   ],
+   "acceptanceCriteria": [
+    "The Instruction enum gains a Decrement variant and process_instruction matches it without changing the read_counter / write_counter calls.",
+    "Decrementing at 0 produces 0 rather than panicking or wrapping to a huge value.",
+    "After SetTo(1) and two Decrement calls the final counter read from the buffer is 0.",
+    "The entry point still returns Result<u64, ProgramError> and the buffer is the only persisted state."
+   ],
+   "hints": [
+    "u64::saturating_sub floors subtraction at 0 without a panic.",
+    "The new arm slots into the same match in process_instruction; nothing about read/write needs to change."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Encode the platform comparison as queryable data",
+   "objective": "Turn the four-question comparison table into runnable data and add a lookup that answers a single question across all three platforms.",
+   "starterPrompt": "Using the smart_contract_platform_compare model, where each Platform maps to a PlatformModel with four fields, write fn serialization_of(platform: Platform) -> &'static str and a loop that prints the serialization format for every platform.",
+   "prompts": [
+    "Reuse describe to obtain the PlatformModel rather than duplicating the field data.",
+    "Implement serialization_of so it returns the serialization field for the given platform.",
+    "Iterate the three Platform variants and print one line per platform naming its serialization format.",
+    "Confirm the output reports Borsh for Solana, JSON/serde for Sei/CosmWasm, and ABI for EVM/Solidity."
+   ],
+   "acceptanceCriteria": [
+    "serialization_of delegates to describe and returns the model's serialization field, with no second copy of the platform facts.",
+    "The loop covers all three variants: Solana, SeiCosmWasm, and EvmSolidity.",
+    "Output pairs each platform with the correct format: Borsh, JSON/serde, and ABI respectively.",
+    "Platform stays a Copy enum so it can be passed by value into the helper without cloning."
+   ],
+   "hints": [
+    "describe already centralizes the four facts; the helper just reads one field off its result.",
+    "Because Platform derives Copy, you can pass it into serialization_of and still use it afterward."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Harden the decode boundary against a hostile increment",
+   "objective": "Find and fix the place where an undecoded or unbounded value reaches state, applying the chapter's borrow-parse-validate-then-mutate discipline.",
+   "starterPrompt": "The counter program uses current + 1 for Increment. A counter sitting at u64::MAX is valid input from a hostile caller, and in release builds that addition wraps to 0 instead of failing. Make the increment path reject overflow instead of silently wrapping.",
+   "prompts": [
+    "Explain why current + 1 is a boundary bug, not just a theoretical edge case, given that input bytes come from an untrusted counterparty.",
+    "Add a ProgramError::Overflow variant and switch the Increment (and any SetTo/Add) path to checked_add.",
+    "Return Err(ProgramError::Overflow) before write_counter runs, so no invalid value reaches the buffer.",
+    "Show that incrementing a buffer initialized to u64::MAX returns an error and leaves the buffer unchanged."
+   ],
+   "acceptanceCriteria": [
+    "The answer names the bug as an unvalidated value reaching state: a release-mode wrapping add on attacker-controlled bytes.",
+    "process_instruction uses checked_add and returns ProgramError::Overflow on overflow rather than wrapping or panicking.",
+    "The error is returned before write_counter, so the account buffer is never mutated on the failing path.",
+    "Incrementing a u64::MAX buffer yields an Err and a subsequent read still shows u64::MAX."
+   ],
+   "hints": [
+    "checked_add returns Option<u64>; map None to ProgramError::Overflow with ok_or.",
+    "Validate fully before you mutate: the write should never run on the error path."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Plan the Solana-to-Sei port",
+   "objective": "Reason about which parts of a working contract change and which stay constant when moving from Solana to a Sei (CosmWasm) deployment.",
+   "starterPrompt": "A team ships the Solana counter program and is asked to deploy comparable logic to a Sei (CosmWasm) chain. Using the four-question framework, write a short porting plan that separates the shell that must change from the pure core that can stay.",
+   "prompts": [
+    "Map each of the four questions to its Solana answer and its Sei/CosmWasm answer (state model, execution target, serialization, entry shape).",
+    "Identify the concrete code that must change: the entry shape (process_instruction versus instantiate/execute/query), the state model (external account versus contract-owned kv store), and the serialization (Borsh versus JSON/serde).",
+    "Identify what stays: the deterministic handler that computes the next counter from the current one over owned domain types.",
+    "State the boundary discipline that must hold on both platforms regardless of format."
+   ],
+   "acceptanceCriteria": [
+    "The plan correctly contrasts external accounts plus Borsh plus process_instruction (Solana) against contract-owned kv plus JSON/serde plus instantiate/execute/query (Sei).",
+    "The plan confines the changes to the shell: deserialization, storage access, and entry-point dispatch.",
+    "The plan keeps the pure handler logic unchanged and explains why it can move across platforms.",
+    "The plan reaffirms decode-validate-then-mutate and a versioned boundary format as constant requirements on both chains."
+   ],
+   "hints": [
+    "Only the shell is chain-specific; the next-counter computation is ordinary deterministic Rust.",
+    "Sei swaps a single entry point for instantiate/execute/query and a contract-owned key-value store, but the no-undecoded-value-reaches-state rule is identical."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What are the four questions the chapter says every chain answers differently, and what are Solana's answers to each?",
+  "In the Solana model, where does contract state live, and why is the program itself described as stateless?",
+  "What do from_le_bytes and to_le_bytes stand in for in the counter listing, and why does the chapter hand-roll them instead of using a crate?",
+  "What does 'never let an undecoded or unvalidated value reach state' mean in practice, and in what order should you borrow, parse, validate, and mutate?",
+  "Which three facts about a contract's runtime (no ambient I/O, metered execution, re-execution by every validator) constrain the ordinary Rust you can write, and why?"
+ ],
+ "lab": {
+  "title": "Runnable lab · harden the Solana counter's decode-validate boundary",
+  "filename": "solana_counter_boundary_lab.rs",
+  "runKey": "ch55_ex_counter",
+  "expectedOutput": "after add = 40\nafter increment = 41\ncounter = 41\noverflow rejected = true",
+  "helperText": "Model a stateless Solana-style program over an external account buffer. Fill in process_instruction so it decodes the little-endian counter, applies the instruction with checked_add, and rejects overflow before any value is written back to state.",
+  "initialCode": "// A crate-free model of a Solana-style program over an external account buffer.\n// State lives in the account's byte buffer; the program is stateless code that\n// borrows the buffer, decodes a little-endian u64 by hand (as Borsh would),\n// applies an instruction, validates, and writes the bytes back.\n\n#[derive(Debug)]\nenum Instruction {\n    Increment,\n    Add(u64),\n}\n\n#[derive(Debug)]\nenum ProgramError {\n    DataTooSmall,\n    Overflow,\n}\n\nfn read_counter(data: &[u8]) -> Result<u64, ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    let mut bytes = [0u8; 8];\n    bytes.copy_from_slice(&data[..8]);\n    Ok(u64::from_le_bytes(bytes))\n}\n\nfn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    data[..8].copy_from_slice(&value.to_le_bytes());\n    Ok(())\n}\n\n// Stateless entry point: decode, apply, validate against overflow, re-encode.\nfn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {\n    let current = read_counter(data)?;\n    // TODO: compute `next` from `current` and `instruction` using checked_add,\n    // returning ProgramError::Overflow instead of wrapping. For now this stub\n    // ignores the instruction so the program still compiles.\n    let next = current;\n    write_counter(data, next)?;\n    Ok(next)\n}\n\nfn main() {\n    let mut data = [0u8; 8];\n\n    let a = process_instruction(&mut data, &Instruction::Add(40)).unwrap();\n    let b = process_instruction(&mut data, &Instruction::Increment).unwrap();\n\n    // A hostile instruction that would overflow must be rejected, not wrap.\n    let mut maxed = u64::MAX.to_le_bytes();\n    let bad = process_instruction(&mut maxed, &Instruction::Increment);\n\n    println!(\"after add = {}\", a);\n    println!(\"after increment = {}\", b);\n    println!(\"counter = {}\", read_counter(&data).unwrap());\n    println!(\"overflow rejected = {}\", bad.is_err());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapter 19",
+  "Opening scenario",
+  "The four questions to ask of any chain",
+  "Mental model",
+  "How the platforms compare",
+  "The four answers, side by side",
+  "Differences and similarities, made explicit",
+  "Core concepts",
+  "Ownership at the (de)serialization boundary",
+  "Determinism and metered execution",
+  "The broader Rust-on-chain landscape",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: Solana's account and instruction model",
+  "Example 2: the platform mental model as data",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A smart contract is just sandboxed, deterministic, gas-metered code over shared state. This chapter looks at how Solana, Sei (through CosmWasm), and the EVM answer the same handful of questions differently, and why the Rust you write to satisfy each one is far more alike than the",
+  "Chapter 19 covered serialization and versioned data contracts, which is exactly what a contract's boundary format is. That lesson is load-bearing here, because a chain's boundary format is the contract's real public API. Chapter 56, the finale, takes the sandboxed, no-ambient-I/O",
+  "A team that already ships a Solana program is asked to deploy comparable logic to a Sei (CosmWasm) chain, and to keep an eye on an EVM deployment a partner maintains. The question is not \"rewrite everything\" but \"what actually changes.\" The answer turns out to be small and specif",
+  "The shape worth memorizing is a thin shell around a pure core. Untrusted bytes enter, get decoded into owned domain types, a deterministic handler runs, and owned results are re-encoded into bytes the runtime persists. Everything chain-specific lives in the shell; the handler is ",
+  "This is a cross-platform comparison, not a cross-language one: the user asked specifically about Solana and Sei, with the EVM included for contrast. Read the first three cards as three answers to the same four questions, then read the fourth card as the Rust ideas that stay const",
+  "The diagram below makes the structural difference concrete: Solana keeps code and state apart, while CosmWasm and the EVM bind each contract to its own storage.",
+  "CosmWasm and the EVM take the opposite approach: each contract is bound to its own private storage rather than reaching into external accounts.",
+  "How a contract composes with another contract is where the platforms diverge most sharply, and it is worth tracing once. The EVM call is synchronous and in-line; CosmWasm hands a message to the runtime and may receive a reply; Solana invokes another program against accounts it ex",
+  "The single most important habit in contract code is the same one Chapter 19 taught for any wire format, with a hostile counterparty assumed: never let an undecoded or unvalidated value reach state. Borrow the input, parse it into owned types, validate, and only then mutate.",
+  "A contract runs inside a sandbox with no ambient I/O, every operation costs a metered resource, and every validator re-executes it expecting identical results. These three facts rule out a surprising amount of ordinary Rust, and the discipline they demand is close to the embedded",
+  "Solana, Sei, and the EVM are the focus here, but Rust reaches several other chains, each varying the edge format while keeping the same core habits. Three are worth knowing by name.",
+  "The chain will not protect you from a contract that trusts its input. Validation, determinism, and a versioned boundary format are your job, not the runtime's.",
+  "A self-contained, crate-free model of how a Solana program works on external account data: stateless code, a mutable byte buffer, a hand-rolled Borsh-style counter, and an instruction that drives it.",
+  "What to look at: the program holds no state. The Account owns the data buffer, and process_instruction borrows it mutably, decodes a little-endian u64 by hand the way Borsh would, applies the instruction, and writes the bytes back. Trace one call through the diagram, then read th",
+  "The program owns no storage; state lives in the account buffer passed in.",
+  "from_le_bytes and to_le_bytes stand in for a real codec.",
+  "Each account records its owning program, the field real validation checks first.",
+  "The Solana / Sei (CosmWasm) / EVM comparison encoded as an enum with four fields per variant, printed as one row per platform so the contrasts line up.",
+  "What to look at: each platform is an enum variant, and describe maps it to the four facts, state model, execution target, serialization, and entry shape. The loop prints one line per platform. This is the comparison table from earlier turned into runnable data; editing a field in",
+  "External accounts on Solana versus contract-owned storage on Sei and the EVM.",
+  "SBF, wasm, and EVM bytecode are three sandboxes with the same determinism demand.",
+  "Borsh, JSON, and the ABI are each a versioned public contract, not an internal detail.",
+  "The companion exercise page asks you to extend the account model with a new instruction, harden the decode-validate boundary against malformed input, and reason about which parts of a contract change when you port it from Solana to Sei.",
+  "A contract runs in a sandbox with no ambient I/O and a metered budget, which is the same world the book's finale lives in. Chapter 56 carries that constrained-runtime thread all the way down into no_std and embedded targets, where you give up the standard library and make every r"
+ ],
+ "codeSamples": {
+  "smart_contract_solana_counter": "// A hand-built model of Solana's account + instruction model, no crates.\n//\n// On Solana a \"program\" is stateless code. The state it works on lives in\n// separate \"accounts\" that the runtime passes in as mutable byte buffers.\n// An instruction tells the program which operation to run and with what data.\n//\n// Here we model exactly that: an Account owns a data buffer and an owner\n// field, process_instruction borrows the buffer mutably, decodes a u64\n// counter by hand (the way Borsh would, little-endian), applies the op, and\n// writes the counter back. main() drives a couple of instructions.\n\n#[derive(Debug)]\nstruct Account {\n    owner: &'static str,\n    data: [u8; 8],\n}\n\n#[derive(Debug)]\nenum Instruction {\n    Increment,\n    SetTo(u64),\n}\n\n#[derive(Debug)]\nenum ProgramError {\n    DataTooSmall,\n}\n\n// Decode the counter the way a by-hand Borsh reader would: a little-endian u64.\nfn read_counter(data: &[u8]) -> Result<u64, ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    let mut bytes = [0u8; 8];\n    bytes.copy_from_slice(&data[..8]);\n    Ok(u64::from_le_bytes(bytes))\n}\n\n// Re-encode the counter back into the account buffer, little-endian.\nfn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    data[..8].copy_from_slice(&value.to_le_bytes());\n    Ok(())\n}\n\n// The \"program entry point\": stateless code over a mutable account buffer.\nfn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {\n    let current = read_counter(data)?;\n    let next = match instruction {\n        Instruction::Increment => current + 1,\n        Instruction::SetTo(value) => *value,\n    };\n    write_counter(data, next)?;\n    Ok(next)\n}\n\nfn main() {\n    let mut account = Account {\n        owner: \"CounterProgram1111\",\n        data: [0u8; 8],\n    };\n\n    // The runtime hands the program a mutable view of account data each call.\n    let after_set = process_instruction(&mut account.data, &Instruction::SetTo(41)).unwrap();\n    let after_inc = process_instruction(&mut account.data, &Instruction::Increment).unwrap();\n\n    let final_counter = read_counter(&account.data).unwrap();\n\n    println!(\"after set = {}\", after_set);\n    println!(\"after increment = {}\", after_inc);\n    println!(\"counter = {}\", final_counter);\n    println!(\"owner = {}\", account.owner);\n}",
+  "smart_contract_platform_compare": "// The Solana vs Sei(CosmWasm) vs EVM mental model, encoded as data.\n//\n// Every on-chain platform answers the same four questions differently:\n//   1. Where does contract state live?\n//   2. What does the code actually run as (the execution target)?\n//   3. How is data serialized across the host boundary?\n//   4. What shape is the entry point the runtime calls?\n//\n// We model each platform as an enum variant, attach those four facts, and\n// print one line per platform so the contrasts sit side by side.\n\n#[derive(Debug, Clone, Copy)]\nenum Platform {\n    Solana,\n    SeiCosmWasm,\n    EvmSolidity,\n}\n\nstruct PlatformModel {\n    name: &'static str,\n    state_model: &'static str,\n    execution_target: &'static str,\n    serialization: &'static str,\n    entry_shape: &'static str,\n}\n\nfn describe(platform: Platform) -> PlatformModel {\n    match platform {\n        Platform::Solana => PlatformModel {\n            name: \"Solana\",\n            state_model: \"external accounts\",\n            execution_target: \"SBF\",\n            serialization: \"Borsh\",\n            entry_shape: \"process_instruction\",\n        },\n        Platform::SeiCosmWasm => PlatformModel {\n            name: \"Sei/CosmWasm\",\n            state_model: \"contract-owned kv\",\n            execution_target: \"wasm\",\n            serialization: \"JSON/serde\",\n            entry_shape: \"instantiate/execute/query\",\n        },\n        Platform::EvmSolidity => PlatformModel {\n            name: \"EVM/Solidity\",\n            state_model: \"contract storage\",\n            execution_target: \"EVM bytecode\",\n            serialization: \"ABI\",\n            entry_shape: \"selector dispatch\",\n        },\n    }\n}\n\nfn main() {\n    let platforms = [Platform::Solana, Platform::SeiCosmWasm, Platform::EvmSolidity];\n\n    for platform in platforms {\n        let model = describe(platform);\n        println!(\n            \"{} | state={} | target={} | serde={} | entry={}\",\n            model.name,\n            model.state_model,\n            model.execution_target,\n            model.serialization,\n            model.entry_shape\n        );\n    }\n}"
+ },
+ "labReferenceSolution": "// A crate-free model of a Solana-style program over an external account buffer.\n// State lives in the account's byte buffer; the program is stateless code that\n// borrows the buffer, decodes a little-endian u64 by hand (as Borsh would),\n// applies an instruction, validates, and writes the bytes back.\n\n#[derive(Debug)]\nenum Instruction {\n    Increment,\n    Add(u64),\n}\n\n#[derive(Debug)]\nenum ProgramError {\n    DataTooSmall,\n    Overflow,\n}\n\nfn read_counter(data: &[u8]) -> Result<u64, ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    let mut bytes = [0u8; 8];\n    bytes.copy_from_slice(&data[..8]);\n    Ok(u64::from_le_bytes(bytes))\n}\n\nfn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    data[..8].copy_from_slice(&value.to_le_bytes());\n    Ok(())\n}\n\n// Stateless entry point: decode, apply, validate against overflow, re-encode.\nfn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {\n    let current = read_counter(data)?;\n    let next = match instruction {\n        Instruction::Increment => current.checked_add(1),\n        Instruction::Add(value) => current.checked_add(*value),\n    };\n    let next = next.ok_or(ProgramError::Overflow)?;\n    write_counter(data, next)?;\n    Ok(next)\n}\n\nfn main() {\n    let mut data = [0u8; 8];\n\n    let a = process_instruction(&mut data, &Instruction::Add(40)).unwrap();\n    let b = process_instruction(&mut data, &Instruction::Increment).unwrap();\n\n    // A hostile instruction that would overflow must be rejected, not wrap.\n    let mut maxed = u64::MAX.to_le_bytes();\n    let bad = process_instruction(&mut maxed, &Instruction::Increment);\n\n    println!(\"after add = {}\", a);\n    println!(\"after increment = {}\", b);\n    println!(\"counter = {}\", read_counter(&data).unwrap());\n    println!(\"overflow rejected = {}\", bad.is_err());\n}"
+}

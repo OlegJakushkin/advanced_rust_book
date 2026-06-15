@@ -1,21 +1,14 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
-
-const workflowDiagram = `write .zok computation
-  -> compile
-  -> setup
-  -> compute-witness
-  -> generate-proof
-  -> export-verifier
-  -> verify locally and/or deploy verifier contract`
 
 const commandRunnerSnippet = `use std::process::Command;
 
@@ -31,31 +24,35 @@ fn run_stage(program: &str, args: &[String]) -> std::io::Result<()> {
 
 const mentalModelPoints = [
   {
-    title: "ZoKrates is a workflow boundary, not a handwritten Rust proving library.",
-    body: "Rust usually orchestrates the CLI or wraps a proving service boundary. The generated verifier contract, proof blobs, witness files, and setup material are artifacts with custody rules, not ordinary in-memory structs pretending to be the whole system.",
+    title: "ZoKrates is a workflow you orchestrate, not a proving library you embed.",
+    body: "Rust drives the ZoKrates CLI or wraps a proving service; it does not reimplement the prover. The verifier contract, proof blobs, witness files, and setup keys are files on disk with custody rules. Modeling them as ordinary in-memory structs that the whole system passes around is the first mistake that leads to a leaked witness or a mismatched key.",
   },
   {
-    title: "The prover and the verifier are different service shapes.",
-    body: "Proving is heavy: witness generation, setup assumptions, proof generation, and artifact storage. Verification is smaller: public inputs plus proof artifact, maybe on-chain, maybe off-chain. If one handler does both inline, the topology is probably already wrong.",
+    title: "The prover and the verifier are different shapes of service.",
+    body: "Proving is heavy and bursty: it generates a witness, leans on setup material, runs proof generation, and stores artifacts. Verification is light: it takes public inputs plus one proof and returns a yes or no, on-chain or off. The moment a single request handler tries to do both inline, the topology is already wrong and will not scale or stay secure.",
   },
   {
-    title: "Ethereum integration is artifact management plus transport translation.",
-    body: "A generated Solidity verifier is a deployment artifact tied to one circuit and one verification key. Rust should prepare public inputs, track contract addresses by version, and keep witness material out of the verifier request entirely.",
+    title: "Ethereum integration is mostly artifact management plus a little translation.",
+    body: "The generated Solidity verifier is a deployment artifact bound to exactly one circuit and one verification key. Rust's job on the Ethereum side is small but exact: encode public inputs into calldata, track which contract address corresponds to which circuit version, and make sure no witness material ever reaches the verifier request.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Treat ZoKrates more like a specialized compiler toolchain plus artifact pipeline than like a linkable library you casually call from hot code. Rust adds value by making process boundaries, file custody, and typed public-input boundaries explicit.",
+    body: "You are used to deciding what links into your binary and what stays a separate tool. Keep that instinct: ZoKrates is a compiler toolchain and artifact pipeline, not a library you call from hot code. The shift is that Rust lets you encode the custody rules you would otherwise enforce by convention, so a witness file or proving key cannot quietly drift into the wrong process.",
   },
   {
     title: "C# background",
-    body: "Do not expect runtime reflection or one framework object to describe the workflow for you. Rust stays calm when the orchestration layer is explicit about commands, artifacts, and ownership, especially once proofs or verifier calls cross queues or services.",
+    body: "There is no runtime, no reflection, and no single framework object that discovers the workflow for you. You spell the stages out as data and types. The trap is reaching for a tall service abstraction that hides command invocation and file paths; Rust stays calmer when the orchestration is plainly visible and the prover and verifier are different types rather than one configurable manager.",
   },
   {
     title: "Go background",
-    body: "A proof pipeline is not just another goroutine stage. Witness generation and proof creation are heavyweight jobs with artifact custody, retry, and resource budgets. Rust makes that topology easier to review when the types separate prover and verifier concerns directly.",
+    body: "Your instinct to decompose into small services and pass work over channels is exactly right. The shift is that a proving stage is not just another goroutine: witness generation and proof creation are heavyweight jobs with their own resource budgets, retry rules, and artifact retention. Let the type system separate prover concerns from verifier concerns so the topology is reviewable, not implied by which function happens to call which.",
+  },
+  {
+    title: "Python background",
+    body: "If you have wired up ML or crypto pipelines, you already think in stages and artifacts. The difference is that nothing is dynamically typed away here: public inputs, proof bundles, and verifier requests become distinct structs with no overlap, so a private witness path cannot land in a request dict by accident. Treat the .zok program like a model you compile once and version, not like a script you re-run inline on every request.",
   },
 ]
 
@@ -376,21 +373,40 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A proof-backed compliance service needs Ethereum-oriented verification of a statement without exposing witness
-            data. The business requirement is to manage the full ZoKrates artifact workflow: proof-friendly inputs,
-            compile and setup stages, witness custody, proof generation, generated verifier deployment, and versioned
-            verification requests.
+            Picture a compliance service that has to prove a fact about a customer to a smart contract without ever
+            revealing the underlying data. The classic example is an age check: the contract needs to be convinced that a
+            person is over eighteen, but it must never see the birth date that establishes it. That is exactly the kind of
+            statement a zero-knowledge proof can carry, and ZoKrates is the toolchain we will use to turn the statement
+            into a circuit, a proof, and a verifier that Ethereum can call.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The work is less about cryptography than it looks. The cryptography lives inside ZoKrates. Your job, in Rust,
+            is to manage everything around it: shaping proof-friendly inputs, driving the compile and setup stages,
+            keeping witness data in custody, generating proofs in a worker, deploying the generated verifier contract, and
+            sending versioned verification requests on-chain. Each of those stages produces an artifact with its own
+            secrecy and ownership rules, and the cost of getting the workflow wrong is almost never a single failed proof.
+            It is a system nobody else can operate safely.
           </p>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="font-medium text-foreground mb-2">Workflow pipeline</div>
-            <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{workflowDiagram}</code>
-            </pre>
+            <div className="font-medium text-foreground mb-2">The workflow as a one-way pipeline</div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The shape to hold in your head is a one-directional pipeline. The source program is compiled once, a setup
+              step derives a matched pair of keys, and then each proof flows from a private witness on the left toward a
+              public verification on the right. Read the diagram left to right and notice the two lanes that must never
+              cross: the witness stays in the private proving lane, and only the proof plus public inputs reach the
+              verifier.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Zok[.zok program] --> Compile[compile]\n  Compile --> Setup[setup]\n  Setup --> PK[proving key]\n  Setup --> VK[verification key]\n  PK --> Witness[compute-witness]\n  Witness --> Proof[generate-proof]\n  VK --> Export[export-verifier]\n  Proof --> Verify[verify]\n  Export --> Verify\n  subgraph private[Private proving lane]\n    Witness\n    Proof\n  end\n  subgraph public[Public verification]\n    Export\n    Verify\n  end`}
+              caption="One source program, one setup, then every proof flows from a private witness to a public verifier. The witness never crosses into the public lane."
+            />
           </div>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <p className="text-sm text-muted-foreground leading-6">
-              Senior-level correction: Chapter 51 explained proof-system concepts. This chapter is about ZoKrates as a
-              tooling workflow and about Rust as the orchestration, custody, and integration layer around it.
+              How this differs from Chapter 51: that chapter explained the proof-system concepts themselves, the
+              statement, witness, constraints, and transcript. This chapter is concrete and operational. It treats
+              ZoKrates as a tooling workflow and Rust as the orchestration, custody, and integration layer wrapped around
+              it.
             </p>
           </div>
         </section>
@@ -400,6 +416,12 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Three ideas keep this work tractable. ZoKrates is a boundary you orchestrate rather than a library you embed.
+            Proving and verifying are different shapes of service with different costs. And Ethereum integration is mostly
+            artifact management plus a small amount of transport translation. Hold these and most design questions in the
+            chapter answer themselves.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -418,8 +440,17 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              ZoKrates workflow: write computation, compile, setup, compute witness, generate proof, export verifier, and verify
+              The seven stages: write, compile, setup, compute witness, generate proof, export verifier, verify
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Every ZoKrates project moves through the same seven stages, and the most useful thing you can do as the Rust
+              engineer is to notice that they do not all belong in the same place. Writing and compiling the circuit are
+              source-control concerns. Setup is a one-time, trust-sensitive ceremony. Computing the witness and generating
+              the proof are the heavy lifting that belongs in a worker. Exporting the verifier is a release step, and
+              verification is the only stage that an external caller, including a smart contract, ever touches directly.
+              The table below names each stage, the artifact it produces, who should own it, and the one operational fact
+              worth remembering about it.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-sm">
                 <thead>
@@ -463,7 +494,14 @@ zokrates verify`}</code>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Modeling inputs and outputs for proof-friendly programs</h4>
+            <h4 className="font-semibold text-foreground mb-3">Shaping inputs so the proof program stays small</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A circuit is not a general-purpose program. Every operation it performs becomes constraints, and constraints
+              are what make proving expensive, so the data you feed a ZoKrates program should already be numeric, bounded,
+              and canonical. The work of turning a messy HTTP body or a JSON document into clean field elements belongs in
+              Rust, before witness generation ever starts. The four guidelines below all push in the same direction: keep
+              the proof program lean and let Rust absorb the irregularity of the outside world.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {proofFriendlyCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -482,9 +520,21 @@ zokrates verify`}</code>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Integrating generated verifiers with Ethereum-oriented systems
+              Connecting a generated verifier to an Ethereum system
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When a smart contract is the verifier, the boundary between your Rust services and the chain becomes the
+              place where most mistakes happen. The cleanest layout keeps three responsibilities physically separate: a
+              prover service that does the heavy work and emits a proof, a thin Rust submitter that encodes public inputs
+              and sends the transaction, and the on-chain verifier contract that returns true or false. The submitter is
+              the only component that talks to Ethereum, and it only ever sees public inputs and a proof, never a witness.
+              Hold that split in mind as you read the four rules that follow.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  App[App request] --> Prover[Prover service]\n  Prover -->|proof + public inputs| Submitter[Rust submitter]\n  Submitter -->|calldata tx| Verifier[On-chain verifier]\n  Verifier -->|true / false| Submitter\n  Witness[(witness)] -.stays here.-> Prover\n  Witness -. never crosses .-x Submitter`}
+              caption="The submitter is the only path to Ethereum, and it carries proof plus public inputs only. The witness stays with the prover."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               {ethereumCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -494,18 +544,33 @@ zokrates verify`}</code>
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                Rust should usually own the contract address map, public-input encoder, proof-blob transport, and on-chain
-                submission policy. The Solidity verifier itself remains a generated contract artifact with its own normal
-                Solidity toolchain and deployment review path.
+                In practice Rust owns the contract address map, the public-input encoder, proof-blob transport, and the
+                on-chain submission policy, including gas, confirmation, and retry. The Solidity verifier itself stays a
+                generated contract artifact with its own toolchain and deployment review path. Owning the calldata is not
+                the same as owning the verifier logic, and conflating the two is how teams end up shipping a contract
+                nobody reviewed.
               </p>
             </div>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Calling ZoKrates workflows from Rust build, CLI, or service boundaries
+              Where each stage runs: admin lane, prover worker, and verifier
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A common early mistake is to wire the whole workflow into one place, often a request handler or a
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">build.rs</code> step, because the
+              prototype was small. The stages have genuinely different operational profiles, so they want different homes.
+              Compile, setup, and export-verifier are infrequent and trust-sensitive and belong in a controlled CLI or CI
+              lane. Witness generation and proof creation are heavy and belong in a bounded worker. Verification is light
+              and belongs in a thin service or a transaction submitter. The diagram shows that separation before the cards
+              describe each lane.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph admin[Admin / CI lane]\n    Compile[compile]\n    Setup[setup]\n    Export[export-verifier]\n  end\n  subgraph worker[Prover worker]\n    Wit[compute-witness]\n    Gen[generate-proof]\n  end\n  subgraph edge[Verifier / submitter]\n    Verify[verify call]\n  end\n  Compile --> Setup\n  Setup --> Wit\n  Wit --> Gen\n  Gen --> Verify\n  Export --> Verify`}
+              caption="Three lanes, three operational profiles: infrequent and trusted, heavy and bounded, light and exposed."
+            />
+            <div className="grid gap-4 lg:grid-cols-2 mt-4">
               {orchestrationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -513,22 +578,45 @@ zokrates verify`}</code>
                 </div>
               ))}
             </div>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{commandRunnerSnippet}</code>
-            </pre>
+            <div className="mt-5 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="font-medium text-foreground mb-2">Driving a stage from Rust</div>
+              <p className="text-sm text-muted-foreground leading-6 mb-3">
+                Whatever lane a stage runs in, Rust ultimately shells out to the ZoKrates binary. The pattern is small but
+                worth getting right: spawn the process, wait for it to finish, and translate a non-zero exit status into a
+                proper Rust error instead of letting it pass silently. The helper below does exactly that, returning
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Ok(())</code> only when the
+                stage actually succeeded. Read it as the success-or-error branch a worker would call once per stage.
+              </p>
+              <MermaidDiagram
+                chart={`flowchart TD\n  Run[run_stage] --> Spawn[Command::status]\n  Spawn --> Check{status.success?}\n  Check -->|yes| Ok[Ok]\n  Check -->|no| Err[Err: stage failed]`}
+                caption="Every stage invocation collapses to one decision: did the process exit cleanly, or does Rust raise an error?"
+              />
+              <pre className="mt-3 rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
+                <code className="font-mono text-foreground">{commandRunnerSnippet}</code>
+              </pre>
+            </div>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                Strong recommendation: do not hide setup or proof generation inside routine `build.rs` or request-handler
-                paths. Those steps are too heavy, too stateful, or too security-sensitive to behave like ordinary Rust
-                compilation or synchronous validation.
+                The rule that follows from all of this: do not hide setup or proof generation inside a routine
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">build.rs</code> or a
+                request-handler path. Those steps are too heavy, too stateful, and too security-sensitive to behave like
+                ordinary compilation or a synchronous validation check.
               </p>
             </div>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Managing artifacts: programs, proving keys, verification keys, witnesses, proofs, and verifier contracts
+              Who owns each artifact, and how long it should live
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The workflow leaves a trail of files behind it, and each one has a different secrecy level and a different
+              custodian. The proving key is sensitive and access-controlled; the verification key is public and ships
+              inside the deployed contract; the witness is the secret you went to all this trouble to protect and should
+              barely exist on disk at all. The single discipline that ties them together is version alignment: a proof, a
+              key, and a verifier contract only mean anything as a matched set. The table is your checklist for keeping
+              that set straight.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
                 <thead>
@@ -556,7 +644,14 @@ zokrates verify`}</code>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Testing proof workflows and reproducibility</h4>
+            <h4 className="font-semibold text-foreground mb-3">Testing the workflow in layers</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Proof failures are notoriously opaque: a verifier returning false tells you nothing about which of a dozen
+              moving parts drifted. The cure is to test in layers and to make failures specific. Unit-test the Rust input
+              normalization on its own. Contract-test local verification against known fixtures. Then keep the Ethereum
+              compile-and-deploy path in its own lane. Above all, write negative tests that fail for named reasons, so an
+              incident points at the wrong key or the wrong input ordering instead of a generic mystery.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {testingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -576,7 +671,14 @@ zokrates verify`}</code>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Performance and operational constraints</h4>
+            <h4 className="font-semibold text-foreground mb-3">Where the time and cost actually go</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Most teams assume proof generation is the expensive part and stop measuring there. It is expensive, but the
+              full picture is more interesting. Witness generation, especially when Rust is hashing large payloads or
+              building Merkle paths first, can dominate before the prover even starts. Verification is cheap by comparison
+              but never free: on-chain it burns gas, off-chain it still parses, checks versions, and may retry. The cards
+              below mark the hot lanes worth isolating and measuring.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {performanceCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -595,8 +697,16 @@ zokrates verify`}</code>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Production caveats, audit boundaries, and upgrade strategy
+              What to plan for before calling it production-ready
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A few concerns sit outside the happy path but decide whether the system is safe to run. If the proving
+              scheme relies on a trusted setup, the provenance of that setup is part of your security model, not a footnote.
+              An upgrade is rarely a single switch: a new circuit usually means new keys, new proofs, and possibly a new
+              contract, so plan for a window where two versions run side by side. And keep the audit surfaces distinct,
+              because circuit correctness, Rust secret handling, and Solidity deployment safety are different reviews that
+              should never collapse into one vague claim that the proof system is secure.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {caveatCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -612,18 +722,26 @@ zokrates verify`}</code>
               </p>
             </div>
           </article>
+        </section>
 
-          <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </article>
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            The hard part of this chapter is not the cryptography; it is resisting the instinct to fold a multi-stage,
+            artifact-heavy pipeline into one tidy abstraction. What that instinct looks like depends on where you are
+            coming from, so here is the mental-model shift for each starting point.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-4">
@@ -699,6 +817,26 @@ zokrates verify`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the code does not run any ZoKrates command. It builds a list of
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Invocation</code> values, one per
+              stage, each carrying its program, its arguments, and the artifact path it will produce. Follow
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">plan_for</code>: it derives a single
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">artifacts/&lt;circuit&gt;</code> base
+              path and threads it through compile, setup, witness, proof, export, and verify so every stage agrees on where
+              the previous one wrote. The diagram shows that the plan is just data, ready for a runner to execute later.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  PlanFor[plan_for] --> List[Vec of Invocation]\n  List --> I0[compile]\n  List --> I1[setup]\n  List --> I2[compute-witness]\n  List --> Cont[three more stages below]`}
+              caption="First half: plan_for returns data, not side effects. It builds a typed list of invocations, one per stage."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The remaining stages round out the list, and two of them produce the concrete outputs a worker reads back:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[three more stages below] --> I3[generate-proof]\n  Cont --> I4[export-verifier]\n  Cont --> I5[verify]\n  I3 --> Render[render -> command string]\n  I4 --> Artifact[.sol artifact path]`}
+              caption="Second half: generate-proof renders to a command string and export-verifier yields the .sol artifact path a runner can execute in order."
+            />
             <RustCodeEditor
               code={codes.zokrates_workflow_command_plan}
               onChange={(newCode) => updateCode("zokrates_workflow_command_plan", newCode)}
@@ -759,6 +897,28 @@ zokrates verify`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: there are two structs, and the gap between them is the whole point. The
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">ProofBundle</code> is the
+              proving-side record and it includes a
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">witness_path</code>. The
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">VerifierCall</code> has no such
+              field. Watch
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">to_verifier_call</code> copy across
+              the contract, function, public-input count, and proof source, and simply leave the witness behind. The
+              diagram traces which fields cross the boundary and which one is dropped on purpose.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph PB[ProofBundle - proving side]\n    Contract[verifier_contract]\n    Public[public_inputs]\n    ProofPath[proof_json_path]\n    Witness[witness_path]\n  end\n  Contract --> Cross[crosses the boundary]\n  Public --> Cross\n  ProofPath --> Cross\n  Witness -. dropped .-x Cross`}
+              caption="First half: the proving-side ProofBundle. Three public fields cross the boundary; the witness path is dropped on purpose."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Only the fields that crossed become the Ethereum-side request:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cross[crosses the boundary] --> Call[contract + fn + inputs + proof]\n  subgraph VC[VerifierCall - Ethereum side]\n    Call\n  end`}
+              caption="Second half: to_verifier_call assembles the VerifierCall from the public fields only, so the witness can never reach the chain."
+            />
             <RustCodeEditor
               code={codes.zokrates_ethereum_verifier_boundary}
               onChange={(newCode) => updateCode("zokrates_ethereum_verifier_boundary", newCode)}
@@ -839,656 +999,3 @@ zokrates verify`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch52-zokrates-workflows-ethereum-verifiers-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { getPageIndexById } from "../page-index"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Split the ZoKrates workflow into build-time, release-time, and runtime responsibilities",
-    objective:
-      "Practice assigning each ZoKrates step to the right operational lane instead of letting the whole pipeline collapse into one opaque script.",
-    starterPrompt:
-      "Classify `compile`, `setup`, `compute-witness`, `generate-proof`, `export-verifier`, and `verify` across build-time, release-time, and runtime boundaries for one proof-backed service.",
-    prompts: [
-      "Which steps happen once per circuit or release rather than once per request?",
-      "Which steps belong in a proving worker instead of a request handler?",
-      "Which steps can happen in CI or a controlled admin CLI lane rather than in build.rs?",
-      "Which step should stay verifier-side and witness-free?",
-    ],
-    acceptanceCriteria: [
-      "You place compile, setup, witness generation, proof generation, export, and verification in distinct operational lanes.",
-      "You identify at least one step that should not run per request.",
-      "You explain why verifier input should exclude witness material.",
-    ],
-    hints: [
-      "Start by asking which artifact is expensive and which one is durable.",
-      "A good answer treats proof generation like a worker job, not like a tiny helper function.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Review a proof workflow for proof-friendly input modeling",
-    objective:
-      "Spot the places where transport-shaped data is being pushed into the ZoKrates boundary without enough normalization or commitment discipline.",
-    starterPrompt:
-      "A Rust API currently forwards raw JSON strings, variable-length lists, and unbounded notes fields directly into a proof step that is supposed to justify only one public total and one public limit.",
-    prompts: [
-      "Which parts should become canonical numeric inputs before witness generation?",
-      "Which large or irregular fields should become commitments or stay witness-only?",
-      "Which fields should never become public verifier inputs just because they already existed in the HTTP payload?",
-      "Which tests would prove the normalization contract is stable across versions?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one field that should be normalized in Rust before the ZoKrates step.",
-      "You identify at least one field that should remain witness-only or become a commitment.",
-      "You mention at least one reproducibility or contract test for the mapping.",
-    ],
-    hints: [
-      "Transport convenience and proof convenience are rarely the same thing.",
-      "If the verifier does not need a field, it probably should not become a public input by accident.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Design a versioned artifact manifest for proof generation and verification",
-    objective:
-      "Build a small Rust-facing manifest that keeps circuit, keys, proof blobs, and verifier contract metadata attributable.",
-    starterPrompt:
-      "Design one `ArtifactManifest` or equivalent set of Rust types that names a circuit ID, proving key ID, verification key ID, proof path, and verifier contract path or address.",
-    prompts: [
-      "Keep proving-side and verifying-side metadata distinguishable.",
-      "Include one protocol or circuit version field.",
-      "Decide which artifact fields are safe to expose to verifier callers and which are proving-only.",
-      "Think about retention policy and auditability while naming the fields.",
-    ],
-    acceptanceCriteria: [
-      "Your design names at least four distinct artifacts explicitly.",
-      "You include one version or circuit-identity field.",
-      "You separate at least one proving-only field from a verifier-facing field.",
-      "The resulting type set is small enough for another engineer to review quickly.",
-    ],
-    hints: [
-      "If one struct does every job, the custody model is probably too vague.",
-      "Versioning belongs on artifacts early, not after the first migration failure.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair a verifier integration that leaks witness or mixes versions",
-    objective:
-      "Fix the most common production mistakes around verifier requests: witness exposure, wrong key pairing, or wrong contract version.",
-    starterPrompt:
-      "You inherit a verifier service that stores witness paths next to verifier request DTOs, chooses the verifier contract from a mutable config string at runtime, and sometimes pairs a new proof blob with an older verification key.",
-    prompts: [
-      "Which fields should disappear from verifier-facing request types immediately?",
-      "How should contract address or path selection become versioned and explicit?",
-      "Which key or circuit mismatch should fail before any external verifier call is attempted?",
-      "Which log or trace fields belong on that failure path?",
-    ],
-    acceptanceCriteria: [
-      "You remove at least one witness-related field from the verifier boundary.",
-      "You define one explicit version or key-matching rule.",
-      "You identify one preflight validation that should fail before a verifier call or transaction submit happens.",
-      "You mention at least one structured field such as circuit ID, key ID, or contract version.",
-    ],
-    hints: [
-      "If the verifier can see the witness path, the boundary is already too wide.",
-      "Version mismatch is a contract failure, not a 'maybe verify and see' runtime strategy.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Design reproducibility and negative tests for the proof pipeline",
-    objective:
-      "Turn proof generation and verification into a testable workflow rather than a one-off manual command sequence.",
-    starterPrompt:
-      "You want CI confidence that proof generation still works after refactors, and that wrong inputs, wrong versions, or wrong keys fail clearly rather than failing as one generic false result.",
-    prompts: [
-      "Which artifact versions should be pinned in CI fixtures?",
-      "Which negative cases must exist: wrong public inputs, wrong verification key, wrong contract version, or wrong witness?",
-      "Where should you use native verification versus Ethereum-oriented verifier tests?",
-      "How would you keep the fixtures reproducible and reviewable over time?",
-    ],
-    acceptanceCriteria: [
-      "You define at least two positive and two negative workflow tests.",
-      "You separate native verify tests from contract or deploy-path tests.",
-      "You mention at least one artifact pinning or manifest rule that improves reproducibility.",
-      "You explain how failing cases become attributable rather than generic.",
-    ],
-    hints: [
-      "A fast native verify path is a good first CI gate, but it is not the same as a deploy-path test.",
-      "The best negative test is the one that tells you which contract or artifact drifted.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Plan audits, upgrades, and rollout for an Ethereum verifier integration",
-    objective:
-      "Make trusted setup, verifier deployment, dual-version rollout, and operational ownership explicit before the first circuit upgrade.",
-    starterPrompt:
-      "You are shipping a proof-backed service whose verifier contract lives in an Ethereum-oriented environment. A circuit update is coming, setup provenance matters, and operators want canary rollout plus rollback.",
-    prompts: [
-      "Which audit surfaces exist separately: proving scheme assumptions, circuit logic, Rust artifact custody, and Solidity verifier deployment?",
-      "How will old and new verifier versions coexist during rollout?",
-      "Which artifact or address mapping must be published for operators and downstream consumers?",
-      "Which telemetry or failure rates gate promotion or trigger rollback?",
-    ],
-    acceptanceCriteria: [
-      "You name at least three distinct audit or review surfaces.",
-      "You describe one mixed-version rollout or dual-verifier strategy.",
-      "You include at least one published artifact mapping such as circuit ID to contract address.",
-      "You mention at least two rollout signals such as verification failure rate, proving queue age, or contract-submit failure rate.",
-    ],
-    hints: [
-      "An upgrade is rarely just one code deploy. It is usually one artifact and contract migration too.",
-      "Keep the rollback story boring enough that another engineer can execute it under pressure.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why should compile and setup usually live in different operational lanes from witness generation and proof generation?",
-  "What makes a proof request different from a verifier request in Rust terms?",
-  "Why is contract or key version drift often a bigger operational risk than one single failed proof?",
-  "What does native verification prove, and what does it not prove about the Ethereum deployment path?",
-  "Why should generated verifier contracts still go through normal Solidity review and release discipline?",
-]
-
-const workingLoop = [
-  "State which inputs are public, private, or artifact identifiers first.",
-  "Assign each ZoKrates step to build-time, release-time, or runtime explicitly.",
-  "Keep verifier-facing request types witness-free.",
-  "Version circuit IDs, keys, and verifier contracts together.",
-  "Test both happy-path and wrong-version or wrong-key failures before rollout.",
-]
-
-const artifactChecklist = [
-  "Circuit or program ID is explicit and versioned.",
-  "Proving key and verification key identifiers are stored separately.",
-  "Witness retention policy is explicit and usually short-lived.",
-  "Proof artifact and verifier contract path or address are attributable.",
-  "CI exercises both native verify and at least one deployment-facing verifier check.",
-]
-
-export function PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = getPageIndexById("ch52-zokrates-workflows-ethereum-verifiers-exercises")
-  const mainPageIndex = getPageIndexById("ch52-zokrates-workflows-ethereum-verifiers")
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 52 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice ZoKrates and Ethereum verifier integration the way it survives review: split workflow ownership, version
-          artifacts deliberately, keep witnesses out of verifier boundaries, and plan upgrades and audits before the first
-          mixed deployment.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a workflow and trust-boundary review. The strongest answer does not stop at
-                “generate a proof.” It says which stage runs where, which artifacts are versioned, who may see the witness,
-                how verifier requests stay small, and how rollout stays reviewable later.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 52
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Artifact checklist</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {artifactChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  ZoKrates drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Build a verifier request without leaking witness material"
-          description={
-            <>
-              Repair the starter so the verifier-facing request is built from the verifier contract, proof path, and public
-              input count only. The witness path exists in the proving artifact bundle but must not be exposed as part of
-              the verifier request boundary.
-            </>
-          }
-          filename="verifier_request_boundary.rs"
-          runKey="ch52_ex_verifier_request"
-          expectedOutput={
-            "contract = contracts/AgeCheckVerifier.sol\npublic inputs = 2\nwitness included = false"
-          }
-          helperText={
-            <>
-              Tip: clone the verifier contract path, count the public inputs with{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">len()</code>, keep the proof path on the
-              request, and make <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">witness_included</code>{" "}
-              explicitly false.
-            </>
-          }
-          initialCode={`#[derive(Debug, Clone)]
-struct ProofBundle {
-    verifier_contract: String,
-    public_inputs: Vec<String>,
-    proof_path: String,
-    witness_path: String,
-}
-
-#[derive(Debug, Clone)]
-struct VerificationRequest {
-    contract: String,
-    public_inputs_len: usize,
-    proof_path: String,
-    witness_included: bool,
-}
-
-fn to_verification_request(bundle: &ProofBundle) -> VerificationRequest {
-    VerificationRequest {
-        contract: String::new(),
-        public_inputs_len: 0,
-        proof_path: bundle.witness_path.clone(),
-        witness_included: true,
-    }
-}
-
-fn main() {
-    let bundle = ProofBundle {
-        verifier_contract: String::from("contracts/AgeCheckVerifier.sol"),
-        public_inputs: vec![String::from("45"), String::from("50")],
-        proof_path: String::from("artifacts/proof.json"),
-        witness_path: String::from("artifacts/witness"),
-    };
-
-    let request = to_verification_request(&bundle);
-
-    println!("contract = {}", request.contract);
-    println!("public inputs = {}", request.public_inputs_len);
-    println!("witness included = {}", request.witness_included);
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to place each ZoKrates step in the right operational lane, design
-            versioned artifact manifests another engineer can audit, keep verifier requests witness-free, and explain how
-            upgrades, contract deployment, and proof verification stay safe and reviewable in a real Ethereum-oriented
-            system.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch52_zokrates_workflows_ethereum_verifiers/workflow_orchestration_plan.rs`
-````
-use std::path::PathBuf;
-
-#[derive(Debug, Clone)]
-struct Invocation {
-    stage: &'static str,
-    program: &'static str,
-    args: Vec<String>,
-    artifact: PathBuf,
-}
-
-fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
-    let compiled = format!("artifacts/{}", circuit);
-    vec![
-        Invocation {
-            stage: "compile",
-            program: "zokrates",
-            args: vec![
-                "compile".into(),
-                "-i".into(),
-                format!("{}.zok", circuit),
-                "-o".into(),
-                compiled.clone(),
-            ],
-            artifact: PathBuf::from(&compiled),
-        },
-        Invocation {
-            stage: "setup",
-            program: "zokrates",
-            args: vec!["setup".into(), "-i".into(), compiled.clone()],
-            artifact: PathBuf::from("artifacts/proving.key"),
-        },
-        Invocation {
-            stage: "compute-witness",
-            program: "zokrates",
-            args: {
-                let mut args = vec![
-                    "compute-witness".into(),
-                    "-i".into(),
-                    compiled.clone(),
-                    "-a".into(),
-                ];
-                args.extend(witness_args.iter().map(|value| value.to_string()));
-                args
-            },
-            artifact: PathBuf::from("artifacts/witness"),
-        },
-        Invocation {
-            stage: "generate-proof",
-            program: "zokrates",
-            args: vec!["generate-proof".into(), "-i".into(), compiled.clone()],
-            artifact: PathBuf::from("artifacts/proof.json"),
-        },
-        Invocation {
-            stage: "export-verifier",
-            program: "zokrates",
-            args: vec!["export-verifier".into(), "-i".into(), compiled.clone()],
-            artifact: PathBuf::from("artifacts/AgeCheckVerifier.sol"),
-        },
-        Invocation {
-            stage: "verify",
-            program: "zokrates",
-            args: vec!["verify".into(), "-i".into(), compiled],
-            artifact: PathBuf::from("artifacts/verify.log"),
-        },
-    ]
-}
-
-fn render(invocation: &Invocation) -> String {
-    format!("{} {}", invocation.program, invocation.args.join(" "))
-}
-
-fn main() {
-    let plan = plan_for("age_check", &["18", "21"]);
-
-    println!("steps = {}", plan.len());
-    println!("compile = {}", render(&plan[0]));
-    println!("proof = {}", render(&plan[3]));
-    println!("contract = {}", plan[4].artifact.display());
-}
-````
-
-### File: `examples/ch52_zokrates_workflows_ethereum_verifiers/ethereum_verifier_boundary.rs`
-````
-#[derive(Debug, Clone)]
-struct ProofBundle {
-    circuit_id: String,
-    verifier_contract: String,
-    public_inputs: Vec<String>,
-    proof_json_path: String,
-    witness_path: String,
-}
-
-#[derive(Debug, Clone)]
-struct VerifierCall {
-    contract: String,
-    function: &'static str,
-    public_inputs_len: usize,
-    proof_source: String,
-}
-
-fn to_verifier_call(bundle: &ProofBundle) -> VerifierCall {
-    VerifierCall {
-        contract: bundle.verifier_contract.clone(),
-        function: "verifyTx",
-        public_inputs_len: bundle.public_inputs.len(),
-        proof_source: bundle.proof_json_path.clone(),
-    }
-}
-
-fn main() {
-    let bundle = ProofBundle {
-        circuit_id: String::from("age-check:v2"),
-        verifier_contract: String::from("contracts/AgeCheckVerifier.sol"),
-        public_inputs: vec![String::from("45"), String::from("50")],
-        proof_json_path: String::from("artifacts/proof.json"),
-        witness_path: String::from("artifacts/witness"),
-    };
-
-    let call = to_verifier_call(&bundle);
-    let witness_leaked = call.proof_source.contains("witness");
-
-    println!("contract = {}", call.contract);
-    println!("verifier fn = {}", call.function);
-    println!("public inputs = {}", call.public_inputs_len);
-    println!("witness leaked = {}", witness_leaked);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -99,4 +99,6 @@ export { PageCh49HttpsTlsSecureServiceBoundaries } from "./page-ch49-https-tls-s
- export { PageCh49HttpsTlsSecureServiceBoundariesExercises } from "./page-ch49-https-tls-secure-service-boundaries-exercises"
- export { PageCh50Libp2pPeerToPeerRustSystems } from "./page-ch50-libp2p-peer-to-peer-rust-systems"
- export { PageCh50Libp2pPeerToPeerRustSystemsExercises } from "./page-ch50-libp2p-peer-to-peer-rust-systems-exercises"
- export { PageCh51ZeroKnowledgeProofsRustEngineers } from "./page-ch51-zero-knowledge-proofs-rust-engineers"
- export { PageCh51ZeroKnowledgeProofsRustEngineersExercises } from "./page-ch51-zero-knowledge-proofs-rust-engineers-exercises"
-+export { PageCh52ZoKratesWorkflowsAndEthereumVerifiers } from "./page-ch52-zokrates-workflows-ethereum-verifiers"
-+export { PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises } from "./page-ch52-zokrates-workflows-ethereum-verifiers-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -111,6 +111,8 @@ import {
-   PageCh50Libp2pPeerToPeerRustSystemsExercises,
-   PageCh51ZeroKnowledgeProofsRustEngineers,
-   PageCh51ZeroKnowledgeProofsRustEngineersExercises,
-+  PageCh52ZoKratesWorkflowsAndEthereumVerifiers,
-+  PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -217,6 +219,8 @@ const PAGE_COMPONENTS = [
-   PageCh50Libp2pPeerToPeerRustSystemsExercises,
-   PageCh51ZeroKnowledgeProofsRustEngineers,
-   PageCh51ZeroKnowledgeProofsRustEngineersExercises,
-+  PageCh52ZoKratesWorkflowsAndEthereumVerifiers,
-+  PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh52Output } from "./rust-simulator-ch52"
- import { simulateCh51Output } from "./rust-simulator-ch51"
- import { simulateCh50Output } from "./rust-simulator-ch50"
- import { simulateCh49Output } from "./rust-simulator-ch49"
-@@ -1029,6 +1030,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch52Output = simulateCh52Output(code, key)
-+  if (ch52Output !== null) return ch52Output
- 
-   const ch51Output = simulateCh51Output(code, key)
-   if (ch51Output !== null) return ch51Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -40,6 +40,7 @@ import { DEFAULT_CODES_CH47 } from "./default-codes-ch47"
- import { DEFAULT_CODES_CH48 } from "./default-codes-ch48"
- import { DEFAULT_CODES_CH49 } from "./default-codes-ch49"
- import { DEFAULT_CODES_CH50 } from "./default-codes-ch50"
- import { DEFAULT_CODES_CH51 } from "./default-codes-ch51"
-+import { DEFAULT_CODES_CH52 } from "./default-codes-ch52"
- 
- export interface PageConfig {
-   id: string
-@@ -1284,6 +1285,28 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Separate public inputs from witnesses, isolate proving from verification, fix transcript drift, and threat-model proof-backed APIs",
-         icon: "trophy",
-+      },
-+    ],
-+  },
-+  {
-+    id: "ch52-zokrates-workflows-ethereum-verifiers",
-+    title: "Chapter 52 · ZoKrates Workflows and Ethereum Verifiers",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch52-zokrates-workflows-ethereum-verifiers",
-+        title: "ZoKrates Workflows and Ethereum Verifiers",
-+        shortTitle: "ZoKrates and Ethereum",
-+        description:
-+          "ZoKrates CLI workflow, proof-friendly modeling, Ethereum verifier integration, Rust orchestration, artifact custody, reproducibility, performance limits, and production caveats",
-+        icon: "book",
-+        codeKeys: ["zokrates_workflow_command_plan", "zokrates_ethereum_verifier_boundary"],
-+      },
-+      {
-+        id: "ch52-zokrates-workflows-ethereum-verifiers-exercises",
-+        title: "Chapter 52 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Split build-time and runtime proof responsibilities, design artifact manifests, repair verifier boundaries, and plan upgrades and audits",
-+        icon: "trophy",
-       },
-     ],
-   },
-@@ -1755,5 +1778,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH49,
-   ...DEFAULT_CODES_CH50,
-   ...DEFAULT_CODES_CH51,
-+  ...DEFAULT_CODES_CH52,
- }
- export interface BookState {
-````

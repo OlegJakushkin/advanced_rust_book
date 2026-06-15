@@ -7,6 +7,7 @@ import {
   Bug,
   Cpu,
   Gauge,
+  Layers,
   Shield,
   TriangleAlert,
   Wrench,
@@ -15,6 +16,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -36,15 +38,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "DDD will feel familiar if you have modeled rich types before, but Rust removes inheritance as the default vehicle. That usually improves the design. Entities, value objects, and services become explicit types and traits instead of base-class trees.",
+    body: "You have modeled rich types before, but your reflex for shared behavior is probably a base class with protected state and virtual methods. Rust removes that vehicle entirely, which forces the question you should have been asking anyway: is this shared behavior (a trait), shared data (a field or component), or a closed set of cases (an enum)? The aggregate also stops being a graph of pointers you must keep alive by hand and becomes one owner of the state that changes together.",
   },
   {
     title: "C# background",
-    body: "If you come from interface-heavy domain models, the big shift is that Rust wants value semantics and ownership clarity to stay visible. Traits help with seams, but newtypes, enums, and constructors do much of the real domain work.",
+    body: "Interface-heavy domain models and a framework that quietly tracks entity identity have trained you to lean on reference semantics and runtime services. The shift is that Rust keeps ownership and value semantics visible: a newtype is a real distinct type, not an annotation, and an aggregate's invariants live in its methods rather than in an ORM's change tracker. Traits give you the seams, but the modeling work happens in plain structs, enums, and constructors.",
   },
   {
     title: "Go background",
-    body: "If you are used to service code drifting toward structs plus functions plus stringly typed IDs, Rust is a strong nudge back toward explicit domain language. Newtypes, enums, and aggregate methods make the model harder to misuse accidentally.",
+    body: "Go nudges you toward structs of public fields plus free functions plus stringly typed IDs, with validation re-checked at every call site. Rust nudges the other way: make the illegal value unconstructable once, in a newtype constructor or an aggregate method, and the rest of the code can trust it. The trap to unlearn is treating an `OrderId` and a `CustomerId` as interchangeable strings; here they are different types and the compiler refuses the mix-up.",
+  },
+  {
+    title: "Python background",
+    body: "Dynamic attributes and duck typing let a domain object mean whatever the last writer set on it, with rules scattered across services and re-validated defensively. Rust asks you to spend the modeling cost up front: encode the closed set of states as an enum, reject bad values at construction, and let the type carry the guarantee. You write more declarations, but the runtime AttributeError and the silently wrong field become compile-time impossibilities instead.",
   },
 ]
 
@@ -318,6 +324,37 @@ export function PageCh16DomainDrivenDesignInRust() {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Domain-driven design is older than Rust, so most senior engineers arrive with habits from a language whose
+            type system made different promises. The vocabulary carries over; the mechanism does not. The shift below is
+            the one worth internalizing before reading any code in this chapter.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm text-muted-foreground leading-6">
+              The common thread across all four: in Rust the domain model is not enforced by a framework at runtime, by a
+              base class, or by convention. It is enforced by types that refuse to hold an invalid value. The diagram
+              below shows where those types sit relative to the infrastructure they protect.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  HTTP[HTTP / CLI edge] --> App[Application service]\n  App --> Domain[Domain model]\n  App --> RepoT[Repository trait]\n  RepoT -. implemented by .-> RepoImpl[SQL repository]\n  RepoImpl --> DB[(Database)]\n  Domain -. no dependency .-> RepoImpl`}
+              caption="Dependencies point inward toward the domain. The application service depends on a repository trait; the SQL implementation depends on the trait, not the other way round, so the domain never imports infrastructure."
+            />
+          </div>
+        </section>
+
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
@@ -337,6 +374,23 @@ export function PageCh16DomainDrivenDesignInRust() {
                 </div>
               ))}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-4">
+              These four pieces nest into one shape worth memorizing. Value objects are owned by the aggregate root, which
+              is the entity that guards the invariants; the repository is the only door through which the whole aggregate
+              is loaded and saved. The root owns everything inside the boundary, so there is no way to mutate a line item
+              without going through a method that can re-check the rule.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Repo[OrderRepository trait] -->|load / save| Root[Order aggregate root]\n  Root -->|enforces| Inv[Invariants: non-empty, valid status]\n  Root -.->|owns, see below| Cont[Aggregate boundary continues below]`}
+              caption="Outside view: the repository moves the whole aggregate in and out of storage, and invariants are checked on the root rather than scattered across callers."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Looking inside that boundary, the root owns the order lines and the value objects they carry:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[Aggregate boundary] --> Root[Order aggregate root]\n  Root -->|owns| Lines[Vec of OrderLine]\n  Lines --> VO1[Sku value object]\n  Lines --> VO2[Quantity value object]\n  Lines --> VO3[MoneyCents value object]`}
+              caption="Inside view: the root owns its value objects through the order lines, so there is no way to mutate a line without going through a method that can re-check the rule."
+            />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -506,17 +560,6 @@ struct CustomerId(u64);`}</code>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">what changes by background</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
         <section className="space-y-4">
@@ -583,6 +626,20 @@ struct CustomerId(u64);`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the order is a tiny state machine with two states. While it is{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Draft</code> you may add lines;
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">submit</code> refuses an empty
+              order and otherwise moves it to <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Submitted</code>,
+              after which <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">add_line</code> is
+              rejected. The value-object constructors reject the local errors first, so by the time a line reaches the
+              aggregate every quantity is non-zero and every SKU is non-empty. Trace the transitions in the diagram, then
+              read the same guards in the code.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Draft: construct\n  Draft --> Draft: add_line ok\n  Draft --> Submitted: submit when non-empty\n  Draft --> Draft: submit fails EmptyOrder\n  Submitted --> Submitted: add_line fails CannotModify\n  Submitted --> [*]`}
+              caption="Two states, with the guards drawn as edges: add_line only works in Draft, and submit only advances when at least one line exists."
+            />
             <RustCodeEditor
               code={codes.ddd_order_aggregate}
               onChange={(newCode) => updateCode("ddd_order_aggregate", newCode)}
@@ -637,6 +694,18 @@ struct CustomerId(u64);`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: there is no stored balance to read. Current state is computed by folding the event stream
+              into a fresh accumulator, one event at a time. Each call to{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">apply</code> validates against the
+              state built so far &mdash; a deposit before the account is open is rejected, a withdrawal larger than the
+              running balance is rejected &mdash; and the version counter is simply how many events were applied. The
+              diagram is that fold; the three output numbers are the accumulator after the last event.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[balance 0, version 0, closed] --> E1[Opened 1000]\n  E1 --> S1[balance 1000, version 1, open]\n  S1 --> E2[Deposited 400]\n  E2 --> S2[balance 1400, version 2]\n  S2 --> E3[Withdrawn 150]\n  E3 --> S3[balance 1250, version 3]`}
+              caption="Rehydration is a left fold: each event is applied to the running state, version increments per applied event, and the final accumulator is the current account."
+            />
             <RustCodeEditor
               code={codes.ddd_event_sourced_account}
               onChange={(newCode) => updateCode("ddd_event_sourced_account", newCode)}
@@ -709,723 +778,3 @@ struct CustomerId(u64);`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch16-domain-driven-design-in-rust-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Separate entity, value object, aggregate, and repository",
-    objective: "Practice naming the DDD role before you choose the Rust shape.",
-    starterPrompt:
-      "Classify these concepts in an order platform: `OrderId`, `MoneyCents`, `Order`, `OrderLine`, and `OrderRepository`.",
-    prompts: [
-      "Which types are identity-carrying entities or roots?",
-      "Which types are value objects and why?",
-      "Which type is the aggregate root that should enforce consistency rules?",
-      "Which item is a boundary trait rather than a domain object?",
-    ],
-    acceptanceCriteria: [
-      "You distinguish entity identity from value semantics clearly.",
-      "You identify one aggregate root and explain why that root owns the consistency boundary.",
-      "You identify the repository as a seam, not as the place where domain rules should live by default.",
-    ],
-    hints: [
-      "Ask which concept is compared by identity over time and which is compared only by value.",
-      "Repositories are usually boundary contracts, not business-rule containers.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Replace primitive obsession with newtypes",
-    objective: "Read a raw-ID design and explain what becomes safer once the domain gets explicit types.",
-    starterPrompt:
-      "You inherit `fn assign(order_id: u64, customer_id: u64, amount_cents: u64)` plus several transport DTOs that all use raw integers and strings.",
-    prompts: [
-      "Which parameters are easiest to swap by accident?",
-      "Which newtypes would you introduce first?",
-      "What review mistakes become easier to spot once the function signature becomes domain-specific?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least two raw primitives that should become domain-specific types.",
-      "You explain one concrete bug class that newtypes help prevent.",
-      "You describe the gain in terms of API review and domain language, not only type aesthetics.",
-    ],
-    hints: [
-      "The question is not whether `u64` works mechanically. The question is whether it says enough.",
-      "Identifiers, money, quantities, and status-like strings are common first candidates.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Encode aggregate invariants in constructors and methods",
-    objective: "Build a small domain model that rejects invalid quantity and keeps the aggregate total correct.",
-    starterPrompt:
-      "Implement `OrderId`, `Quantity`, and `Order` so zero quantity is invalid and `add_line` updates both line count and total cents.",
-    prompts: [
-      "Use a newtype for `OrderId`.",
-      "Make `Quantity::new(0)` return an explicit error.",
-      "Keep the aggregate method responsible for updating line count and total.",
-      "Do not push the rule into a free function outside the aggregate.",
-    ],
-    acceptanceCriteria: [
-      "The model uses at least one newtype and one constructor that enforces an invariant.",
-      "The aggregate method updates its own state consistently.",
-      "The runnable lab prints the expected zero-quantity error, line count, and total.",
-    ],
-    hints: [
-      "A value-object constructor is the right place for the local rule.",
-      "An aggregate method is the right place for multi-field consistency.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair an anaemic domain model without inheritance",
-    objective: "Move rule enforcement closer to the model instead of reproducing a service-layer god object.",
-    starterPrompt:
-      "You inherit `struct OrderRecord { pub lines: Vec<...>, pub status: String, pub total_cents: u64 }` plus service functions `validate_order`, `recompute_total`, and `submit_order`.",
-    prompts: [
-      "Which fields should stop being `pub` immediately?",
-      "Which free functions should become methods on the aggregate?",
-      "Where do you keep status as an enum instead of an open string?",
-      "How would you explain the refactor to a teammate coming from inheritance-heavy design?",
-    ],
-    acceptanceCriteria: [
-      "You narrow the public surface of the aggregate state.",
-      "You move at least one real invariant into a method or constructor on the model.",
-      "You replace at least one stringly typed state with a stronger domain type.",
-    ],
-    hints: [
-      "Rust modules and private fields are part of the repair.",
-      "A rich model is about rule locality, not about having more methods for style.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Design repository traits with sync and async variants",
-    objective: "Choose repository seams that remain honest under both blocking and suspending IO.",
-    starterPrompt:
-      "Design `OrderRepository` and `AsyncOrderRepository` for one aggregate. Then explain why an async version returning `&Order` is usually the wrong seam.",
-    prompts: [
-      "What should the sync trait return on load and save?",
-      "What should the async trait return, and what future shape would you use on stable Rust if you avoid macros?",
-      "Why does an owned return usually fit async repository boundaries better than a borrowed return?",
-    ],
-    acceptanceCriteria: [
-      "You produce a plausible sync repository trait over domain types or domain-shaped projections.",
-      "You produce a plausible async repository trait or clearly describe one with owned outputs.",
-      "You explain the ownership and lifetime issue behind borrowed async returns accurately.",
-    ],
-    hints: [
-      "Repository boundaries usually want owned aggregates or owned projections.",
-      "The async problem is not style. It is borrow lifetime across suspension.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose event sourcing and service boundaries deliberately",
-    objective: "Make DDD boundary choices across a modular monolith or distributed system without over-modeling everything.",
-    starterPrompt:
-      "You are designing `cart -> order -> payment -> fulfillment`, with one team considering event sourcing for order history and another team splitting payment into a separate service.",
-    prompts: [
-      "Which parts of the model belong inside one bounded context and which deserve translation at a boundary?",
-      "Which events are internal domain facts and which might become public integration events?",
-      "Would event sourcing help the order context enough to justify projection and migration work?",
-      "What testing or observability hooks would you add before declaring the design production-ready?",
-    ],
-    acceptanceCriteria: [
-      "You distinguish bounded-context boundaries from in-process code organization clearly.",
-      "You separate internal domain events from public integration events deliberately.",
-      "You justify event sourcing as a domain choice with operational cost, not as automatic modernization.",
-      "You name at least one test and one observability hook, such as aggregate transition tests, outbox lag, or projection version metrics.",
-    ],
-    hints: [
-      "Not every internal event deserves public contract status.",
-      "The strongest answer names both the modeling benefit and the operational price.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why is a newtype often a better DDD move than another validation helper around a primitive?",
-  "What makes an aggregate a consistency boundary rather than just a large struct?",
-  "Why is an anaemic model especially brittle in Rust service code?",
-  "What is the difference between an application service and a domain service?",
-  "Why do async repositories usually prefer owned outputs?",
-  "What production tradeoff should you state explicitly before choosing event sourcing?",
-]
-
-const workingLoop = [
-  "Name the domain concept before you name the Rust feature.",
-  "Place local invariants in value-object constructors and multi-field consistency in aggregate methods.",
-  "Keep repositories as boundary traits, not domain dumping grounds.",
-  "If the boundary is async or distributed, prefer owned data and explicit translation over borrowed convenience.",
-]
-
-const repositoryChecklist = [
-  "Do repository traits speak in domain IDs, aggregates, or purpose-built projections?",
-  "Does the async boundary return owned data rather than borrowed references tied to storage internals?",
-  "Are transport and persistence errors translated before they leak into the domain?",
-  "Would an in-memory implementation exercise the same semantic contract as the real repository?",
-]
-
-export function PageCh16DomainDrivenDesignInRustExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 31
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 16 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice DDD the Rust way: precise domain language, type-level safety where it pays, explicit aggregate
-          boundaries, and repository seams that stay honest under production pressure.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a modeling review. The best answer does not say only “use DDD” or “make a
-                trait.” It says which concept deserves a type, where the invariant belongs, which layer owns the rule,
-                and where the boundary must translate into owned data or external contracts.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(30)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 16
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Repository boundary checklist</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {repositoryChecklist.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Domain modeling drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Newtypes plus aggregate invariants"
-          description={
-            <>
-              Repair the starter so zero quantity is rejected and the aggregate keeps its own counters correct. The
-              checker expects a real constructor guard for{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Quantity</code> and a correct update in{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">add_line</code>.
-            </>
-          }
-          filename="order_invariants_lab.rs"
-          runKey="ch16_ex_order_invariants"
-          expectedOutput={'zero = Err("quantity must be greater than 0")\norder = OrderId(7)\nlines = 1\ntotal cents = 1800'}
-          helperText={
-            <>
-              Tip: keep the local rule in <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Quantity::new</code>,
-              then keep the multi-field consistency update inside the aggregate method. The per-line total is{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">qty.get() as u64 * unit_price_cents</code>.
-            </>
-          }
-          initialCode={`#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct OrderId(u64);\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct Quantity(u32);\n\nimpl Quantity {\n    fn new(value: u32) -> Result<Self, &'static str> {\n        Ok(Self(value))\n    }\n\n    fn get(self) -> u32 {\n        self.0\n    }\n}\n\n#[derive(Debug)]\nstruct Order {\n    id: OrderId,\n    line_count: usize,\n    total_cents: u64,\n}\n\nimpl Order {\n    fn new(id: OrderId) -> Self {\n        Self {\n            id,\n            line_count: 0,\n            total_cents: 0,\n        }\n    }\n\n    fn add_line(&mut self, qty: Quantity, unit_price_cents: u64) {\n        self.line_count += 0;\n        self.total_cents += 0;\n    }\n}\n\nfn main() {\n    println!(\"zero = {:?}\", Quantity::new(0));\n    let mut order = Order::new(OrderId(7));\n    let qty = Quantity::new(3).unwrap();\n    order.add_line(qty, 600);\n    println!(\"order = {:?}\", order.id);\n    println!(\"lines = {}\", order.line_count);\n    println!(\"total cents = {}\", order.total_cents);\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to defend when a concept deserves a newtype, when a rule belongs
-            in a constructor versus an aggregate method, how repository traits differ from domain behavior, and why DDD
-            boundaries in Rust are mostly about explicit language, ownership, and translation rather than architectural
-            slogans.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch16_domain_driven_design_in_rust/order_aggregate.rs`
-````
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct OrderId(u64);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct CustomerId(u64);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Quantity(u32);
-
-impl Quantity {
-    fn new(value: u32) -> Result<Self, DomainError> {
-        if value == 0 {
-            return Err(DomainError::InvalidQuantity);
-        }
-        Ok(Self(value))
-    }
-
-    fn get(self) -> u32 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct MoneyCents(u64);
-
-impl MoneyCents {
-    fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    fn get(self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Sku(String);
-
-impl Sku {
-    fn new(value: &str) -> Result<Self, DomainError> {
-        if value.trim().is_empty() {
-            return Err(DomainError::EmptySku);
-        }
-        Ok(Self(value.to_string()))
-    }
-}
-
-#[derive(Debug)]
-struct OrderLine {
-    sku: Sku,
-    qty: Quantity,
-    unit_price: MoneyCents,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OrderStatus {
-    Draft,
-    Submitted,
-}
-
-#[derive(Debug)]
-enum DomainError {
-    InvalidQuantity,
-    EmptySku,
-    EmptyOrder,
-    CannotModifySubmittedOrder,
-}
-
-#[derive(Debug)]
-struct Order {
-    id: OrderId,
-    customer_id: CustomerId,
-    status: OrderStatus,
-    lines: Vec<OrderLine>,
-}
-
-impl Order {
-    fn new(id: OrderId, customer_id: CustomerId) -> Self {
-        Self {
-            id,
-            customer_id,
-            status: OrderStatus::Draft,
-            lines: Vec::new(),
-        }
-    }
-
-    fn add_line(
-        &mut self,
-        sku: Sku,
-        qty: Quantity,
-        unit_price: MoneyCents,
-    ) -> Result<(), DomainError> {
-        if self.status == OrderStatus::Submitted {
-            return Err(DomainError::CannotModifySubmittedOrder);
-        }
-
-        self.lines.push(OrderLine {
-            sku,
-            qty,
-            unit_price,
-        });
-
-        Ok(())
-    }
-
-    fn submit(&mut self) -> Result<(), DomainError> {
-        if self.lines.is_empty() {
-            return Err(DomainError::EmptyOrder);
-        }
-
-        self.status = OrderStatus::Submitted;
-        Ok(())
-    }
-
-    fn total_cents(&self) -> u64 {
-        self.lines
-            .iter()
-            .map(|line| line.qty.get() as u64 * line.unit_price.get())
-            .sum()
-    }
-
-    fn status(&self) -> &'static str {
-        match self.status {
-            OrderStatus::Draft => "draft",
-            OrderStatus::Submitted => "submitted",
-        }
-    }
-}
-
-fn main() {
-    let mut order = Order::new(OrderId(1001), CustomerId(7));
-
-    order
-        .add_line(
-            Sku::new("BOOK-1").unwrap(),
-            Quantity::new(2).unwrap(),
-            MoneyCents::new(1500),
-        )
-        .unwrap();
-
-    order
-        .add_line(
-            Sku::new("PEN-9").unwrap(),
-            Quantity::new(3).unwrap(),
-            MoneyCents::new(400),
-        )
-        .unwrap();
-
-    order.submit().unwrap();
-
-    println!("lines = {}", order.lines.len());
-    println!("total cents = {}", order.total_cents());
-    println!("state = {}", order.status());
-}
-````
-
-### File: `examples/ch16_domain_driven_design_in_rust/event_sourced_account.rs`
-````
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct AccountId(u64);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AccountEvent {
-    Opened { opening_balance_cents: i64 },
-    Deposited { cents: i64 },
-    Withdrawn { cents: i64 },
-}
-
-#[derive(Debug)]
-enum DomainError {
-    AlreadyOpened,
-    NotOpen,
-    InsufficientFunds,
-}
-
-#[derive(Debug)]
-struct Account {
-    id: AccountId,
-    balance_cents: i64,
-    version: usize,
-    is_open: bool,
-}
-
-impl Account {
-    fn rehydrate(id: AccountId, history: &[AccountEvent]) -> Result<Self, DomainError> {
-        let mut account = Self {
-            id,
-            balance_cents: 0,
-            version: 0,
-            is_open: false,
-        };
-
-        for event in history {
-            account.apply(*event)?;
-            account.version += 1;
-        }
-
-        Ok(account)
-    }
-
-    fn apply(&mut self, event: AccountEvent) -> Result<(), DomainError> {
-        match event {
-            AccountEvent::Opened {
-                opening_balance_cents,
-            } => {
-                if self.is_open {
-                    return Err(DomainError::AlreadyOpened);
-                }
-
-                self.balance_cents = opening_balance_cents;
-                self.is_open = true;
-                Ok(())
-            }
-            AccountEvent::Deposited { cents } => {
-                if !self.is_open {
-                    return Err(DomainError::NotOpen);
-                }
-
-                self.balance_cents += cents;
-                Ok(())
-            }
-            AccountEvent::Withdrawn { cents } => {
-                if !self.is_open {
-                    return Err(DomainError::NotOpen);
-                }
-
-                if self.balance_cents < cents {
-                    return Err(DomainError::InsufficientFunds);
-                }
-
-                self.balance_cents -= cents;
-                Ok(())
-            }
-        }
-    }
-}
-
-fn main() {
-    let history = vec![
-        AccountEvent::Opened {
-            opening_balance_cents: 1000,
-        },
-        AccountEvent::Deposited { cents: 400 },
-        AccountEvent::Withdrawn { cents: 150 },
-    ];
-
-    let account = Account::rehydrate(AccountId(7), &history).unwrap();
-
-    println!("events = {}", history.len());
-    println!("balance cents = {}", account.balance_cents);
-    println!("version = {}", account.version);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -28,3 +28,5 @@ export { PageCh14InterfacesInRustTraitsExercises } from "./page-ch14-interfaces-
- export { PageCh15OopModelsInRust } from "./page-ch15-oop-models-in-rust"
- export { PageCh15OopModelsInRustExercises } from "./page-ch15-oop-models-in-rust-exercises"
-+export { PageCh16DomainDrivenDesignInRust } from "./page-ch16-domain-driven-design-in-rust"
-+export { PageCh16DomainDrivenDesignInRustExercises } from "./page-ch16-domain-driven-design-in-rust-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -39,6 +39,8 @@ import {
-   PageCh14InterfacesInRustTraitsExercises,
-   PageCh15OopModelsInRust,
-   PageCh15OopModelsInRustExercises,
-+  PageCh16DomainDrivenDesignInRust,
-+  PageCh16DomainDrivenDesignInRustExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -72,6 +74,8 @@ const PAGE_COMPONENTS = [
-   PageCh14InterfacesInRustTraitsExercises,
-   PageCh15OopModelsInRust,
-   PageCh15OopModelsInRustExercises,
-+  PageCh16DomainDrivenDesignInRust,
-+  PageCh16DomainDrivenDesignInRustExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh16Output } from "./rust-simulator-ch16"
- import { simulateCh15Output } from "./rust-simulator-ch15"
- import { simulateCh14Output } from "./rust-simulator-ch14"
- import { simulateCh13Output } from "./rust-simulator-ch13"
-@@ -994,6 +995,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch16Output = simulateCh16Output(code, key)
-+  if (ch16Output !== null) return ch16Output
- 
-   const ch15Output = simulateCh15Output(code, key)
-   if (ch15Output !== null) return ch15Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -5,6 +5,7 @@ import { DEFAULT_CODES_CH13 } from "./default-codes-ch13"
- import { DEFAULT_CODES_CH14 } from "./default-codes-ch14"
- import { DEFAULT_CODES_CH15 } from "./default-codes-ch15"
-+import { DEFAULT_CODES_CH16 } from "./default-codes-ch16"
- 
- export interface PageConfig {
-   id: string
-@@ -373,6 +374,29 @@ export const CHAPTERS: ChapterConfig[] = [
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch16-domain-driven-design-in-rust",
-+    title: "Chapter 16 · Domain-Driven Design in Rust",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch16-domain-driven-design-in-rust",
-+        title: "Domain-Driven Design in Rust",
-+        shortTitle: "DDD in Rust",
-+        description:
-+          "Entities, value objects, aggregates, repositories, invariants, event sourcing, and DDD boundaries",
-+        icon: "book",
-+        codeKeys: ["ddd_order_aggregate", "ddd_event_sourced_account"],
-+      },
-+      {
-+        id: "ch16-domain-driven-design-in-rust-exercises",
-+        title: "Chapter 16 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Implement newtypes, encode aggregate invariants, and design repository seams for sync and async workloads",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
- 
-@@ -806,6 +830,7 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH13,
-   ...DEFAULT_CODES_CH14,
-   ...DEFAULT_CODES_CH15,
-+  ...DEFAULT_CODES_CH16,
- }
- 
- export interface BookState {
-````

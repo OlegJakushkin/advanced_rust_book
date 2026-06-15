@@ -1,0 +1,204 @@
+{
+ "chapterKey": "ch45",
+ "num": 45,
+ "title": "Capstone: A Distributed Rust System",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Assemble the capstone architecture from earlier chapters",
+   "objective": "Practice mapping earlier book topics into one distributed system without inventing extra abstraction layers first.",
+   "starterPrompt": "Sketch `HTTP request -> canonicalize -> compute verification root -> publish task -> claim task -> execute graph or matrix workload -> durable completion -> notify` as one Rust system.",
+   "prompts": [
+    "Which boundaries are Tokio task boundaries, and which are broker or queue boundaries?",
+    "Where does the task first have to become fully owned?",
+    "Which subsystem should own duplicate suppression and durable finish-once state?",
+    "Where do graph, matrix, and optional accelerator lanes enter the picture?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one owned message boundary and one async runtime boundary clearly.",
+    "You place duplicate suppression at the durable completion boundary rather than in a fragile local cache only.",
+    "You separate the execution lanes from the transport and verification lanes explicitly."
+   ],
+   "hints": [
+    "The queue boundary is usually the first place borrowed request-local state becomes dishonest.",
+    "A good answer names owners, not only components."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Review a flawed capstone delivery path",
+   "objective": "Spot the production mistakes that appear when a distributed design compiles but its ownership and failure model are still wrong.",
+   "starterPrompt": "You inherit an API handler that borrows request data into spawned work, publishes to one shared queue for all workloads, acks broker delivery before durable result storage, and records no trace or dedupe key in the envelope.",
+   "prompts": [
+    "Which line or boundary turns borrowed data into an eventual lifetime bug or design lie?",
+    "Why does one shared queue create avoidable tail-latency coupling between fast and slow workloads?",
+    "Why is ack-before-store a correctness bug rather than only a telemetry bug?",
+    "Which missing fields make replay, tracing, or idempotency weaker than they need to be?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least three concrete design failures, not only one vague 'needs refactoring' note.",
+    "You explain one ownership bug, one backpressure or queueing bug, and one correctness or replay bug.",
+    "You propose a repair for each category."
+   ],
+   "hints": [
+    "Try to classify each issue as ownership, pacing, correctness, or observability.",
+    "The most important bug is usually the one that loses work or duplicates side effects under crash."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Define implementation milestones and acceptance criteria",
+   "objective": "Break the capstone into reviewable milestones so the repository stays coherent and measurable after each step.",
+   "starterPrompt": "Propose four milestones for building the capstone in order: a single-process reference implementation, a brokered path, specialized worker lanes, and production rollout hardening.",
+   "prompts": [
+    "What must be working at the end of each milestone?",
+    "Which tests belong to each milestone: unit, integration, soak, or replay?",
+    "Which telemetry should exist before the next milestone begins?",
+    "Which architectural decisions must remain stable across all milestones, such as the task envelope shape?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least four milestones with one clear completion condition each.",
+    "You attach at least one test or verification lane to each milestone.",
+    "You preserve one stable task envelope or durable contract across the whole plan."
+   ],
+   "hints": [
+    "A milestone is useful only if another engineer can tell when it is done.",
+    "Keep the durable contract stable earlier than the internal executor implementation."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair worker idempotency and queue budgets",
+   "objective": "Refactor the capstone when duplicate execution and mixed-latency queues are already hurting correctness and p99.",
+   "starterPrompt": "Metrics show duplicate completions during lease expiry and queue age spikes whenever matrix jobs arrive in bursts. Repair the design before tuning kernels.",
+   "prompts": [
+    "Where should finish-once state live so a replay stays harmless?",
+    "Should graph and matrix work split into separate queues or worker pools?",
+    "Which local queues should be bounded, and where should admission push back instead of buffering forever?",
+    "What regression test would prove the refactor fixed the replay path?"
+   ],
+   "acceptanceCriteria": [
+    "You place idempotent completion in one durable owner or store.",
+    "You isolate at least one slow workload class from a fast one.",
+    "You add or propose one bounded queue or concurrency cap explicitly.",
+    "You define one replay or duplicate-suppression test."
+   ],
+   "hints": [
+    "Correctness usually gets fixed before throughput.",
+    "A queue split is often a pacing repair as much as a performance repair."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Profile and refactor the capstone from evidence",
+   "objective": "Turn one latency incident into a measurement-first refactoring plan instead of a guess-driven rewrite.",
+   "starterPrompt": "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 0.25, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
+   "prompts": [
+    "Which layer is the dominant bottleneck right now?",
+    "Which metric should have paged first, and which trace should you inspect next?",
+    "Which refactor should come before any graph or matrix kernel optimization?",
+    "What before-and-after signals would prove the repair moved the real bottleneck?"
+   ],
+   "acceptanceCriteria": [
+    "You identify queueing or accelerator admission, not local handler CPU, as the current dominant story.",
+    "You choose at least one metric and one trace or log field for the next diagnostic step.",
+    "You propose one refactor tied directly to the evidence, such as queue split, worker budget change, or retry classification repair.",
+    "You name at least two validation signals after the change."
+   ],
+   "hints": [
+    "A 70 ms handler is rarely the first optimization target if queue wait is already 800 ms.",
+    "Retry rate belongs in the capacity story, not only in the error story."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose rollout, acceleration, and failure isolation policy",
+   "objective": "Design the final production posture for the capstone so operators can canary, rollback, and contain slow specialist lanes.",
+   "starterPrompt": "You are releasing the capstone with optional CPU-only, MPI-assisted, and CUDA-assisted execution paths. Operators require canary rollout, rollback artifacts, and an explicit policy for replay after worker crash.",
+   "prompts": [
+    "Which execution path should be the stable fallback when specialist lanes are saturated or unavailable?",
+    "Which artifact or configuration knobs must be visible during canary so teams know which lane is active?",
+    "How will you isolate retry storms in one specialist lane from the rest of the system?",
+    "What telemetry or health gates must pass before promotion from canary to broad rollout?"
+   ],
+   "acceptanceCriteria": [
+    "You define one safe fallback path and one specialist path selection rule.",
+    "You include at least one failure-isolation mechanism such as queue split, worker-pool split, or retry-lane split.",
+    "You include at least two rollout gates tied to concrete telemetry, such as queue age, retry rate, verification failures, or durable completion lag.",
+    "You mention one rollback artifact or operator action that does not depend on rebuilding from memory during the incident."
+   ],
+   "hints": [
+    "A capstone is not rollout-ready until the fallback path is boring and explicit.",
+    "Specialist acceleration without isolation is just another outage amplifier."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Where should the capstone first cross from borrowed request data into an owned durable envelope?",
+  "Why should duplicate suppression live near durable completion rather than only in one in-memory worker cache?",
+  "What is the practical difference between profiling queue wait and profiling worker run time in this system?",
+  "Why should specialist graph, matrix, MPI, or CUDA lanes still preserve one stable outer task contract?",
+  "What makes an implementation milestone useful instead of decorative?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Verified dispatcher"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 25, 30, 31, 32, 36, 37, 38, 39, 40, 43, and 44",
+  "Opening scenario",
+  "One possible capstone topology",
+  "At a glance",
+  "Capstone review questions",
+  "Mental model",
+  "Core concepts",
+  "How this lands depending on where you came from",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: task envelope, broker route, and verification root",
+  "Example 2: worker pool executing graph and matrix workloads",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "The capstone assembles a distributed Rust service with bounded ingress, brokered work, replay-safe workers, verifiable payloads, compute executors, and observability. The business case is an auditable system that can be operated under load.",
+  "This chapter deliberately recombines the previous async, broker, distributed-task, Merkle, graph, matrix, profiling, observability, and deployment material into one coherent system. Treat it as an architecture review, not as a new disconnected topic.",
+  "A platform service accepts work over HTTP, routes it through a broker, verifies worker inputs, executes graph or matrix workloads, and optionally dispatches dense batches to MPI or CUDA lanes. The business requirement is a replay-safe, observable, and deployable architecture with",
+  "Every chapter up to this point handed you one piece of that sentence in isolation. The job now is to make the pieces agree with each other. The diagram below is the trip a single unit of work takes from a client request to a durable result. As you read the rest of the chapter, ke",
+  "The sections below walk the same pipeline left to right: the domain model that defines the unit of work, the broker that moves it, the Tokio shell that admits it, the worker pool that runs it, and the verification step that gates the expensive part. Each one is a boundary in the ",
+  "The important ownership rule is simple: the queue or broker carries an owned envelope. It does not carry a borrow into API-local request state. That single design choice removes a large amount of async and retry confusion immediately.",
+  "The whole routing decision is the match on the workload variant: a graph job and a matrix job leave the same publisher but land in different queues. That one branch is what lets a slow matrix backlog grow without ever stalling a fast graph job behind it. Read the shape first, the",
+  "The order of these four lines is the whole point. The handler waits for an admission permit before it builds anything, so backpressure is applied at the door rather than at the broker. It builds an owned envelope, not a borrow into the request, so the published work can outlive t",
+  "Notice what the dispatch loop does and does not do. It pulls one delivery, verifies and decodes it once, then sends the decoded spec down a workload-specific channel. It does not execute the graph or matrix work inline. That separation is what keeps the dispatcher thin and lets e",
+  "A common production repair is exactly this: keep the dispatcher thin and the execution lanes specialized. Fast graph jobs and slow matrix or GPU jobs usually deserve separate budgets once the p99 latency matters, because a single shared pool lets the slow class quietly consume ev",
+  "The single rule that makes this worth doing is the position of the gate: recompute the root over the canonical input and compare it before the worker runs the expensive side effect, never after. If the roots disagree, the work stops and is dead-lettered instead of executing on in",
+  "This chapter deliberately ends with rollout and packaging because distributed correctness does not stop at code. The queue budget, telemetry surface, artifact shape, and rollback plan are part of the final system.",
+  "You have almost certainly built something shaped like this capstone before: an ingress, a queue, a pool of workers, and some compute at the end. What changes in Rust is not the architecture but where the language forces a decision. The cards below name the mental-model shift, and",
+  "The capstone fails in production when the boundaries are optimized independently but specified poorly together. The root cause is usually contract drift: replay without idempotency, acceleration without queue budgets, or telemetry that observes only one layer of the path.",
+  "The API or submission shell emits one owned envelope with a workload-specific route and one explicit verification root. This is the durable contract other processes will see.",
+  "Watch how the four printed lines come straight off one owned value. The example builds a TaskEnvelope, derives the route from its workload variant, and reads the task id, route, root, and tenant back out. Run it to confirm the baseline, then change the workload to a matrix varian",
+  "The queue receives one owned task contract rather than borrowed request-local state.",
+  "The route names the workload class, which makes queue splits and observability calmer later.",
+  "The root is carried explicitly so the worker can reject drift before executing expensive side effects.",
+  "Tenant or shard identity belongs on the envelope too, not only in one local API handler variable.",
+  "The worker pool owns a bounded queue, then dispatches two different workload classes without losing one clear completion contract.",
+  "The three output lines map onto three facts: the pool completed every queued item, the graph lane produced a unit count, and the matrix lane produced a checksum. Follow the diagram one item at a time: each task is drained from the shared queue, dispatched to its lane, executed, a",
+  "The worker owns the next runnable item instead of scattering mutable completion state everywhere.",
+  "Graph execution can keep stable handles and frontier metrics separate from dense numeric work.",
+  "Matrix work can later swap CPU, MPI, or CUDA executors without changing the outer task contract.",
+  "The capstone should still record one durable finish-once checkpoint after these local results exist.",
+  "The repository also includes standalone Rust source under examples/ch45_capstone_distributed_rust_system/ including the two editor-backed examples plus one Tokio worker-topology sketch that shows how the API shell and bounded worker lane fit together outside the in-browser editor",
+  "The companion exercise page asks you to assemble the capstone architecture from earlier chapters, define implementation milestones and acceptance criteria, and profile then refactor the system from queue age, retry, and execution evidence rather than from intuition."
+ ],
+ "codeSamples": {
+  "capstone_task_envelope_routing": "#[derive(Debug, Clone)]\nenum Workload {\n    GraphSearch { start: u32, goal: u32 },\n    MatrixTile { rows: usize, cols: usize, tile: usize },\n}\n\n#[derive(Debug, Clone)]\nstruct TaskEnvelope {\n    task_id: &'static str,\n    tenant: &'static str,\n    attempt: u32,\n    verification_root: u32,\n    workload: Workload,\n}\n\nfn routing_key(workload: &Workload) -> &'static str {\n    match workload {\n        Workload::GraphSearch { .. } => \"tasks.graph\",\n        Workload::MatrixTile { .. } => \"tasks.matrix\",\n    }\n}\n\nfn main() {\n    let task = TaskEnvelope {\n        task_id: \"task-7\",\n        tenant: \"acme\",\n        attempt: 1,\n        verification_root: 4242,\n        workload: Workload::GraphSearch { start: 4, goal: 19 },\n    };\n\n    println!(\"task = {}\", task.task_id);\n    println!(\"route = {}\", routing_key(&task.workload));\n    println!(\"root = {}\", task.verification_root);\n    println!(\"tenant = {}\", task.tenant);\n}",
+  "capstone_worker_pool_workloads": "use std::collections::VecDeque;\n\n#[derive(Debug, Clone)]\nenum Workload {\n    GraphSearch { frontier: Vec<u32> },\n    MatrixTile { left: [f32; 4], right: [f32; 4] },\n}\n\n#[derive(Debug, Clone)]\nstruct Job {\n    id: &'static str,\n    workload: Workload,\n}\n\nfn graph_units(frontier: &[u32]) -> u32 {\n    frontier.iter().copied().sum()\n}\n\nfn matrix_checksum(left: [f32; 4], right: [f32; 4]) -> f32 {\n    left.iter().zip(right).map(|(l, r)| *l * r).sum()\n}\n\nfn main() {\n    let mut queue = VecDeque::from([\n        Job {\n            id: \"graph-1\",\n            workload: Workload::GraphSearch {\n                frontier: vec![2_u32, 3, 5],\n            },\n        },\n        Job {\n            id: \"matrix-1\",\n            workload: Workload::MatrixTile {\n                left: [1.0_f32, 2.0, 3.0, 4.0],\n                right: [2.0_f32, 3.0, 4.0, 5.0],\n            },\n        },\n    ]);\n\n    let mut completed = 0_u32;\n    let mut graph_total = 0_u32;\n    let mut matrix_total = 0.0_f32;\n\n    while let Some(job) = queue.pop_front() {\n        match job.workload {\n            Workload::GraphSearch { frontier } => {\n                graph_total += graph_units(&frontier);\n            }\n            Workload::MatrixTile { left, right } => {\n                matrix_total += matrix_checksum(left, right);\n            }\n        }\n        completed += 1;\n    }\n\n    println!(\"completed = {}\", completed);\n    println!(\"graph units = {}\", graph_total);\n    println!(\"matrix checksum = {:.1}\", matrix_total);\n}"
+ },
+ "labReferenceSolution": null
+}

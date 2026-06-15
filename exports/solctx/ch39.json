@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch39",
+ "num": 39,
+ "title": "Graph Search Games",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose adjacency list, matrix, or stable-index arena from the workload",
+   "objective": "Practice mapping graph workload shape to the representation that keeps ownership and traversal calm.",
+   "starterPrompt": "Classify four cases: a sparse service dependency graph, a dense all-to-all connectivity matrix for 64 nodes, a maze grid with uniform step cost, and a long-lived mutable route graph that will be serialized and reloaded.",
+   "prompts": [
+    "Which case wants an adjacency list because edges are sparse and iteration dominates?",
+    "Which case justifies a matrix because edge existence lookup is dense and fixed-size?",
+    "Which case wants stable indices because the owner should be one node table rather than many references?",
+    "Which case is better modeled as a graph over grid coordinates rather than as a pointer graph?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one adjacency-list case and one adjacency-matrix case with a concrete reason.",
+    "You identify stable indices or arena-backed ownership as the calmer default for a mutable serialized graph.",
+    "You explain one representation in terms of memory growth and one in terms of traversal shape."
+   ],
+   "hints": [
+    "Ask first whether the graph is sparse or dense.",
+    "Then ask who should own nodes and how long edges need to stay meaningful."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Explain why stable indices beat borrowed neighbors in a growable graph",
+   "objective": "Read a vector-backed graph design and explain the ownership and reallocation consequences precisely.",
+   "starterPrompt": "You inherit one graph that stores nodes in `Vec<Node>` and edges as `usize`, and another that stores nodes in `Vec<Node>` but keeps long-lived `&Node` references inside edge lists.",
+   "prompts": [
+    "Which design survives vector growth and later serialization more honestly?",
+    "Why is a long-lived `&Node` inside a growable owner table usually the wrong contract?",
+    "What does the stable-index version give up, and what does it gain?",
+    "Where would a truly shared-owner graph still justify `Rc` or `Arc` instead?"
+   ],
+   "acceptanceCriteria": [
+    "You explain why borrowed neighbors into growable storage are the wrong stability model.",
+    "You identify at least one operational win for stable indices, such as mutation calm or serialization ease.",
+    "You name one case where shared ownership could still be semantically real."
+   ],
+   "hints": [
+    "The question is not only about memory safety. It is also about which design remains honest after change.",
+    "Stable handles are often easier to queue, trace, and store than references."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement BFS over an adjacency list with stable indices",
+   "objective": "Build one small graph owner and traverse it with BFS without pointer-like references between nodes.",
+   "starterPrompt": "Implement `Graph`, `NodeId`, `bfs_order`, and `shortest_hops` over a `Vec<Node>` plus adjacency lists.",
+   "prompts": [
+    "Keep nodes owned in one vector.",
+    "Use `VecDeque` for the BFS frontier.",
+    "Return stable `NodeId` handles from insertion.",
+    "Do not use `Rc`, `RefCell`, or raw pointers."
+   ],
+   "acceptanceCriteria": [
+    "The graph owner is one `Vec<Node>`.",
+    "Edges store `NodeId` handles rather than references.",
+    "BFS visits nodes in deterministic layer order.",
+    "The runnable lab prints the expected visit order and hop count."
+   ],
+   "hints": [
+    "This is the same owner-plus-handle shape used in many ASTs and dependency graphs.",
+    "A visited bitmap or distance vector indexed by `NodeId.0` is usually enough."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a DFS or cycle-check implementation that over-relies on recursion",
+   "objective": "Replace a fragile recursive structural walk with a more explicit stack or state-set model when graph depth or cycles make the original risky.",
+   "starterPrompt": "A service uses recursive DFS for cycle detection on user-supplied dependency graphs and occasionally sees stack depth concerns and confusing re-entry bugs.",
+   "prompts": [
+    "Would an explicit stack improve control over depth and instrumentation?",
+    "Which sets should distinguish 'currently exploring' from 'already finished' if you are detecting cycles?",
+    "How would you report one concrete cycle witness rather than only returning `false`?",
+    "What metric or log line would help operators diagnose a graph that causes unusual depth?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish traversal depth from cycle-state tracking clearly.",
+    "You propose an explicit stack or another bounded-state repair with a reason.",
+    "You include one production-facing diagnostic idea such as cycle witness, depth histogram, or node fan-out summary."
+   ],
+   "hints": [
+    "Cycle detection usually needs more than one visited bit.",
+    "An explicit stack is often easier to instrument than deep recursion."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design a dependency resolver challenge",
+   "objective": "Turn graph search into a production-shaped dependency solver with explicit cycle handling and stable graph identity.",
+   "starterPrompt": "You are designing `resolve build units -> produce execution order -> surface one cycle path if no valid order exists`.",
+   "prompts": [
+    "Which graph direction makes the scheduler calm: dependency to dependent or the reverse?",
+    "Which algorithmic pieces belong together: indegree counting, ready frontier, or DFS cycle witness?",
+    "What stable IDs or labels should every node carry for logs and test fixtures?",
+    "What scoring or extension track would you add for version conflicts or optional edges?"
+   ],
+   "acceptanceCriteria": [
+    "You define one stable node identity strategy.",
+    "You describe at least one valid ordering path and one cycle-reporting path.",
+    "You include one extension or scoring rule for the challenge track."
+   ],
+   "hints": [
+    "A good dependency resolver does more than output a sorted list. It also explains failure.",
+    "Stable IDs make cycle reporting and replay testing much easier."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design a distributed graph-search challenge with bounded frontier workers",
+   "objective": "Map graph search to a multi-worker control plane where duplicate suppression, queue age, and trace lineage are first-class.",
+   "starterPrompt": "You are designing `seed frontier -> expand neighbors -> dedupe visited nodes -> merge frontier -> publish best path so far`, with work split across several worker pools or processes.",
+   "prompts": [
+    "Where does the owned frontier message boundary live?",
+    "How will you stop duplicate discoveries from turning into infinite replay or a retry storm?",
+    "Which queues should be bounded, and what metric should alert first when the frontier gets stuck?",
+    "How would you score Bronze, Silver, and Gold versions of this challenge?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least one owned queue boundary and one duplicate-suppression rule.",
+    "You include at least one boundedness rule such as worker concurrency or queue capacity.",
+    "You mention at least two observability hooks such as oldest frontier age, duplicate hit rate, or merge lag.",
+    "You include one scoring or extension-track rule for the challenge."
+   ],
+   "hints": [
+    "Distributed graph search is partly an algorithm problem and partly a control-plane problem.",
+    "Frontier size and duplicate rate are often more useful than raw CPU usage at first."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why are stable indices usually calmer than borrowed references in graph owners that grow or serialize?",
+  "When is BFS the correct answer even if Dijkstra or A* looks more advanced?",
+  "What is the difference between an admissible and a consistent (monotone) heuristic for A*, and which one does the standard closed-set version need to avoid re-opening nodes?",
+  "Why can frontier parallelism still fail if the visited-set or merge step is one hot lock?",
+  "What extra operational questions appear the moment graph search crosses process or queue boundaries?"
+ ],
+ "lab": {
+  "title": "Runnable lab · BFS over an adjacency list with stable indices",
+  "filename": "graph_bfs_lab.rs",
+  "runKey": "ch39_ex_bfs_adj_list",
+  "expectedOutput": "visited = api,auth,billing,search\nhops = 2",
+  "initialCode": "use std::collections::VecDeque;\n\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\nstruct NodeId(usize);\n\n#[derive(Debug)]\nstruct Node {\n    name: &'static str,\n    edges: Vec<NodeId>,\n}\n\n#[derive(Default, Debug)]\nstruct Graph {\n    nodes: Vec<Node>,\n}\n\nimpl Graph {\n    fn add_node(&mut self, name: &'static str) -> NodeId {\n        let id = NodeId(self.nodes.len());\n        self.nodes.push(Node {\n            name,\n            edges: Vec::new(),\n        });\n        id\n    }\n\n    fn add_edge(&mut self, from: NodeId, to: NodeId) {\n        self.nodes[from.0].edges.push(to);\n    }\n\n    fn names(&self, ids: &[NodeId]) -> Vec<&'static str> {\n        ids.iter().map(|id| self.nodes[id.0].name).collect()\n    }\n\n    fn bfs_order(&self, _start: NodeId) -> Vec<NodeId> {\n        Vec::new()\n    }\n\n    fn shortest_hops(&self, _start: NodeId, _goal: NodeId) -> Option<usize> {\n        None\n    }\n}\n\nfn main() {\n    let mut graph = Graph::default();\n\n    let api = graph.add_node(\"api\");\n    let auth = graph.add_node(\"auth\");\n    let billing = graph.add_node(\"billing\");\n    let search = graph.add_node(\"search\");\n\n    graph.add_edge(api, auth);\n    graph.add_edge(api, billing);\n    graph.add_edge(auth, search);\n    graph.add_edge(billing, search);\n\n    let order = graph.bfs_order(api);\n    let hops = graph.shortest_hops(api, search).unwrap_or(0);\n\n    println!(\"visited = {}\", graph.names(&order).join(\",\"));\n    println!(\"hops = {}\", hops);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 10, 11, 13, 22, and 26",
+  "Opening scenario",
+  "A practical decision order",
+  "At a glance",
+  "Design questions",
+  "Mental model",
+  "Core concepts",
+  "Graph representations in Rust",
+  "Choosing among BFS, DFS, Dijkstra, and A*",
+  "Ownership-friendly graph models",
+  "Arena-backed graphs",
+  "Parallel graph traversal",
+  "How to think about this coming from another language",
+  "Practice projects",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: BFS over an adjacency list with stable handles",
+  "Example 2: weighted shortest path with Dijkstra and A*",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Graph search is where the algorithm you already know meets the storage decision Rust forces you to make first. This chapter treats BFS, DFS, Dijkstra, and A* as production data-processing components: how the nodes are owned, what an edge holds, which traversal fits the cost model",
+  "Chapter 10 covered contiguous storage and slice-first APIs. Chapter 11 covered hash-based visited sets and maps. Chapter 13 explained arena-backed ownership. Chapter 22 covered threads and shared-state tradeoffs. Chapter 26 covered bounded work orchestration. This chapter uses al",
+  "A platform team is building a maze solver, a dependency resolver, and a distributed topology search. The business requirement is to choose graph ownership, representation, and traversal policy from the workload before adding parallelism or distributed execution.",
+  "The order matters because each decision constrains the next. Representation determines how cheaply you can read neighbors; the identity model determines whether the borrow checker will let your search loop coexist with mutation; the cost structure determines which algorithm is ev",
+  "For most service, maze, and dependency workloads, adjacency lists win because the graph is sparse and edge iteration dominates. Adjacency matrices only become calm when the graph is dense enough or fixed enough that the quadratic storage buys a real lookup advantage.",
+  "These four traversals are not a ranking from simple to advanced; they are answers to different questions. The decision tree below collapses the choice to two questions you can answer about almost any graph: do the edges carry weight, and do you have a usable estimate of the dista",
+  "A common correction: do not use a more general weighted search when the workload is unweighted. BFS often gives the simplest correct answer and the simplest implementation.",
+  "This is one of the main places Rust differs from many C++ or C# designs: the simpler graph is often one owner plus handles, not a web of objects each acting as an independent owner.",
+  "An arena-backed graph fits the common lifecycle exactly: the graph is built once as a batch, searched many times, and then dropped as a batch. That describes mazes, abstract syntax trees, dependency plans, route graphs, and many game worlds. The pattern is just a Vec<Node> that o",
+  "The diagram shows why this stays calm under mutation: edges point at slots, not at addresses, so growing the table never invalidates an edge. Compare that to a pointer graph, where one reallocation would dangle every stored neighbor pointer.",
+  "The safe way to parallelize a search is to keep BFS's layer structure and only parallelize within a layer. Split the current frontier into chunks, expand each chunk on its own worker into a private next-frontier buffer, and merge the buffers (deduplicating against the visited set",
+  "The repository also includes a standalone example under examples/ch39_graph_search_games/parallel_frontier_levels.rs that shows one level-synchronous frontier expansion shape outside the in-browser editor.",
+  "Every language gives you a default mental picture of a graph, and most of those defaults assume a runtime that tracks who points at whom. Rust does not. The single biggest adjustment, regardless of where you come from, is to stop modeling a graph as a web of objects holding refer",
+  "The most common graph-design mistake in Rust is trying to preserve a reference-rich object model from another language when a stable-index arena model would have made search, mutation, and serialization much easier.",
+  "Both examples use the same storage idea from the mental model: one owning node table and edges that hold a NodeId handle. Run each listing first to confirm the baseline output, then edit the graph or the goal and watch how the answer changes. Each listing is introduced by what to",
+  "The graph is owned in one node table. Edges are NodeId handles, BFS uses a queue, and the shortest unweighted route is counted in hops.",
+  "What to look at: the loop in shortest_hops marks each node with a distance the first time it is reached and never revisits it. Because the queue is FIFO, nodes come out in layer order, so the distance recorded for the goal is the minimum number of hops. The diagram traces that ex",
+  "One Vec<Node> plus NodeId keeps ownership stable and makes edges cheap values.",
+  "BFS explores by layers, so the first time the goal is reached is the shortest unweighted hop count.",
+  "This is the calm shape for dependency graphs, service-route graphs, and maze steps when costs are uniform.",
+  "The graph keeps coordinates only because A* needs a heuristic. Dijkstra uses exact cost only; A* adds a guess about the remaining distance. Both must agree on the answer.",
+  "What to look at: both methods share the same State on a BinaryHeap, and the inverted Ord makes that max-heap behave as a min-heap on the priority field. The only real difference is the priority: Dijkstra orders by cost so far, while A* orders by cost so far plus the Manhattan heu",
+  "Dijkstra is the correct baseline whenever edge costs matter and remain non-negative.",
+  "A* becomes useful only because the heuristic is explicit and tied to node coordinates.",
+  "A BinaryHeap frontier makes the weighted next-best expansion policy explicit and efficient enough for most host-side work.",
+  "The repository also includes standalone Rust source under examples/ch39_graph_search_games/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to implement BFS over an adjacency list, model graph nodes with stable indices, design a dependency resolver, and sketch a bounded distributed graph-search challenge with scoring tracks."
+ ],
+ "codeSamples": {
+  "graph_search_bfs_handles": "use std::collections::VecDeque;\n\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\nstruct NodeId(usize);\n\n#[derive(Debug)]\nstruct Node {\n    name: &'static str,\n    edges: Vec<NodeId>,\n}\n\n#[derive(Default, Debug)]\nstruct Graph {\n    nodes: Vec<Node>,\n}\n\nimpl Graph {\n    fn add_node(&mut self, name: &'static str) -> NodeId {\n        let id = NodeId(self.nodes.len());\n        self.nodes.push(Node {\n            name,\n            edges: Vec::new(),\n        });\n        id\n    }\n\n    fn add_edge(&mut self, from: NodeId, to: NodeId) {\n        self.nodes[from.0].edges.push(to);\n    }\n\n    fn name(&self, id: NodeId) -> &'static str {\n        self.nodes[id.0].name\n    }\n\n    fn names(&self, ids: &[NodeId]) -> Vec<&'static str> {\n        ids.iter().map(|&id| self.name(id)).collect()\n    }\n\n    fn bfs_order(&self, start: NodeId) -> Vec<NodeId> {\n        let mut visited = vec![false; self.nodes.len()];\n        let mut queue = VecDeque::new();\n        let mut order = Vec::new();\n\n        visited[start.0] = true;\n        queue.push_back(start);\n\n        while let Some(id) = queue.pop_front() {\n            order.push(id);\n\n            for &next in &self.nodes[id.0].edges {\n                if !visited[next.0] {\n                    visited[next.0] = true;\n                    queue.push_back(next);\n                }\n            }\n        }\n\n        order\n    }\n\n    fn shortest_hops(&self, start: NodeId, goal: NodeId) -> Option<usize> {\n        let mut dist = vec![usize::MAX; self.nodes.len()];\n        let mut queue = VecDeque::new();\n\n        dist[start.0] = 0;\n        queue.push_back(start);\n\n        while let Some(id) = queue.pop_front() {\n            if id == goal {\n                return Some(dist[id.0]);\n            }\n\n            for &next in &self.nodes[id.0].edges {\n                if dist[next.0] == usize::MAX {\n                    dist[next.0] = dist[id.0] + 1;\n                    queue.push_back(next);\n                }\n            }\n        }\n\n        None\n    }\n}\n\nfn main() {\n    let mut graph = Graph::default();\n\n    let api = graph.add_node(\"api\");\n    let auth = graph.add_node(\"auth\");\n    let billing = graph.add_node(\"billing\");\n    let search = graph.add_node(\"search\");\n\n    graph.add_edge(api, auth);\n    graph.add_edge(api, billing);\n    graph.add_edge(auth, search);\n    graph.add_edge(billing, search);\n\n    let order = graph.bfs_order(api);\n    let hops = graph.shortest_hops(api, search).unwrap_or(0);\n\n    println!(\"bfs = {}\", graph.names(&order).join(\",\"));\n    println!(\"path hops = {}\", hops);\n}",
+  "graph_search_dijkstra_astar": "use std::cmp::Ordering;\nuse std::collections::BinaryHeap;\n\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]\nstruct NodeId(usize);\n\n#[derive(Clone, Copy, Debug)]\nstruct Edge {\n    to: NodeId,\n    cost: u32,\n}\n\n#[derive(Debug)]\nstruct Node {\n    name: &'static str,\n    x: i32,\n    y: i32,\n    edges: Vec<Edge>,\n}\n\n#[derive(Default)]\nstruct WeightedGraph {\n    nodes: Vec<Node>,\n}\n\n#[derive(Clone, Copy, Debug, PartialEq, Eq)]\nstruct State {\n    cost: u32,\n    node: NodeId,\n    estimate: u32,\n}\n\nimpl Ord for State {\n    fn cmp(&self, other: &Self) -> Ordering {\n        other\n            .estimate\n            .cmp(&self.estimate)\n            .then_with(|| other.cost.cmp(&self.cost))\n            .then_with(|| other.node.cmp(&self.node))\n    }\n}\n\nimpl PartialOrd for State {\n    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {\n        Some(self.cmp(other))\n    }\n}\n\nimpl WeightedGraph {\n    fn add_node(&mut self, name: &'static str, x: i32, y: i32) -> NodeId {\n        let id = NodeId(self.nodes.len());\n        self.nodes.push(Node {\n            name,\n            x,\n            y,\n            edges: Vec::new(),\n        });\n        id\n    }\n\n    fn add_edge(&mut self, from: NodeId, to: NodeId, cost: u32) {\n        self.nodes[from.0].edges.push(Edge { to, cost });\n    }\n\n    fn heuristic(&self, left: NodeId, right: NodeId) -> u32 {\n        self.nodes[left.0].x.abs_diff(self.nodes[right.0].x)\n            + self.nodes[left.0].y.abs_diff(self.nodes[right.0].y)\n    }\n\n    fn dijkstra_cost(&self, start: NodeId, goal: NodeId) -> Option<u32> {\n        let mut dist = vec![u32::MAX; self.nodes.len()];\n        let mut heap = BinaryHeap::new();\n\n        dist[start.0] = 0;\n        heap.push(State {\n            cost: 0,\n            node: start,\n            estimate: 0,\n        });\n\n        while let Some(State { cost, node, .. }) = heap.pop() {\n            if node == goal {\n                return Some(cost);\n            }\n\n            if cost > dist[node.0] {\n                continue;\n            }\n\n            for edge in &self.nodes[node.0].edges {\n                let next_cost = cost + edge.cost;\n                if next_cost < dist[edge.to.0] {\n                    dist[edge.to.0] = next_cost;\n                    heap.push(State {\n                        cost: next_cost,\n                        node: edge.to,\n                        estimate: next_cost,\n                    });\n                }\n            }\n        }\n\n        None\n    }\n\n    fn a_star_cost(&self, start: NodeId, goal: NodeId) -> Option<u32> {\n        let mut best = vec![u32::MAX; self.nodes.len()];\n        let mut heap = BinaryHeap::new();\n\n        best[start.0] = 0;\n        heap.push(State {\n            cost: 0,\n            node: start,\n            estimate: self.heuristic(start, goal),\n        });\n\n        while let Some(State { cost, node, .. }) = heap.pop() {\n            if node == goal {\n                return Some(cost);\n            }\n\n            if cost > best[node.0] {\n                continue;\n            }\n\n            for edge in &self.nodes[node.0].edges {\n                let next_cost = cost + edge.cost;\n                if next_cost < best[edge.to.0] {\n                    best[edge.to.0] = next_cost;\n                    heap.push(State {\n                        cost: next_cost,\n                        node: edge.to,\n                        estimate: next_cost + self.heuristic(edge.to, goal),\n                    });\n                }\n            }\n        }\n\n        None\n    }\n}\n\nfn main() {\n    let mut graph = WeightedGraph::default();\n\n    let a = graph.add_node(\"A\", 0, 0);\n    let b = graph.add_node(\"B\", 1, 0);\n    let c = graph.add_node(\"C\", 0, 1);\n    let d = graph.add_node(\"D\", 1, 1);\n    let goal = graph.add_node(\"Goal\", 2, 1);\n\n    graph.add_edge(a, b, 2);\n    graph.add_edge(a, c, 5);\n    graph.add_edge(b, d, 2);\n    graph.add_edge(c, d, 1);\n    graph.add_edge(d, goal, 3);\n    graph.add_edge(b, goal, 9);\n\n    let dijkstra = graph.dijkstra_cost(a, goal).unwrap_or(0);\n    let a_star = graph.a_star_cost(a, goal).unwrap_or(0);\n\n    println!(\"dijkstra cost = {}\", dijkstra);\n    println!(\"a_star cost = {}\", a_star);\n}"
+ },
+ "labReferenceSolution": null
+}

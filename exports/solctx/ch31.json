@@ -1,0 +1,214 @@
+{
+ "chapterKey": "ch31",
+ "num": 31,
+ "title": "Distributed Task Execution",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Classify delivery semantics and idempotency obligations",
+   "objective": "Practice choosing at-most-once, at-least-once, or effectively exactly-once side effects from business tolerance rather than slogan.",
+   "starterPrompt": "Classify four workloads: a thumbnail regeneration job, a billing capture, a cache warmup, and a periodic analytics refresh.",
+   "prompts": [
+    "Which workload can tolerate occasional loss and therefore may accept at-most-once behavior?",
+    "Which workload must tolerate replay and therefore needs idempotency even under at-least-once delivery?",
+    "Which workload can be naturally repeat-safe because it overwrites one deterministic final state?",
+    "Which workload would force you to define a durable dedupe or checkpoint boundary explicitly?"
+   ],
+   "acceptanceCriteria": [
+    "You separate delivery semantics from business side-effect semantics clearly.",
+    "You identify at least one task that is naturally repeat-safe and one that needs explicit dedupe state.",
+    "You avoid claiming exactly-once as a queue property by itself."
+   ],
+   "hints": [
+    "Ask what happens if the same logical work runs twice.",
+    "A strong answer talks about side effects, not only about transport labels."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Read a lease timeline like an incident reviewer",
+   "objective": "Explain what happened when one worker timed out, another reclaimed the task, and the first worker later came back.",
+   "starterPrompt": "Worker A claims task-7, its lease expires, Worker B reclaims task-7, Worker A finally reports success, then Worker B also reports success.",
+   "prompts": [
+    "Which event makes duplicate execution normal instead of surprising?",
+    "Where should idempotent completion state live so only one success is accepted?",
+    "What visibility-timeout or heartbeat change would reduce replay without delaying recovery too much?",
+    "Which metric would tell you that the lease duration is badly matched to real handler time?"
+   ],
+   "acceptanceCriteria": [
+    "You explain the duplicate execution path from the lease-expiry timeline concretely.",
+    "You place dedupe or completion recording at the durable side-effect boundary.",
+    "You mention at least one tuning or observability signal such as lease-expiry rate or task age."
+   ],
+   "hints": [
+    "A lease expiry is a recovery event, not a correctness bug by itself.",
+    "The bug appears only if the completion path is not idempotent."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Build a lease-based worker with idempotent completion",
+   "objective": "Implement the core mechanics of redelivery after timeout and duplicate-safe completion recording.",
+   "starterPrompt": "Complete a tiny in-memory queue so timed-out work returns to visibility and a second completion attempt becomes a harmless duplicate.",
+   "prompts": [
+    "Requeue the task only when the current time is past the deadline.",
+    "Record completion in a set keyed by task ID.",
+    "Return a boolean from completion so the caller can tell whether this was the first successful application or a duplicate.",
+    "Keep the queue owner as one struct instead of scattering state globally."
+   ],
+   "acceptanceCriteria": [
+    "The queue requeues timed-out work correctly.",
+    "Completion recording is idempotent.",
+    "The runnable lab prints the expected redelivery, completed count, and duplicate status."
+   ],
+   "hints": [
+    "The two key repairs are one requeue condition and one set insert.",
+    "Use the set insert result directly if you want the calmest duplicate signal."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Centralize distributed retries and poison-task policy",
+   "objective": "Repair a design that copied retry loops into several handlers and requeues permanent failure forever.",
+   "starterPrompt": "Three handlers each retry internally with slightly different attempt limits, and every permanent validation error is still requeued.",
+   "prompts": [
+    "Which facts should one shared retry policy own: max attempts, retryable classes, backoff, terminal routing?",
+    "Which failures should be dead-lettered immediately?",
+    "Where should local in-process retry bookkeeping end and queue-level requeue policy begin?",
+    "How would you make the policy testable without a live broker or queue service?"
+   ],
+   "acceptanceCriteria": [
+    "You centralize retry classification and visible attempt budgeting.",
+    "You separate transient retryable failure from permanent terminal failure.",
+    "You mention one test strategy such as table-driven classification or DLQ routing tests."
+   ],
+   "hints": [
+    "If the same retry logic appears in three places, it already wants one home.",
+    "Poison-task handling is a transport and policy question, not a random handler branch."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Trace a distributed task graph end to end",
+   "objective": "Make one task graph observable enough that queue wait, handler work, and fan-in are all attributable.",
+   "starterPrompt": "A DAG pipeline runs `fetch -> parse -> { enrich, store } -> notify`, but traces only show the inner handler spans and not the time spent waiting in queues.",
+   "prompts": [
+    "Which IDs should every task envelope carry?",
+    "Where should parent-child lineage be recorded for fan-out and fan-in nodes?",
+    "Which span or event should represent queue wait before a worker actually starts the handler?",
+    "What metric would tell you the graph is bottlenecked at aggregation rather than at worker execution?"
+   ],
+   "acceptanceCriteria": [
+    "You include a stable task or message ID plus trace lineage fields.",
+    "You represent queue wait as a first-class trace or metric concept.",
+    "You mention at least one graph-specific profiling signal such as frontier size, reducer lag, or critical-path time."
+   ],
+   "hints": [
+    "If queue wait is invisible, the trace is incomplete.",
+    "Graph tracing needs lineage, not only one flat request ID."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose queue topology, aggregation, tracing, and profiling for a production task service",
+   "objective": "Map the full distributed-task control plane for a real system with several failure and scaling modes.",
+   "starterPrompt": "You are designing `upload -> transcode variants -> scan -> persist metadata -> notify`, with bursty uploads, one long-running GPU step, and strict operator requirements around replay and incident forensics.",
+   "prompts": [
+    "Which stages deserve their own queue or shard boundary?",
+    "Where should leases be renewed instead of just lengthened?",
+    "How will final aggregation decide when the whole graph is complete?",
+    "Which tracing fields, queue metrics, and duplicate metrics would you require before rollout?",
+    "Where would you isolate slow GPU retries so they do not stall the rest of the platform?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one queue or shard split deliberately.",
+    "You define a lease or renewal policy for the long-running step.",
+    "You describe one result-aggregation rule and one failure-isolation rule.",
+    "You mention at least three observability hooks such as queue age, redelivery rate, reducer lag, trace lineage, or duplicate suppression hits."
+   ],
+   "hints": [
+    "The cleanest answer gives every expensive stage a visible budget and a visible failure policy.",
+    "A long-running specialist worker is often a stronger argument for leasing discipline than for a longer global timeout."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is at-least-once delivery the calm default assumption for distributed task systems?",
+  "What is the practical difference between a lease expiry and a processing bug?",
+  "Why should retries and terminal failure paths be centralized instead of copied into each handler?",
+  "What makes queue wait time a first-class profiling signal?",
+  "Why does a large task graph need explicit lineage and aggregation policy rather than one flat success counter?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Lease timeout plus idempotent completion",
+  "filename": "lease_idempotent_lab.rs",
+  "runKey": "ch31_ex_lease_idempotent",
+  "expectedOutput": "redelivered = task-1\ncompleted = 1\nduplicate = true",
+  "initialCode": "use std::collections::{HashSet, VecDeque};\n\n#[derive(Debug, Clone)]\nstruct Task {\n    id: &'static str,\n}\n\nstruct Queue {\n    visible: VecDeque<Task>,\n    completed: HashSet<&'static str>,\n    now: u64,\n}\n\nimpl Queue {\n    fn claim(&mut self) -> Option<Task> {\n        self.visible.pop_front()\n    }\n\n    fn requeue_if_timed_out(&mut self, task: Task, deadline: u64) {\n        if self.now < deadline {\n            self.visible.push_back(task);\n        }\n    }\n\n    fn finish_once(&mut self, task: &Task) -> bool {\n        false\n    }\n}\n\nfn main() {\n    let mut queue = Queue {\n        visible: VecDeque::new(),\n        completed: HashSet::new(),\n        now: 0,\n    };\n\n    queue.visible.push_back(Task { id: \"task-1\" });\n\n    let first = queue.claim().unwrap();\n    queue.now = 6;\n    queue.requeue_if_timed_out(first.clone(), 5);\n\n    let redelivery = queue.claim().unwrap();\n    let _first_apply = queue.finish_once(&redelivery);\n    let duplicate_apply = queue.finish_once(&redelivery);\n\n    println!(\"redelivered = {}\", redelivery.id);\n    println!(\"completed = {}\", queue.completed.len());\n    println!(\"duplicate = {}\", !duplicate_apply);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 22, 25, 26, and 30",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "Task queues and work distribution models",
+  "Exactly-once vs at-least-once processing",
+  "Leasing and visibility timeouts",
+  "Distributed retries and failure isolation",
+  "Result aggregation and scheduling large task graphs",
+  "Distributed tracing",
+  "Distributed tasks profiling",
+  "How this lands for each background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: lease queue with visibility timeout and idempotent completion",
+  "Example 2: task-graph scheduling, result aggregation, and trace propagation",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Once work leaves your process for another machine, the borrow checker can no longer help. What protects you instead is durable handoff, leases, retries, idempotency, and traceable recovery. This chapter shows how those requirements show up as concrete shapes in Rust worker and qu",
+  "Chapter 22 covered thread ownership and channels inside one process. Chapter 25 covered Tokio task orchestration and graceful shutdown. Chapter 26 separated waiting-heavy runtimes from CPU pools and bounded queues. Chapter 30 covered AMQP brokers and at-least-once delivery. This ",
+  "A media platform ingests an upload, transcodes several quality variants, generates thumbnails, scans the content for policy violations, and finally publishes one completion record that the rest of the product reads. None of those steps run in the request that triggered them. They",
+  "The trap for an engineer arriving from a single-process background is to reach for the queue brand first. The queue is the easy part. The hard part is the contract you wrap around it: what an in-flight task means, what a duplicate means, and what recovery looks like when a machin",
+  "The shape of the whole scenario is a fan-out followed by a fan-in. One submission turns into several independent worker tasks, each pulling from the same durable queue, and a single coordinator waits for all of them before it writes the completion record. Hold this picture in min",
+  "A task queue exists to separate the moment a request is made from the moment the work is done. The submitter writes a durable record and returns immediately; a worker picks the record up later, when it has capacity. That decoupling is what buys you elasticity and failure isolatio",
+  "Every task moves through the same small state machine no matter which distribution model you pick. The two branches worth staring at are the loop back to Queued on retry and the one-way exit to DeadLetter. A system without that terminal exit will requeue a permanently broken task",
+  "Delivery semantics describe what the system promises about how many times your handler runs for one logical task. There are three honest answers, and only one of them is the production default. At-least-once is what durable queues actually give you, because the safe move after a ",
+  "When another engineer says “exactly once,” ask whether they mean transport delivery, handler execution, or durable side effects. Those are different claims.",
+  "A lease is how the queue answers the question every distributed system eventually faces: what happens to a task whose worker stopped responding. When a worker claims a task, the queue hands it a lease with an expiry and hides the task from everyone else for that window, which is ",
+  "Lease design is really failure-recovery design. A distributed worker should be assumed killable at any point. The queue recovers by lease expiry. The application recovers by idempotent completion. Those are two separate guarantees, and you need both: lease expiry alone gets the t",
+  "Retry is the most over-applied tool in this whole space, because the transport usually makes blind requeue a one-line call. The discipline is to classify failures before you retry them. A timeout to a throttled dependency is worth another attempt after a backoff; a malformed payl",
+  "The second half is the isolation discipline. Classification decides whether a task retries; isolation decides where its retries run, so one noisy class cannot starve healthy lanes:",
+  "Most real work is not one task; it is a small graph of tasks with dependencies. A scheduler for that graph does not run nodes in source order. It maintains a ready frontier, the set of nodes whose dependencies are all complete, and it only schedules from that frontier. When a nod",
+  "Read the diagram as a sequence of frontiers, not a static picture. The graph starts with fetch alone in the frontier. Once it completes, parse unblocks. Parsing then unblocks enrich and store together, which is where parallelism appears, and notify is the join point that must wai",
+  "In one process a stack trace tells you the causal chain. Across a queue there is no shared stack, so the causal chain has to be carried inside the message itself. That is why a production task envelope holds more than the business payload: it carries the identity and lineage that",
+  "The reflex carried over from single-process work is to profile the handler, find the hot function, and optimize it. In a distributed task system that reflex usually points at the wrong thing. A task can be cheap to run and expensive to wait for, so the first number worth separati",
+  "A distributed task system often fails because it is profiled like an in-process function call. Queue wait, replay, serialization, and aggregation are the real cost centers more often than the task body alone.",
+  "Most engineers arrive at distributed tasks with a mental model from another language's concurrency story, and the model is usually close enough to be dangerous. The shift is the same in every case: the primitives you trusted assumed one process with one lifetime, and a task syste",
+  "These are the habits that separate a task system that survives its first incident from one that creates it. None of them are exotic; the value is in doing them before you need to, because each one is much cheaper to build in than to retrofit under load.",
+  "Nearly every one of these starts as a reasonable assumption carried over from single-process work. They are listed not because they are obscure but because they are easy to ship and slow to notice, surfacing only when the system is already under the load that exposes them.",
+  "The hardest distributed-task bug is often not a worker crash. It is a silently wrong recovery model: replay without idempotency, retry without a budget, or tracing without queue-age visibility.",
+  "Both examples are deliberately small enough to run in the editor, and each one models a flow we have already drawn. Read the short note and the diagram above each listing before the code, so the variables in the program map onto a shape you already recognize. Press Run first to a",
+  "One worker claims a task, misses its lease, and another worker reclaims it. The application-side completion path still makes the duplicate harmless.",
+  "What to look at: this is the lease lifecycle from the core-concepts diagram, played out between two workers. Worker A claims the task and then goes quiet, so its lease expires and the queue hands the same task to worker B. The line that matters most is the completion check: when ",
+  "The queue records one temporary ownership claim plus a deadline.",
+  "The task disappears locally until the lease expires.",
+  "A redelivery is expected behavior after lease expiry, not a surprise incident.",
+  "Completion recording makes the second finish attempt harmless.",
+  "A tiny DAG scheduler runs tasks whose dependencies are complete, accumulates outputs, and keeps one trace lineage for the whole graph."
+ ],
+ "codeSamples": {
+  "distributed_tasks_lease_idempotent": "use std::collections::{HashMap, HashSet, VecDeque};\n\n#[derive(Debug, Clone)]\nstruct Task {\n    id: &'static str,\n    payload: &'static str,\n}\n\n#[derive(Debug)]\nstruct Lease {\n    task: Task,\n    deadline: u64,\n}\n\nstruct LeaseQueue {\n    visible: VecDeque<Task>,\n    leased: HashMap<&'static str, Lease>,\n    completed: HashSet<&'static str>,\n    visibility_timeout: u64,\n    now: u64,\n}\n\nimpl LeaseQueue {\n    fn new(visibility_timeout: u64) -> Self {\n        Self {\n            visible: VecDeque::new(),\n            leased: HashMap::new(),\n            completed: HashSet::new(),\n            visibility_timeout,\n            now: 0,\n        }\n    }\n\n    fn push(&mut self, id: &'static str, payload: &'static str) {\n        self.visible.push_back(Task { id, payload });\n    }\n\n    fn claim(&mut self, worker: &'static str) -> Option<(&'static str, &'static str, &'static str)> {\n        let task = self.visible.pop_front()?;\n        let deadline = self.now + self.visibility_timeout;\n        let task_id = task.id;\n        let payload = task.payload;\n        self.leased.insert(task_id, Lease { task, deadline });\n        Some((worker, task_id, payload))\n    }\n\n    fn advance_time(&mut self, delta: u64) {\n        self.now += delta;\n    }\n\n    fn requeue_expired(&mut self) {\n        let expired: Vec<&'static str> = self\n            .leased\n            .iter()\n            .filter(|(_, lease)| lease.deadline <= self.now)\n            .map(|(&task_id, _)| task_id)\n            .collect();\n\n        for task_id in expired {\n            let lease = self.leased.remove(task_id).unwrap();\n            self.visible.push_back(lease.task);\n        }\n    }\n\n    fn finish_once(&mut self, task_id: &'static str) -> bool {\n        if !self.completed.insert(task_id) {\n            return false;\n        }\n\n        self.leased.remove(task_id);\n        true\n    }\n}\n\nfn main() {\n    let mut queue = LeaseQueue::new(5);\n    queue.push(\"task-1\", \"rebuild-index\");\n\n    let first = queue.claim(\"worker-a\").unwrap();\n    queue.advance_time(6);\n    queue.requeue_expired();\n\n    let redelivery = queue.claim(\"worker-b\").unwrap();\n    let _applied = queue.finish_once(redelivery.1);\n    let duplicate = !queue.finish_once(redelivery.1);\n\n    println!(\"claimed = {}\", first.1);\n    println!(\"redelivered = {}\", redelivery.1);\n    println!(\"completed = {}\", queue.completed.len());\n    println!(\"duplicates ignored = {}\", duplicate);\n}",
+  "distributed_tasks_graph_trace": "use std::collections::BTreeSet;\n\ntype TaskId = usize;\n\n#[derive(Debug)]\nstruct TaskSpec {\n    name: &'static str,\n    deps: Vec<TaskId>,\n    output: u32,\n}\n\n#[derive(Default)]\nstruct TaskGraph {\n    nodes: Vec<TaskSpec>,\n}\n\nimpl TaskGraph {\n    fn add(&mut self, name: &'static str, deps: Vec<TaskId>, output: u32) -> TaskId {\n        let id = self.nodes.len();\n        self.nodes.push(TaskSpec { name, deps, output });\n        id\n    }\n\n    fn ready(&self, done: &BTreeSet<TaskId>) -> Vec<TaskId> {\n        self.nodes\n            .iter()\n            .enumerate()\n            .filter(|(id, node)| !done.contains(id) && node.deps.iter().all(|dep| done.contains(dep)))\n            .map(|(id, _)| id)\n            .collect()\n    }\n}\n\nfn main() {\n    let mut graph = TaskGraph::default();\n    let fetch = graph.add(\"fetch\", vec![], 5);\n    let parse = graph.add(\"parse\", vec![fetch], 8);\n    let enrich = graph.add(\"enrich\", vec![parse], 13);\n    let store = graph.add(\"store\", vec![parse], 3);\n    let _notify = graph.add(\"notify\", vec![enrich, store], 2);\n\n    let trace_id = \"trace-7\";\n    let mut done = BTreeSet::new();\n    let mut order = Vec::new();\n    let mut aggregate = 0_u32;\n\n    while done.len() < graph.nodes.len() {\n        let ready = graph.ready(&done);\n\n        for id in ready {\n            let node = &graph.nodes[id];\n            aggregate += node.output;\n            order.push(node.name);\n            done.insert(id);\n        }\n    }\n\n    println!(\"completed = {}\", order.len());\n    println!(\"aggregate = {}\", aggregate);\n    println!(\"final = {}\", order.last().copied().unwrap_or(\"none\"));\n    println!(\"trace = {}\", trace_id);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,0 +1,217 @@
+{
+ "chapterKey": "ch53",
+ "num": 53,
+ "title": "EZKL, Verifiable LLM Inference, and GPU-Aware ZKML",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Classify which parts of an LLM inference workflow are public, private, deterministic, or artifact-bound",
+   "objective": "Practice separating verifier-visible claims from witness-only material and from versioned artifacts before the first proving job is queued.",
+   "starterPrompt": "Classify one LLM scoring workflow with a tokenizer version, prompt token IDs, attention mask, quantization bits, output commitment, proof blob, verifier key ID, and a public model hash.",
+   "prompts": [
+    "Which fields are public inputs the verifier is expected to see?",
+    "Which fields are witness-only and should stay on the proving side?",
+    "Which fields are artifacts that must be versioned even if they are not secret?",
+    "Which parts must be deterministic for the workflow to stay reproducible across prover and verifier deployments?"
+   ],
+   "acceptanceCriteria": [
+    "You separate public claims from witness material clearly.",
+    "You identify at least two artifact-bound fields such as model hash, verifier key ID, or tokenizer version.",
+    "You name at least one reproducibility consequence of getting the classification wrong."
+   ],
+   "hints": [
+    "Ask what the verifier is supposed to learn, what the prover must know, and what both sides must agree on.",
+    "Artifact-bound does not automatically mean secret; it often means versioned and attributable."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Design a Rust service boundary around an EZKL-style proving job",
+   "objective": "Read one service workflow and decide where HTTP or gRPC transport ends, where the proving queue begins, and where the verifier lane becomes witness-free.",
+   "starterPrompt": "A service currently accepts an API request, tokenizes input inline, generates a witness inline, proves inline, verifies inline, and stores prompt text together with the proof blob in one response record.",
+   "prompts": [
+    "Which steps belong in the submitter edge versus a proving worker lane?",
+    "Which boundary should first own an artifact manifest instead of raw request-local state?",
+    "Which data should never appear in the verifier-facing request type?",
+    "Which metric would tell you the inline design is already hurting the API edge?"
+   ],
+   "acceptanceCriteria": [
+    "You move at least one heavyweight step out of the request handler.",
+    "You identify at least one verifier boundary that should be witness-free.",
+    "You place artifact versioning or manifest lookup at one explicit boundary.",
+    "You mention at least one latency or queue signal that the repaired design should expose."
+   ],
+   "hints": [
+    "The proving lane should look like a worker boundary, not like a convenience helper.",
+    "If the verifier sees prompt tokens or witness paths, the boundary is already too wide."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement separate proving and verification request types",
+   "objective": "Build small Rust types that force the proving request and verification request to stay distinct.",
+   "starterPrompt": "Design one `ProvingJob`, one `ProofArtifact`, and one `VerificationJob` for a workflow that proves a public output commitment was produced from one model artifact without revealing the raw prompt.",
+   "prompts": [
+    "Keep witness fields only on the proving side.",
+    "Keep verifier fields limited to public claims and proof artifact references.",
+    "Add one circuit or model version field.",
+    "Name at least one artifact ID explicitly instead of hiding it in a path string only."
+   ],
+   "acceptanceCriteria": [
+    "The proving and verification types are structurally distinct.",
+    "The verifier-facing type does not require witness-only data.",
+    "You include one version or artifact-identity field explicitly.",
+    "The design is small enough that another engineer could review it quickly."
+   ],
+   "hints": [
+    "If one struct does every job, the boundary is probably still vague.",
+    "Versioning belongs in the type shape early, not after the first migration pain."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair numerical reproducibility drift before the prover and verifier split across services",
+   "objective": "Fix the class of bugs where prover and verifier disagree because preprocessing or transcript policy drifted, not because the proof backend is broken.",
+   "starterPrompt": "One deployment changed quantization bits, another changed tokenizer special-token handling, and a third reordered public inputs in one manifest serializer. Cross-service verification now fails intermittently.",
+   "prompts": [
+    "Which parts of the workflow need canonical ordering or stable field layout?",
+    "Which fields belong in the artifact manifest so a mismatch is visible before prove or verify happens?",
+    "Why is quantization or tokenization drift a protocol break rather than just a model-tuning difference?",
+    "Which CI or contract test should fail before rollout next time?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one canonical serialization repair and one preprocessing-version repair.",
+    "You explain why the issue is a protocol-compatibility bug, not only a runtime bug.",
+    "You propose at least one CI or contract gate for drift detection."
+   ],
+   "hints": [
+    "If both sides compute a different graph or public input ordering, the proof boundary changed.",
+    "A deterministic artifact manifest is often the simplest first repair."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Profile a hypothetical GPU-backed ZKML pipeline and identify the real bottleneck",
+   "objective": "Separate transfer-bound, witness-bound, prove-bound, verify-bound, and queue-bound cases clearly before changing hardware or code.",
+   "starterPrompt": "A window summary shows queue wait 700 ms, witness generation 260 ms, proof generation 1100 ms, verification 35 ms, and GPU transfer 220 ms for one batch path.",
+   "prompts": [
+    "Which category dominates wall time right now?",
+    "Which rewrite is probably premature because the bottleneck is elsewhere?",
+    "What next measurement would you take inside the dominant category?",
+    "Which signals would prove the repair moved the real bottleneck instead of only changing one micro-metric?"
+   ],
+   "acceptanceCriteria": [
+    "You identify the current dominant latency layer correctly.",
+    "You reject at least one likely but wrong optimization target.",
+    "You propose one deeper measurement and at least one before-and-after validation metric.",
+    "You treat GPU usage as workload-dependent rather than automatically correct."
+   ],
+   "hints": [
+    "If queue wait is already high, faster kernels may not move the user-visible story enough.",
+    "Keep witness, prove, verify, and transfer as separate buckets."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Productize ZKML with APIs, job orchestration, artifact versioning, and observability",
+   "objective": "Turn one proof-backed inference prototype into an operable service design with bounded queues and reviewable artifact custody.",
+   "starterPrompt": "You are shipping a service with submit, status, and verify endpoints; CPU and GPU proving lanes; one artifact registry; and one downstream audit sink. Mixed model versions and canary rollout are expected.",
+   "prompts": [
+    "Which artifacts should be versioned and content-addressed: model hash, circuit ID, quantization manifest, verifier key ID, proof blob, tokenizer manifest?",
+    "Which queues or worker pools deserve separate budgets?",
+    "Where should fallback from GPU to CPU happen, and how should it be exposed to operators?",
+    "Which metrics, traces, and alerts would you require before the service is called production-ready?"
+   ],
+   "acceptanceCriteria": [
+    "You name at least three explicit artifacts and one custody or version rule for each class.",
+    "You define at least one separate queue or worker-lane budget.",
+    "You include one fallback or failure-isolation rule around the GPU lane.",
+    "You mention at least three observability hooks such as queue age, proof bytes, verification failures, or fallback rate."
+   ],
+   "hints": [
+    "A good answer makes proving heavy, verification light, and artifacts attributable.",
+    "If mixed model versions are expected, treat version lookup as a first-class service concern."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why should verification requests usually stay witness-free?",
+  "What makes tokenization, quantization, and public-input ordering protocol concerns instead of private implementation details?",
+  "Why is a proving lane usually a queue and capacity problem as much as a cryptography problem?",
+  "What does a verifiable inference system prove, and what does it not prove?",
+  "Why should GPU-backed proving still be treated as an optional execution lane rather than as the whole architecture?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Build a verifier request without leaking witness material",
+  "filename": "gpu_queue_boundary_lab.rs",
+  "runKey": "ch53_ex_gpu_queue_boundary",
+  "expectedOutput": "prove queue = zkml.gpu\nverify payload = 2\nwitness leaked = false",
+  "initialCode": "#[derive(Debug, Clone)]\nstruct ProvingJob {\n    model_id: String,\n    gpu_requested: bool,\n    public_outputs: Vec<String>,\n    witness_path: String,\n    proof_path: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerificationJob {\n    proof_path: String,\n    public_output_count: usize,\n    witness_included: bool,\n}\n\nfn build_verification_job(job: &ProvingJob) -> VerificationJob {\n    VerificationJob {\n        proof_path: job.witness_path.clone(),\n        public_output_count: 0,\n        witness_included: true,\n    }\n}\n\nfn main() {\n    let job = ProvingJob {\n        model_id: String::from(\"llm-int8:v3\"),\n        gpu_requested: true,\n        public_outputs: vec![String::from(\"token_hash\"), String::from(\"score_hash\")],\n        witness_path: String::from(\"artifacts/witness.json\"),\n        proof_path: String::from(\"artifacts/proof.pf\"),\n    };\n\n    let verify = build_verification_job(&job);\n    let prove_queue = if job.gpu_requested { \"zkml.gpu\" } else { \"zkml.cpu\" };\n\n    println!(\"prove queue = {}\", prove_queue);\n    println!(\"verify payload = {}\", verify.public_output_count);\n    println!(\"witness leaked = {}\", verify.witness_included);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 37, 43, 47, 51, and 52",
+  "Opening scenario",
+  "The same topology as a service sketch",
+  "Mental model",
+  "Core concepts",
+  "The five stages every ZKML pipeline shares",
+  "Where EZKL fits, and what to keep out of the request path",
+  "Why LLMs are the hard case",
+  "GPU-aware execution: opportunities, transfer costs, and failure modes",
+  "The four boundaries Rust should keep separate",
+  "What a proof actually promises, and what it does not",
+  "Profiling the whole lane, not just the prover binary",
+  "Turning the pipeline into a product you can operate",
+  "How this lands depending on where you came from",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: keep public claims, witness material, and verification requests separate",
+  "Example 2: route heavyweight proving through one queue and profile the slow stage explicitly",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Verifiable inference lets a server prove it ran a specific model on specific inputs, so a third party can check the result without rerunning the model or seeing the private data. Doing that for an LLM, on a GPU, in production, turns into an artifact pipeline: frozen model graphs,",
+  "Chapter 37 covered GPU cost models and safe host-side wrappers. Chapter 43 covered observability for heavy asynchronous systems. Chapter 47 covered typed service and transport boundaries. Chapter 51 covered statements, witnesses, transcripts, and proof artifacts. Chapter 52 cover",
+  "You run a multi-tenant inference gateway. A regulated customer asks a fair question: how do they know the model you advertised, with the inference policy you published, is actually the model that produced their result? They cannot rerun it because they do not have the weights, an",
+  "That single product promise expands into a surprising amount of infrastructure. You need a frozen model graph, a versioned tokenization and quantization policy, a witness builder that assembles the private execution trace, bounded proving lanes that may reach for a GPU, a small v",
+  "Read the diagram top to bottom in code form. The indentation shows which stores and manifests each stage reaches into. The submit edge and the verifier API are deliberately thin; everything expensive hides behind the queue.",
+  "Hold onto the one boundary that beginners always blur: verifiable inference proves a computation claim under chosen artifacts. It does not automatically prove that the model is truthful, fair, safe, aligned, or even useful. A perfectly valid proof can wrap a terrible answer.",
+  "If you remember three things from this chapter, make them these. ZKML is an artifact pipeline before it is a model call, the cost is wildly asymmetric between proving and verifying, and any claim about GPU acceleration has to be earned with a measurement. The three cards below un",
+  "Strip away the tooling and every verifiable-inference flow is the same five steps in the same order. You freeze the computation into a graph, you pin a numeric representation so the proof system can reason about it, you build the witness from the actual run, you prove, and you ve",
+  "EZKL is one mature option for compiling a model graph into a proof-oriented circuit and driving the export-quantize-witness-prove-verify cycle. Its exact commands and file layouts change between releases, so do not memorize them. Memorize the boundary instead: compilation, truste",
+  "Everything above applies to any model, but LLMs stress every part of it at once. The tokenizer becomes part of the signed contract, attention makes proving cost scale brutally with sequence length, fixed-point encoding has to stand in for the floats you took for granted, batching",
+  "The temptation is to assume the GPU is always faster and move on. Chapter 37 already warned against that, and ZKML makes the warning sharper because the proving kernel is only one slice of wall time. A blazing kernel still loses if host-to-device copies, queue wait, or artifact s",
+  "GPU usage in ZKML should stay measurement-driven. The same proof backend may shift from CPU-favorable to GPU-favorable or back again as batch size, witness shape, and artifact transfer cost change.",
+  "This is where Rust earns its place. The job is mostly about who is allowed to hold what, and the type system is the cheapest enforcement you will ever get. Watch the witness in the diagram: it is born in the prover lane and must never appear on the verifier edge. The service laye",
+  "It is worth being precise about the guarantee, because the marketing around zero-knowledge tends to oversell it. A passing proof says the chosen computation was followed over the chosen public inputs under the chosen proving assumptions. It says nothing about whether the model is",
+  "When you go to optimize, the prover binary is the obvious suspect and frequently the wrong one. Witness generation, with its canonicalization and commitment building, can be hotter than the proof engine itself, and queue wait can dwarf both under load. Measure each stage separate",
+  "Everything converges here. A shippable ZKML service exposes submit, status, and verify surfaces that behave like a job system with receipts, not a synchronous toy endpoint; it bounds its proving queues and separates CPU from GPU lanes; it moves model hash, circuit ID, verifier ke",
+  "The hard part of ZKML is rarely the cryptography itself; it is unlearning the habits your previous language encouraged. Each background brings a different instinct to the table, and each instinct trips on a different part of this pipeline. Find the card that matches your history ",
+  "These are the habits that separate a demo from a service you can keep running. None of them are exotic; they are the same discipline applied at every boundary the diagrams above traced. Treat each as a default you deviate from only with a reason.",
+  "Most of these are the mental-model violations made flesh. They are easy to commit because each one looks like a harmless shortcut at the time: inline the prover just this once, treat a tokenizer bump as a refactor, assume the GPU helped. The callout at the end names the single mo",
+  "The most expensive ZKML mistake is often contract drift: one tokenizer change, one quantization tweak, one graph export difference, or one verifier-key mismatch that was never treated as a versioned systems boundary.",
+  "Two runnable examples make the abstractions concrete. The first shows how to encode the public/private boundary in the type system so a leak becomes a compile error rather than an audit finding. The second shows a proving job routed through a queue and profiled by stage. Read the",
+  "The main lesson is boundary honesty. The verifier-facing request carries the public claim and proof artifact only. Witness material remains proving-side custody.",
+  "What to look at: notice that the witness fields and the public-claim fields live in separate structs, and the verification request only ever holds the public type plus a proof reference. The diagram traces which field is allowed to reach the verifier. If you tried to put a prompt",
+  "Model ID, quantization choice, and public token count are verifier-facing contract fields here.",
+  "Prompt tokens and masks stay proving-side. If they leak into verification DTOs, the boundary already widened.",
+  "Circuit and verifier key identifiers make mixed deployments and failures attributable.",
+  "This is the shape to keep whether the prover is a local binary, a GPU lane, or an external worker service.",
+  "The route, dominant stage, and end-to-end timing are all explicit. That is a more production-honest starting point than “call prove() somewhere inside the handler.”",
+  "What to look at: the job picks a lane by routing policy, runs through the witness, prove, and transfer stages while recording each one, then reports which stage dominated and the end-to-end total. The diagram is that control flow. The point of the example is that the dominant sta",
+  "GPU preference becomes one routing policy, not one invisible local branch inside business logic."
+ ],
+ "codeSamples": {
+  "zkml_verification_boundary_types": "#[derive(Debug, Clone)]\nstruct PublicClaim {\n    model_id: String,\n    quantization_bits: u8,\n    token_count: usize,\n    output_commitment: String,\n}\n\n#[derive(Debug, Clone)]\nstruct WitnessMaterial {\n    prompt_tokens: Vec<u32>,\n    attention_mask: Vec<u8>,\n}\n\n#[derive(Debug, Clone)]\nstruct ProofArtifact {\n    circuit_id: String,\n    proof_bytes_len: usize,\n    verifier_key_id: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerificationRequest {\n    claim: PublicClaim,\n    proof: ProofArtifact,\n}\n\nfn build_verification_request(claim: PublicClaim, proof: ProofArtifact) -> VerificationRequest {\n    VerificationRequest { claim, proof }\n}\n\nfn main() {\n    let claim = PublicClaim {\n        model_id: String::from(\"llm-int8:v3\"),\n        quantization_bits: 8,\n        token_count: 128,\n        output_commitment: String::from(\"out:9af1\"),\n    };\n\n    let _witness = WitnessMaterial {\n        prompt_tokens: vec![101_u32, 202, 303],\n        attention_mask: vec![1_u8, 1, 1],\n    };\n\n    let proof = ProofArtifact {\n        circuit_id: String::from(\"ezkl-circuit:v3\"),\n        proof_bytes_len: 2_048,\n        verifier_key_id: String::from(\"vk:2026-04\"),\n    };\n\n    let request = build_verification_request(claim, proof);\n\n    println!(\"model = {}\", request.claim.model_id);\n    println!(\"public tokens = {}\", request.claim.token_count);\n    println!(\"proof bytes = {}\", request.proof.proof_bytes_len);\n    println!(\"witness kept private = {}\", true);\n}",
+  "zkml_proving_queue_profile": "#[derive(Debug, Clone)]\nstruct ZkmlJob {\n    artifact_id: String,\n    gpu_requested: bool,\n    batch_size: usize,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct StageTimes {\n    witness_ms: u64,\n    prove_ms: u64,\n    verify_ms: u64,\n    transfer_ms: u64,\n}\n\nfn queue_name(job: &ZkmlJob) -> &'static str {\n    if job.gpu_requested {\n        \"zkml.gpu\"\n    } else {\n        \"zkml.cpu\"\n    }\n}\n\nfn dominant_stage(times: &StageTimes) -> &'static str {\n    [\n        (\"witness\", times.witness_ms),\n        (\"prove\", times.prove_ms),\n        (\"verify\", times.verify_ms),\n        (\"transfer\", times.transfer_ms),\n    ]\n    .into_iter()\n    .max_by_key(|(_, ms)| *ms)\n    .map(|(name, _)| name)\n    .unwrap()\n}\n\nfn end_to_end_ms(times: &StageTimes) -> u64 {\n    times.witness_ms + times.prove_ms + times.verify_ms + times.transfer_ms\n}\n\nfn main() {\n    let job = ZkmlJob {\n        artifact_id: String::from(\"model-sha256:abc123\"),\n        gpu_requested: true,\n        batch_size: 4,\n    };\n\n    let times = StageTimes {\n        witness_ms: 320,\n        prove_ms: 1_280,\n        verify_ms: 40,\n        transfer_ms: 240,\n    };\n\n    println!(\"route = {}\", queue_name(&job));\n    println!(\"dominant = {}\", dominant_stage(&times));\n    println!(\"e2e ms = {}\", end_to_end_ms(&times));\n    println!(\"artifact = {}\", job.artifact_id);\n}"
+ },
+ "labReferenceSolution": null
+}

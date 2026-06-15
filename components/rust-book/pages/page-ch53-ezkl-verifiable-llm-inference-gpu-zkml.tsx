@@ -8,6 +8,7 @@ import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 
 const architectureSketch = `HTTP / gRPC submitter
   -> auth + tokenizer/version selection
@@ -24,30 +25,34 @@ const architectureSketch = `HTTP / gRPC submitter
 const mentalModelPoints = [
   {
     title: "Verifiable inference is an artifact pipeline first.",
-    body: "The operational unit is not only a model call. It is a versioned graph export, tokenization policy, quantization manifest, witness material, proof artifact, and verification request that all need to line up reproducibly.",
+    body: "The operational unit is not a model call. It is a versioned graph export, a tokenization policy, a quantization manifest, witness material, a proof artifact, and a verification request that all have to line up byte-for-byte. If any one of them drifts, the proof either fails to generate or verifies against the wrong claim. You are operating a pipeline of frozen inputs, not invoking a function.",
   },
   {
-    title: "LLM proving is usually asymmetric and queue-shaped.",
-    body: "Verification is the small lane. Witness generation and proof creation are the heavy lane. Treat proving like a specialized worker pool with bounded admission, not like an ordinary inline request helper.",
+    title: "Proving and verifying are wildly asymmetric.",
+    body: "Verification is the cheap lane: small inputs, milliseconds, embeddable anywhere. Witness generation and proof creation are the heavy lane: seconds to minutes, large memory, sometimes a pinned accelerator. Design accordingly. The verifier can sit on the request path, but proving belongs in a bounded worker pool with admission control, never inline behind a user's spinner.",
   },
   {
-    title: "GPU acceleration is conditional and measurement-driven.",
-    body: "Some ZKML stages benefit from accelerators, but the right question is always where wall time is going: host-device copies, witness construction, proving kernels, artifact serialization, or queue wait.",
+    title: "GPU acceleration is conditional, not a given.",
+    body: "Some stages benefit from accelerators and some do not, and the same backend can flip from CPU-favorable to GPU-favorable as batch size and witness shape change. The honest question is always where wall time actually went: host-to-device copies, witness construction, proving kernels, artifact serialization, or plain queue wait. Measure first, then claim.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Think of the proof flow more like a compiler and artifact pipeline around a model graph than like one ordinary inference function call. Rust helps most by making ownership, queueing, and artifact versioning explicit.",
+    body: "You already think in terms of build pipelines and toolchains, so port that instinct: the proof flow is closer to a compiler that lowers a model graph into a circuit than to a single inference call. The shift is that Rust makes the artifacts of that pipeline first-class. Circuit IDs, witness buffers, and proof blobs become owned values with lifetimes, not loose files you remember to clean up by convention.",
   },
   {
     title: "C# background",
-    body: "Do not expect runtime reflection or one framework object to describe the whole workflow. In Rust, the calm design keeps public claims, witness inputs, proof artifacts, and verifier requests as separate typed boundaries.",
+    body: "There is no managed runtime, reflection layer, or single framework object that quietly stitches the workflow together for you. The mental shift is to stop looking for the one orchestrating class and instead model each stage as its own typed boundary. Public claims, witness inputs, proof artifacts, and verifier requests are deliberately different types so the compiler stops you from passing private material where only public data belongs.",
   },
   {
     title: "Go background",
-    body: "A proving lane is usually more like a bounded job system than like a light goroutine fan-out. Queue age, artifact size, and retry policy matter as much as the math.",
+    body: "Your service instinct transfers well, but a proving lane is not a cheap goroutine fan-out. Each job can pin a GPU, hold gigabytes of witness data, and run for seconds, so the trap is treating proving like a lightweight handler. Think bounded worker pool with admission control. Queue age, artifact size, and retry classification matter as much as the cryptography.",
+  },
+  {
+    title: "Python background",
+    body: "This is where the largest mental shift lives. In Python ML the model object, tokenizer, and numpy arrays float around as mutable, dynamically typed values. ZKML reverses that: the tokenizer version, quantization scheme, and graph export are frozen protocol inputs, and a float that drifts by one ULP is a different computation the verifier will reject. Rust pushes you to pin every one of those as an explicit, versioned, typed artifact rather than an incidental runtime detail.",
   },
 ]
 
@@ -281,8 +286,11 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Verifiable ML inference needs model artifacts, input commitments, proving capacity, accelerator budgets, and
-          verifier integration. This chapter covers EZKL-style ZKML pipelines as production service architecture.
+          Verifiable inference lets a server prove it ran a specific model on specific inputs, so a third party can check
+          the result without rerunning the model or seeing the private data. Doing that for an LLM, on a GPU, in
+          production, turns into an artifact pipeline: frozen model graphs, input commitments, witness generation, proving
+          capacity, accelerator budgets, and a thin verifier. This chapter treats EZKL-style ZKML not as a math demo but as
+          a service architecture you have to own and operate.
         </p>
       </div>
 
@@ -322,24 +330,48 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A multi-tenant inference gateway must provide audit evidence that a published model artifact and inference
-            policy produced a result while private prompts and intermediate state remain restricted. The business
-            requirement is an artifact pipeline with versioned tokenization, quantization, witness custody, bounded proving
-            lanes, verifier APIs, and resource telemetry.
+            You run a multi-tenant inference gateway. A regulated customer asks a fair question: how do they know the model
+            you advertised, with the inference policy you published, is actually the model that produced their result? They
+            cannot rerun it because they do not have the weights, and you cannot hand them the private prompts of other
+            tenants. Verifiable inference resolves the standoff. The server attaches a cryptographic proof that a named
+            computation, over committed public inputs, produced the claimed output, and the customer checks that proof in
+            milliseconds without seeing anything private.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            That single product promise expands into a surprising amount of infrastructure. You need a frozen model graph,
+            a versioned tokenization and quantization policy, a witness builder that assembles the private execution trace,
+            bounded proving lanes that may reach for a GPU, a small verifier API, and telemetry across every stage. The
+            rest of this chapter walks that pipeline. Before the prose, here is the shape of the request as it moves from
+            an HTTP submitter all the way to an audit log.
+          </p>
+
+          <div className="mt-4">
+            <MermaidDiagram
+              chart={`flowchart TD\n  Sub[HTTP / gRPC submit] --> Auth[auth + tokenizer version]\n  Auth --> Manifest[artifact manifest lookup]\n  Manifest --> Queue[(zkml job queue)]\n  Queue --> Witness[witness builder]\n  Witness --> Prover[GPU prover lane]\n  Prover --> ProofStore[(proof artifact store)]\n  ProofStore --> Verifier[verifier API]\n  Verifier --> Result[(result + audit log)]`}
+              caption="The heavy lane (witness, prover) sits behind a queue; the verifier on the right is the small, fast lane."
+            />
+          </div>
+
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="flex items-center gap-2 mb-2">
               <Network className="h-5 w-5 text-primary" />
-              <h4 className="font-semibold text-foreground">Rust service topology sketch</h4>
+              <h4 className="font-semibold text-foreground">The same topology as a service sketch</h4>
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the diagram top to bottom in code form. The indentation shows which stores and manifests each stage
+              reaches into. The submit edge and the verifier API are deliberately thin; everything expensive hides behind
+              the queue.
+            </p>
             <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{architectureSketch}</code>
             </pre>
           </div>
           <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
             <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-              Verifiable inference proves a computation claim under chosen artifacts. It does{" "}
-              <strong>not</strong> automatically prove that the model is truthful, fair, safe, aligned, or even useful.
+              Hold onto the one boundary that beginners always blur: verifiable inference proves a computation claim under
+              chosen artifacts. It does{" "}
+              <strong>not</strong> automatically prove that the model is truthful, fair, safe, aligned, or even useful. A
+              perfectly valid proof can wrap a terrible answer.
             </p>
           </div>
         </section>
@@ -349,6 +381,13 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            If you remember three things from this chapter, make them these. ZKML is an artifact pipeline before it is a
+            model call, the cost is wildly asymmetric between proving and verifying, and any claim about GPU acceleration
+            has to be earned with a measurement. The three cards below unpack each one. They are the lens you should hold
+            while reading every later section, because almost every production mistake in this space is really a violation
+            of one of them.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -367,9 +406,20 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              ZKML mental model: model graph, quantization, witnesses, proofs, verification, and reproducibility
+              The five stages every ZKML pipeline shares
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Strip away the tooling and every verifiable-inference flow is the same five steps in the same order. You
+              freeze the computation into a graph, you pin a numeric representation so the proof system can reason about
+              it, you build the witness from the actual run, you prove, and you verify. Each arrow in the diagram below is
+              a place where a version mismatch can silently change what the proof means, which is why the cards that follow
+              treat each stage as a contract rather than a convenience.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Graph[freeze model graph] --> Quant[quantize / calibrate]\n  Quant --> Witness[generate witness]\n  Witness --> Prove[prove]\n  Prove --> Verify[verify]\n  Verify -->|public claim only| Caller[caller]\n  Witness -.private, never leaves prover.-x Caller`}
+              caption="One direction, five stages. The witness is the only stage that must never cross to the verifier side."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {zkmlMentalModelCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -381,8 +431,15 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              EZKL workflow for verifiable AI and analytics at a senior-engineer level
+              Where EZKL fits, and what to keep out of the request path
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              EZKL is one mature option for compiling a model graph into a proof-oriented circuit and driving the
+              export-quantize-witness-prove-verify cycle. Its exact commands and file layouts change between releases, so do
+              not memorize them. Memorize the boundary instead: compilation, trusted setup, and heavy proof generation
+              belong in CI, admin tooling, or dedicated workers, while the API edge does almost nothing but select
+              artifacts, enqueue work, and hand back a receipt. The four cards spell out what that discipline buys you.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {ezklWorkflowCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -395,8 +452,16 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              LLM-specific challenges: model size, tokenization, attention, numerical precision, batching, and proof cost
+              Why LLMs are the hard case
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Everything above applies to any model, but LLMs stress every part of it at once. The tokenizer becomes part
+              of the signed contract, attention makes proving cost scale brutally with sequence length, fixed-point
+              encoding has to stand in for the floats you took for granted, batching reshapes both your accelerator math
+              and your replay size, and open-ended sampling adds nondeterminism a proof cannot tolerate. The practical
+              consequence, which the last card states plainly, is that mature systems rarely prove free-form generation.
+              They prove a bounded, deterministic slice and are honest about it.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {llmChallengeCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -409,8 +474,15 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              GPU-aware execution: acceleration opportunities, host-device transfer costs, and failure modes
+              GPU-aware execution: opportunities, transfer costs, and failure modes
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The temptation is to assume the GPU is always faster and move on. Chapter 37 already warned against that, and
+              ZKML makes the warning sharper because the proving kernel is only one slice of wall time. A blazing kernel
+              still loses if host-to-device copies, queue wait, or artifact serialization dominate, and a GPU lane brings
+              its own incident class: out-of-memory, driver resets, and CPU/GPU artifact mismatches. The cards below frame
+              the accelerator as a workload-dependent option you justify with telemetry, not a default.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {gpuAwareCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -429,9 +501,20 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Rust integration boundaries around CLI tools, generated artifacts, services, and queues
+              The four boundaries Rust should keep separate
             </h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              This is where Rust earns its place. The job is mostly about who is allowed to hold what, and the type system
+              is the cheapest enforcement you will ever get. Watch the witness in the diagram: it is born in the prover lane
+              and must never appear on the verifier edge. The service layer takes a request and hands off one owned job; the
+              prover keeps private custody of the witness; the verifier sees only public claims plus a proof reference; and
+              storage decides, deliberately, whether witness files are ephemeral or auditable.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Client[client request] --> API[service: normalize + resolve version]\n  API -->|owned job| Queue[(job queue)]\n  Queue --> Prover[prover: builds + holds witness]\n  Prover -->|public claim + proof ref| Verifier[verifier API]\n  Prover -->|proof blob| Store[(artifact store)]\n  Verifier --> Client\n  Prover -. witness stays here .- Prover`}
+              caption="Ownership handoff: the witness never crosses to the verifier or the client side."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {integrationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -443,8 +526,16 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Privacy, correctness, and trust assumptions for verifiable inference
+              What a proof actually promises, and what it does not
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              It is worth being precise about the guarantee, because the marketing around zero-knowledge tends to oversell
+              it. A passing proof says the chosen computation was followed over the chosen public inputs under the chosen
+              proving assumptions. It says nothing about whether the model is good, and the privacy it offers is only as
+              tight as your public boundary: timing, artifact sizes, and metadata can all leak. Reproducibility belongs in
+              this section too, because a prover and verifier that disagree on any frozen input are simply two different
+              systems that happen to share a name.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {trustCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -457,8 +548,15 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Profiling proof generation and verification latency
+              Profiling the whole lane, not just the prover binary
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When you go to optimize, the prover binary is the obvious suspect and frequently the wrong one. Witness
+              generation, with its canonicalization and commitment building, can be hotter than the proof engine itself, and
+              queue wait can dwarf both under load. Measure each stage separately, give the small verifier lane its own SLOs
+              rather than waving it off as cheap, and give any GPU lane its own telemetry so the accelerator does not become
+              a black box the moment an incident starts.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {profilingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -471,8 +569,16 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Productizing ZKML: APIs, job orchestration, artifact versioning, and observability
+              Turning the pipeline into a product you can operate
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Everything converges here. A shippable ZKML service exposes submit, status, and verify surfaces that behave
+              like a job system with receipts, not a synchronous toy endpoint; it bounds its proving queues and separates
+              CPU from GPU lanes; it moves model hash, circuit ID, verifier key, quantization manifest, and tokenizer
+              version together as one record; and it emits the metrics that let you reason about all of the above. The final
+              card is the reality check: full LLM-scale proving is usually too expensive to ship naively, so most production
+              systems prove bounded subgraphs or audit-oriented outputs instead.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {productizingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -484,8 +590,14 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <h4 className="font-semibold text-foreground mb-3">How this lands depending on where you came from</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The hard part of ZKML is rarely the cryptography itself; it is unlearning the habits your previous language
+              encouraged. Each background brings a different instinct to the table, and each instinct trips on a different
+              part of this pipeline. Find the card that matches your history and notice the specific mental shift it asks
+              for.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -501,6 +613,11 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
             <Wrench className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            These are the habits that separate a demo from a service you can keep running. None of them are exotic; they are
+            the same discipline applied at every boundary the diagrams above traced. Treat each as a default you deviate
+            from only with a reason.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
@@ -515,6 +632,11 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
             <Bug className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Most of these are the mental-model violations made flesh. They are easy to commit because each one looks like a
+            harmless shortcut at the time: inline the prover just this once, treat a tokenizer bump as a refactor, assume
+            the GPU helped. The callout at the end names the single most expensive one.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
@@ -539,6 +661,12 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Two runnable examples make the abstractions concrete. The first shows how to encode the public/private boundary
+            in the type system so a leak becomes a compile error rather than an audit finding. The second shows a proving
+            job routed through a queue and profiled by stage. Read the short orientation and diagram above each listing
+            first, then run it and change a value to see the behavior move.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -562,6 +690,16 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: notice that the witness fields and the public-claim fields live in separate structs, and the
+              verification request only ever holds the public type plus a proof reference. The diagram traces which field
+              is allowed to reach the verifier. If you tried to put a prompt token into the verification request, it simply
+              would not type-check.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Inputs[inference inputs] --> Witness[Witness struct: prompt tokens, masks]\n  Inputs --> Claim[PublicClaim: model id, quant, token count]\n  Witness -->|stays prover-side| Prove[prove]\n  Claim --> VReq[VerificationRequest]\n  Prove -->|proof bytes| VReq\n  VReq --> Verifier[verifier]`}
+              caption="Two structs in, one verification request out. The witness has no path to the verifier."
+            />
             <RustCodeEditor
               code={codes.zkml_verification_boundary_types}
               onChange={(newCode) => updateCode("zkml_verification_boundary_types", newCode)}
@@ -624,6 +762,16 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the job picks a lane by routing policy, runs through the witness, prove, and transfer stages
+              while recording each one, then reports which stage dominated and the end-to-end total. The diagram is that
+              control flow. The point of the example is that the dominant stage and the artifact ID are first-class outputs,
+              not values you have to reconstruct from logs after an incident.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Submit[submit job + artifact id] --> Route{lane?}\n  Route -->|gpu preferred| Gpu[zkml.gpu lane]\n  Route -->|fallback| Cpu[zkml.cpu lane]\n  Gpu --> Stages[record witness / prove / transfer]\n  Cpu --> Stages\n  Stages --> Pick[pick dominant stage]\n  Pick --> Report[report route, dominant, e2e ms, artifact]`}
+              caption="Routing, per-stage timing, and a dominant-stage verdict are explicit, not hidden inside a handler."
+            />
             <RustCodeEditor
               code={codes.zkml_proving_queue_profile}
               onChange={(newCode) => updateCode("zkml_proving_queue_profile", newCode)}

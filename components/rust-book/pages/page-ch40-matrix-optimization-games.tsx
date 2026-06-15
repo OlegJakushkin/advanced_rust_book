@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 
 const mentalModelPoints = [
   {
@@ -120,15 +121,19 @@ const gpuCards = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "You may already think in cache lines, loop nests, and SIMD lanes. Rust's main correction is ownership and boundary honesty: flat storage by default, explicit sparse formats, and a small safe wrapper around any lower-level tuning.",
+    body: "Your instincts about cache lines, loop nests, and SIMD lanes all carry over intact, and that is the good news. The shift is that Rust wants the same flat layout you would hand-tune, but it asks who owns the buffer at every boundary. Wrap any lower-level tuning in a small safe API instead of leaving raw pointers and aliasing assumptions in the open.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of object graphs and more in terms of contiguous buffers. The performance win comes from removing abstraction that fights layout, not from recreating matrix objects with rich runtime identity.",
+    body: "Stop reaching for an object graph. A matrix here is one contiguous buffer plus a stride formula, not a class with rich runtime identity and a managed heap behind it. The speed comes from deleting the abstraction layer that fights memory layout, not from modeling cells as first-class objects.",
   },
   {
     title: "Go background",
-    body: "A slice-of-slices matrix is easy to write but often the wrong dense layout. Rust nudges you toward one owner plus explicit indexing, which is exactly what cache-aware and SIMD-friendly kernels usually want.",
+    body: "The natural Go move is a slice-of-slices, and for a dense kernel that is almost always the wrong shape: each row is a separate allocation, so traversal chases pointers and the cache never warms up. Rust pushes you toward one owner plus explicit index math, which is exactly the contiguous layout a cache-aware or SIMD-friendly kernel needs.",
+  },
+  {
+    title: "Python background",
+    body: "In NumPy the fast path is hidden: as long as you stay in vectorized array ops, C and BLAS do the real work for you. In Rust you are the BLAS. Writing the loop yourself means you also own the layout, the loop order, and the tiling decisions that NumPy made on your behalf, so the cache and SIMD reasoning becomes your job rather than the library's.",
   },
 ]
 
@@ -278,13 +283,31 @@ export function PageCh40MatrixOptimizationGames() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A batch scoring service, sparse route planner, and accelerator research path all depend on matrix-shaped data.
-            The business requirement is to make storage layout, traversal order, sparsity, tiling, thread ownership, and
-            accelerator boundary costs measurable before claiming an optimization win.
+            Three teams land on the same desk in the same week. One owns a batch scoring service whose hot path is a dense
+            matrix multiply. One owns a route planner whose graph is mostly empty space. One owns a research spike that
+            wants to put everything on a GPU. Each team has a story about why their workload is slow and what would make
+            it fast, and each story is plausible. The work here is to replace those stories with measurements, in an order
+            that does not waste effort.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            That order matters more than any single trick. The mistake repeated across all three teams is reaching for the
+            most exciting lever first: SIMD intrinsics, a thread pool, a GPU. Those levers can all help, but only after
+            the storage layout and the loop order are honest. A clever kernel built on a cache-hostile layout just makes
+            the wrong memory pattern run faster. So the chapter walks the levers in the order that actually pays off, and
+            insists that every step prove itself against the same workload and the same release build.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
-            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the pipeline below from left to right. Each stage is cheaper to get right than the one after it, and
+              each later stage assumes the earlier ones are already settled. You almost never need to reach the GPU stage,
+              and when you do, you want to arrive there with the layout question already answered.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  L[Pick storage layout] --> O[Fix loop order and reuse]\n  O --> T[Add tiling]\n  T --> P[Parallel CPU]\n  P --> G[GPU offload]\n  O -. measure each step .-> M[(same workload\\nsame release build)]\n  T -.-> M\n  P -.-> M\n  G -.-> M`}
+              caption="Optimize in cost order: layout first, accelerator last, and measure every stage against one fixed workload."
+            />
+            <ol className="mt-4 space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Choose dense row-major, column-oriented, blocked, or sparse storage from actual access pattern.</li>
               <li>Fix loop order and reuse before widening the execution model.</li>
               <li>Introduce tiles before threads, and bounded work before a shared accelerator.</li>
@@ -320,6 +343,11 @@ export function PageCh40MatrixOptimizationGames() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Before any specific technique, three ideas frame the whole chapter. They explain why the optimization order is
+            what it is: speed lives in how memory is laid out and reused, dense and sparse are genuinely different problems,
+            and the wide execution models only help once the local boundary is already honest.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -338,7 +366,18 @@ export function PageCh40MatrixOptimizationGames() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Matrix storage layouts</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A matrix is a two-dimensional idea, but memory is one-dimensional. Every layout is really a rule for
+              flattening rows and columns into a single contiguous run of bytes, and the rule you pick decides which
+              traversals are cheap. Row-major storage lays each row down end to end, so walking a row is a straight,
+              cache-friendly scan and walking a column jumps by a full row width on every step. The diagram below shows
+              that flattening for a small matrix; keep it in mind whenever you reason about which loop is the fast one.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph LV["Logical view"]\n    R0["row 0: a b c"]\n    R1["row 1: d e f"]\n  end\n  subgraph MEM["Memory, row-major"]\n    M["a b c d e f"]\n  end\n  R0 --> M\n  R1 --> M\n  M --> Idx["offset = row * cols + col"]`}
+              caption="Row-major flattens rows back to back; the index formula is the bridge between the 2D view and the 1D buffer."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {storageLayoutCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -353,7 +392,30 @@ export function PageCh40MatrixOptimizationGames() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Cache-aware multiplication</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Matrix multiply does the same arithmetic no matter how you nest the loops, but the three loop indices
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">i</code>,
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">j</code>, and
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">k</code> can be ordered six ways,
+              and the order decides how memory is touched. With row-major storage the classic
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">i-j-k</code> order walks
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">B</code> down a column in the inner
+              loop, which strides across whole rows and defeats the cache. Swapping to
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">i-k-j</code> makes the inner loop
+              sweep a row of <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">B</code> contiguously
+              while a single scalar from <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">A</code>
+              stays hot. Same result, far fewer cache misses. The diagram contrasts the two inner-loop access patterns.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  IJK["i-j-k order: inner loop varies k"] --> Bcol["B walked down a column\\nstrided, cache-hostile"]`}
+              caption="Slow order: the i-j-k nesting walks B down a column in the inner loop, striding across whole rows."
+            />
+            <p className="text-sm text-muted-foreground leading-6">Reordering to i-k-j keeps the same arithmetic but changes which way the inner loop walks B:</p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  IKJ["i-k-j order: inner loop varies j"] --> Brow["B walked along a row\\ncontiguous, cache-friendly"]\n  IKJ --> Areuse["a[i,k] held in a register"]`}
+              caption="Fast order: the i-k-j nesting sweeps a row of B contiguously while a scalar of A stays hot in a register."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {cacheAwareCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -371,6 +433,15 @@ export function PageCh40MatrixOptimizationGames() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">SIMD opportunities</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              SIMD lets one instruction multiply or add several values at once, which is exactly the shape of the inner
+              dot-product loop. But the compiler can only vectorize what it can prove is safe and regular, and you can
+              only reach for intrinsics productively once the data is already contiguous. So treat SIMD as the last layer,
+              not the first. In most kernels the auto-vectorizer does the work for free if you feed it a flat buffer and a
+              tight loop; explicit intrinsics earn their complexity only after profiling shows the loop is genuinely
+              arithmetic-bound. The snippet below is the kind of inner loop that vectorizes well: contiguous loads, a fixed
+              trip count, and no branchy noise.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {simdCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -390,7 +461,21 @@ for k in 0..tile_width {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Sparse vs dense matrices</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Dense and sparse are not two tuning settings on the same matrix; they are two different data models that
+              answer different questions. A dense matrix stores every cell, including the zeros, and pays for that with
+              predictable contiguous traversal. A sparse matrix stores only the nonzero values plus enough index metadata
+              to find them, trading random-access simplicity for the ability to skip empty space entirely. The most common
+              sparse format, compressed sparse row (CSR), encodes the whole matrix as three flat arrays: the nonzero
+              values, the column index of each value, and a per-row pointer that says where each row begins in those
+              arrays. The diagram shows how those three arrays relate, and why iterating one row is just slicing between two
+              row pointers.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Mat["sparse matrix\\nmost cells are zero"] --> V["values:\\nnonzero entries"]\n  Mat --> C["col_index:\\ncolumn of each value"]\n  Mat --> R["row_ptr:\\nwhere each row starts"]\n  R --> Slice["row i =\\nvalues between\\nrow_ptr[i] and row_ptr[i+1]"]\n  C --> Slice`}
+              caption="CSR is three flat arrays; a row is the slice of values and columns between two consecutive row pointers."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {sparseDenseCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -435,7 +520,21 @@ for k in 0..tile_width {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Parallel matrix operations</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Matrix multiply parallelizes well because the output cells are independent: nothing in computing
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">C[i, j]</code> depends on any other
+              cell of <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">C</code>. That independence is
+              the whole opportunity, and the way to keep it is to partition the output so each worker owns a disjoint set
+              of rows or tiles and writes only there. The moment workers share a write target through a lock or a
+              contended accumulator, you serialize the gain back out. In Rust this is the same ownership question from the
+              earlier chapters, just applied to a buffer: hand each worker its own slice of the output and the merge cost
+              disappears. The diagram shows the clean split.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  C["output matrix C"] --> S0["rows 0..n\\nworker 0"]\n  C --> S1["rows n..2n\\nworker 1"]\n  C --> S2["rows 2n..3n\\nworker 2"]\n  S0 --> Done["join,\\nno shared lock"]\n  S1 --> Done\n  S2 --> Done`}
+              caption="Partition the output by rows so each worker owns its slice; joining needs no shared lock or contended accumulator."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {parallelCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -447,7 +546,19 @@ for k in 0..tile_width {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">GPU offload</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A GPU does not run your kernel in isolation; it sits at the far end of a queue with a copy bus in between.
+              The end-to-end cost of an offload is the sum of waiting for the device, copying inputs across the bus,
+              launching the kernel, running it, and copying results back. A 2 ms kernel wrapped in 18 ms of transfer and
+              synchronization is an 18 ms feature, not a 2 ms one. That is why a kernel benchmark in isolation is so
+              misleading and why the only honest comparison measures each segment separately. The sequence below traces a
+              single offload so you can see where the time actually goes.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant Host\n  participant Queue\n  participant GPU\n  Host->>Queue: submit work\n  Note over Host,Queue: queue wait\n  Host->>GPU: copy inputs (transfer in)\n  Host->>GPU: launch kernel\n  GPU->>GPU: run kernel\n  GPU-->>Host: copy results (transfer out)\n  Host->>Host: synchronize`}
+              caption="Kernel time is one slice of the path; queue wait, transfers, and synchronization often dominate the real latency."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {gpuCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -464,8 +575,14 @@ for k in 0..tile_width {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <h4 className="font-semibold text-foreground mb-3">How to think about this coming from another language</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Every language you have used already made a layout decision for matrices, usually without telling you. The
+              useful question is not which crate replaces which library. It is what mental habit each background brings,
+              which of those habits help here, and which one quietly produces the wrong memory layout if you let it run on
+              autopilot.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -478,9 +595,15 @@ for k in 0..tile_width {
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <Cpu className="h-5 w-5 text-primary" />
+            <Layers className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Optimization games and challenge tracks</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Each track is scored, because the point is not to chase one fastest number but to defend a decision with
+            evidence. The scoring weights reward the parts that engineers most often skip: a clear cache story, an honest
+            memory budget, and benchmark accounting that separates queue wait from transfer from kernel time. Treat the
+            extension lists as ways to make the comparison fairer, not as feature checklists.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {challengeTracks.map((track) => (
               <div key={track.title} className="rounded-xl border border-border bg-card p-5">
@@ -563,6 +686,28 @@ for k in 0..tile_width {
                 </Button>
               )}
             </div>
+            <div className="mb-3 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                What to look at: the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Matrix</code>
+                struct stores one flat <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;f32&gt;</code>
+                with the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">offset = row * cols + col</code>
+                formula doing all the 2D-to-1D translation. Then compare the two kernels.
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">matmul_naive</code> is the plain
+                triple loop. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">matmul_tiled</code>
+                wraps the same arithmetic in outer
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">ii</code> /
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">kk</code> /
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">jj</code> tile loops, then runs
+                short inner loops inside each tile so a block of data stays hot in cache. The diagram shows that nesting;
+                the key check is that <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">approx_eq</code>
+                still prints <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">true</code>, meaning the
+                tiling changed locality without changing the result.
+              </p>
+            </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  II["outer: ii tile of rows"] --> KK["outer: kk tile of A cols"]\n  KK --> JJ["outer: jj tile of C cols"]\n  JJ --> Inner["inner i,k,j loops over one tile"]\n  Inner --> Hot["a[i,k] reused across the j tile"]\n  Inner --> Same["same sums as naive, just reordered"]`}
+              caption="Tiling adds three outer loops that carve the work into cache-sized blocks; the inner loops do the identical arithmetic."
+            />
             <RustCodeEditor
               code={codes.matrix_games_tiled_matmul}
               onChange={(newCode) => updateCode("matrix_games_tiled_matmul", newCode)}
@@ -617,6 +762,23 @@ for k in 0..tile_width {
                 </Button>
               )}
             </div>
+            <div className="mb-3 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">advance_frontier</code>
+                is one breadth-first expansion step expressed as a sparse matrix-vector product. It walks only the rows that
+                are currently active in the frontier, and for each one it reads the slice
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">indptr[row]..indptr[row + 1]</code>
+                to find that row's outgoing edges, marking each reachable column in the next frontier. Crucially it never
+                touches a zero cell, so the cost scales with the number of edges, not with rows times columns. The
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">dense_bytes</code> print exists to
+                make the tradeoff concrete: the CSR payload here is a handful of values while the equivalent dense matrix
+                would reserve every cell. The diagram traces that per-row skip-and-expand loop.
+              </p>
+            </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start["for each row in frontier"] --> Active{"row active?"}\n  Active -->|no| Skip["skip, touch nothing"]\n  Active -->|yes| Edges["slice indptr[row]..indptr[row+1]"]\n  Edges --> Mark["mark reachable columns in next"]\n  Mark --> Start\n  Skip --> Start`}
+              caption="The frontier step visits only active rows and only their stored edges, so work scales with edges rather than total cells."
+            />
             <RustCodeEditor
               code={codes.matrix_games_sparse_frontier}
               onChange={(newCode) => updateCode("matrix_games_sparse_frontier", newCode)}
@@ -687,811 +849,3 @@ for k in 0..tile_width {
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch40-matrix-optimization-games-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { getPageIndexById } from "../page-index"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose row-major, blocked, CSR, or dense-matrix representation from the workload",
-    objective: "Practice selecting the matrix shape that matches the real traversal and sparsity profile instead of defaulting to whatever was easiest to write first.",
-    starterPrompt:
-      "Classify four cases: a dense batch GEMM on one node, a graph frontier step over mostly empty adjacency, a tiny fixed 4x4 transform matrix, and a service path that repeatedly multiplies one matrix by many vectors from the same hot cache footprint.",
-    prompts: [
-      "Which case wants ordinary row-major dense storage?",
-      "Which case wants CSR or another sparse format because zero-skipping is the whole point?",
-      "Which case may justify blocked storage because tile reuse dominates?",
-      "Which case can stay simple because the matrix is tiny and fixed-shape?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least one dense case and one sparse case with a concrete reason.",
-      "You distinguish sparsity from size: tiny and dense is not the same thing as sparse.",
-      "You mention at least one locality or metadata tradeoff explicitly.",
-    ],
-    hints: [
-      "Start from what the inner loop actually touches.",
-      "If most values are zeros and the algorithm can skip them, that is usually sparse territory.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Read a cache-hostile multiplication loop like a profiler",
-    objective: "Explain why one multiplication variant is memory-unfriendly before you even talk about SIMD or GPU offload.",
-    starterPrompt:
-      "Compare one naive `for i { for j { for k { ... } } }` row-major multiply against one tiled multiply that keeps `a[i, k]` hot across a short `j` range.",
-    prompts: [
-      "Which loop order repeatedly walks columns of the right-hand matrix in a cache-hostile way?",
-      "How does tiling improve reuse of one loaded `a[i, k]` value?",
-      "Why is this still a CPU-layout question before it becomes a thread or GPU question?",
-      "What metric or profile signal would you inspect next?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one loop-order locality problem concretely.",
-      "You explain one specific reuse win from tiling.",
-      "You mention at least one follow-up measurement such as cache misses, wall time, or bytes moved.",
-    ],
-    hints: [
-      "Think in rows and cache lines, not only in algebra.",
-      "The right answer sounds like a memory story, not like a syntax story.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Implement naive and tiled matrix multiplication variants",
-    objective: "Write one correct baseline and one blocked variant so correctness is stable while locality changes.",
-    starterPrompt:
-      "Implement `matmul_naive` and `matmul_tiled` over one flat row-major matrix owner. Compare their outputs on the same input and print one deterministic cell and equality flag.",
-    prompts: [
-      "Keep the matrix owner as one `Vec<f32>` plus `rows` and `cols`.",
-      "Use a tile size parameter for the blocked variant.",
-      "Do not use pointer-like references between cells or rows.",
-      "Verify equality before claiming the tiled version is correct.",
-    ],
-    acceptanceCriteria: [
-      "Both variants produce the same matrix on the same input.",
-      "The tiled version walks work in visible tile bands rather than only calling the naive function again.",
-      "The runnable lab prints the expected equality flag and output cell.",
-      "The implementation remains small enough to review without unsafe code.",
-    ],
-    hints: [
-      "A flat owner plus `offset(row, col)` is enough.",
-      "Tile loops usually step over `ii`, `kk`, and `jj` outside the smaller inner loops.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair a sparse pathfinding matrix that stayed dense too long",
-    objective: "Replace a dense adjacency matrix with a sparse representation once the edge pattern and memory budget make the dense model dishonest.",
-    starterPrompt:
-      "You inherit a pathfinding step that stores a 20,000-node graph as a dense adjacency matrix even though each node has only a handful of outgoing edges.",
-    prompts: [
-      "What makes the dense representation wasteful here?",
-      "Which sparse representation would you try first for frontier expansion?",
-      "What API surface should stay stable even after the storage model changes?",
-      "Which metric would prove the refactor mattered?",
-    ],
-    acceptanceCriteria: [
-      "You explain the dense-memory cost in terms of node count squared or equivalent scale pressure.",
-      "You choose one sparse representation and tie it to the frontier workload.",
-      "You mention one stable outer API boundary and one after-the-fix measurement.",
-    ],
-    hints: [
-      "The algorithm did not become sparse only after the rewrite. The data was already sparse.",
-      "A stable outer API lets the storage repair stay local.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Repair a benchmark that lies about CPU versus GPU performance",
-    objective: "Design a fair comparison so the tournament measures the same logical work and the real boundary costs.",
-    starterPrompt:
-      "A team benchmark launches one tiny GPU kernel per request item, compares it against one batched CPU loop, and reports 'GPU slower' as a universal conclusion.",
-    prompts: [
-      "What makes the comparison unfair already?",
-      "Which dimensions should the benchmark sweep: batch size, transfer size, launch count, or all three?",
-      "Which result would justify 'stay on CPU' for one service path without declaring GPU offload universally bad?",
-      "What should be recorded separately: transfer, queue wait, launch, kernel, sync?",
-    ],
-    acceptanceCriteria: [
-      "You name at least two fairness problems in the original benchmark.",
-      "You propose at least one batch-size sweep or launch-count repair.",
-      "You explain one workload-specific reason to stay on CPU even when a large batch GPU path still wins elsewhere.",
-      "You record at least three boundary cost categories explicitly.",
-    ],
-    hints: [
-      "A fair tournament compares the same logical work, not different batching policies disguised as different hardware.",
-      "The break-even point is often the real result.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Design the CPU versus GPU benchmark tournament with scoring rules",
-    objective: "Turn the chapter topics into a production-shaped evaluation plan that another team could run and audit.",
-    starterPrompt:
-      "Create a tournament for `dense multiply`, `sparse frontier step`, and `batched scorer` paths across plain CPU, parallel CPU, and optional GPU implementations.",
-    prompts: [
-      "Which scoring categories belong in the tournament: correctness, wall time, memory traffic, explanation quality, reproducibility?",
-      "What input classes should every contestant run: tiny, medium, and large batches?",
-      "Which outputs must every contestant publish for review?",
-      "What extension track would you add for distributed or MPI-backed variants?",
-    ],
-    acceptanceCriteria: [
-      "You define explicit scoring rules or weights for the tournament.",
-      "You include at least three input-size classes and a reproducibility rule.",
-      "You require correctness evidence before performance points count.",
-      "You include one extension or bonus track for sparse or distributed variants.",
-    ],
-    hints: [
-      "A good tournament rewards evidence, not only a single fastest number.",
-      "Correctness has to score first or the rest is theater.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why is row-major dense storage such a strong default for host-side matrix work?",
-  "What does tiling repair that loop-order-only changes may not fully repair?",
-  "Why are sparse and dense matrices different workload models rather than different flavors of the same owner?",
-  "What makes a SIMD discussion premature?",
-  "Why should CPU versus GPU comparisons publish transfer and launch cost separately from kernel cost?",
-]
-
-const workingLoop = [
-  "State the storage layout first: dense row-major, blocked, or sparse.",
-  "State the traversal second: loop order, reuse pattern, and frontier behavior.",
-  "Implement one correct baseline before the optimized variant.",
-  "Measure with the same inputs and the same output checks across all contenders.",
-  "Only then decide whether the path should stay local, go parallel, or go to an accelerator.",
-]
-
-const benchmarkTournamentRules = [
-  "Correctness is mandatory: any wrong checksum, wrong path frontier, or wrong output matrix scores zero on speed.",
-  "Benchmark classes must include at least tiny, medium, and large inputs so break-even behavior stays visible.",
-  "Every run must publish wall time plus at least one ownership or boundary metric, such as bytes copied or launch count.",
-  "GPU entries must report transfer, launch, kernel, and sync separately.",
-  "Parallel CPU entries must report thread count or worker budget explicitly.",
-]
-
-const extensionTracks = [
-  "Sparse pathfinding bonus: compare dense bytes against CSR payload bytes and explain the break-even point.",
-  "Distributed bonus: add an MPI or queue-backed matrix path and report communication or queue-wait cost separately.",
-  "SIMD bonus: isolate one explicit vectorized or auto-vectorization-friendly kernel and report what changed in the memory story.",
-]
-
-export function PageCh40MatrixOptimizationGamesExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = getPageIndexById("ch40-matrix-optimization-games-exercises")
-  const mainPageIndex = getPageIndexById("ch40-matrix-optimization-games")
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 40 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice matrix optimization the way it survives review: correct baselines first, locality second, accelerator
-          claims only after fair measurement.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a performance design review. The strongest answer names the storage model, the
-                access pattern, the measurement plan, and the budget or scoring rule before it names the trick.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 40
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Benchmark tournament rules</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {benchmarkTournamentRules.map((rule) => (
-              <li key={rule}>{rule}</li>
-            ))}
-          </ul>
-          <div className="mt-4">
-            <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Extension tracks</div>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-              {extensionTracks.map((track) => (
-                <li key={track}>{track}</li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Matrix drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Repair the tiled multiplication variant"
-          description={
-            <>
-              Finish the blocked multiply so it matches the naive baseline on the same input. The checker expects the
-              tiled result to match exactly and to produce the bottom-right cell below.
-            </>
-          }
-          filename="tiled_matmul_lab.rs"
-          runKey="ch40_ex_tiled_matmul"
-          expectedOutput={"equal = true\ncell = 50.00"}
-          helperText={
-            <>
-              Tip: keep the owner flat, walk the output in tile bands, and accumulate into the existing output cell. A
-              2x2 input still demonstrates the same correctness rule as a larger blocked multiply.
-            </>
-          }
-          initialCode={`#[derive(Debug, Clone, PartialEq)]
-struct Matrix {
-    rows: usize,
-    cols: usize,
-    data: Vec<f32>,
-}
-
-impl Matrix {
-    fn from_vec(rows: usize, cols: usize, data: Vec<f32>) -> Self {
-        Self { rows, cols, data }
-    }
-
-    fn zeros(rows: usize, cols: usize) -> Self {
-        Self {
-            rows,
-            cols,
-            data: vec![0.0; rows * cols],
-        }
-    }
-
-    fn offset(&self, row: usize, col: usize) -> usize {
-        row * self.cols + col
-    }
-
-    fn get(&self, row: usize, col: usize) -> f32 {
-        self.data[self.offset(row, col)]
-    }
-
-    fn set(&mut self, row: usize, col: usize, value: f32) {
-        let index = self.offset(row, col);
-        self.data[index] = value;
-    }
-}
-
-fn matmul_naive(a: &Matrix, b: &Matrix) -> Matrix {
-    let mut out = Matrix::zeros(a.rows, b.cols);
-
-    for i in 0..a.rows {
-        for j in 0..b.cols {
-            let mut acc = 0.0_f32;
-            for k in 0..a.cols {
-                acc += a.get(i, k) * b.get(k, j);
-            }
-            out.set(i, j, acc);
-        }
-    }
-
-    out
-}
-
-fn matmul_tiled(a: &Matrix, b: &Matrix, tile: usize) -> Matrix {
-    let _ = tile;
-    Matrix::zeros(a.rows, b.cols)
-}
-
-fn approx_eq(left: &Matrix, right: &Matrix) -> bool {
-    left.rows == right.rows
-        && left.cols == right.cols
-        && left
-            .data
-            .iter()
-            .zip(&right.data)
-            .all(|(l, r)| (l - r).abs() < 0.001)
-}
-
-fn main() {
-    let a = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]);
-    let b = Matrix::from_vec(2, 2, vec![5.0, 6.0, 7.0, 8.0]);
-
-    let naive = matmul_naive(&a, &b);
-    let tiled = matmul_tiled(&a, &b, 2);
-
-    println!("equal = {}", approx_eq(&naive, &tiled));
-    println!("cell = {:.2}", tiled.get(1, 1));
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to implement a correct dense baseline, add a tiled variant
-            without hand-waving, choose sparse or dense representation from workload shape, and defend a CPU versus GPU
-            tournament with fair rules and reproducible evidence.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch40_matrix_optimization_games/row_major_tiled_matmul.rs`
-````
-#[derive(Debug, Clone, PartialEq)]
-struct Matrix {
-    rows: usize,
-    cols: usize,
-    data: Vec<f32>,
-}
-
-impl Matrix {
-    fn from_vec(rows: usize, cols: usize, data: Vec<f32>) -> Self {
-        assert_eq!(data.len(), rows * cols);
-        Self { rows, cols, data }
-    }
-
-    fn zeros(rows: usize, cols: usize) -> Self {
-        Self {
-            rows,
-            cols,
-            data: vec![0.0; rows * cols],
-        }
-    }
-
-    fn offset(&self, row: usize, col: usize) -> usize {
-        row * self.cols + col
-    }
-
-    fn get(&self, row: usize, col: usize) -> f32 {
-        self.data[self.offset(row, col)]
-    }
-
-    fn set(&mut self, row: usize, col: usize, value: f32) {
-        let index = self.offset(row, col);
-        self.data[index] = value;
-    }
-}
-
-fn matmul_naive(a: &Matrix, b: &Matrix) -> Matrix {
-    assert_eq!(a.cols, b.rows);
-    let mut out = Matrix::zeros(a.rows, b.cols);
-
-    for i in 0..a.rows {
-        for j in 0..b.cols {
-            let mut acc = 0.0_f32;
-            for k in 0..a.cols {
-                acc += a.get(i, k) * b.get(k, j);
-            }
-            out.set(i, j, acc);
-        }
-    }
-
-    out
-}
-
-fn matmul_tiled(a: &Matrix, b: &Matrix, tile: usize) -> Matrix {
-    assert_eq!(a.cols, b.rows);
-    let mut out = Matrix::zeros(a.rows, b.cols);
-    let tile = tile.max(1);
-
-    let mut ii = 0;
-    while ii < a.rows {
-        let mut kk = 0;
-        while kk < a.cols {
-            let mut jj = 0;
-            while jj < b.cols {
-                let i_end = (ii + tile).min(a.rows);
-                let k_end = (kk + tile).min(a.cols);
-                let j_end = (jj + tile).min(b.cols);
-
-                for i in ii..i_end {
-                    for k in kk..k_end {
-                        let a_ik = a.get(i, k);
-                        for j in jj..j_end {
-                            let current = out.get(i, j);
-                            out.set(i, j, current + a_ik * b.get(k, j));
-                        }
-                    }
-                }
-
-                jj += tile;
-            }
-            kk += tile;
-        }
-        ii += tile;
-    }
-
-    out
-}
-
-fn approx_eq(left: &Matrix, right: &Matrix) -> bool {
-    left.rows == right.rows
-        && left.cols == right.cols
-        && left
-            .data
-            .iter()
-            .zip(&right.data)
-            .all(|(l, r)| (l - r).abs() < 0.001)
-}
-
-fn checksum(matrix: &Matrix) -> f32 {
-    matrix.data.iter().copied().sum()
-}
-
-fn main() {
-    let a = Matrix::from_vec(
-        3,
-        3,
-        vec![
-            1.0, 2.0, 0.0,
-            0.0, 1.0, 3.0,
-            2.0, 0.0, 1.0,
-        ],
-    );
-
-    let b = Matrix::from_vec(
-        3,
-        3,
-        vec![
-            3.0, 1.0, 2.0,
-            2.0, 1.0, 0.0,
-            1.0, 4.0, 2.0,
-        ],
-    );
-
-    let naive = matmul_naive(&a, &b);
-    let tiled = matmul_tiled(&a, &b, 2);
-
-    println!("naive == tiled = {}", approx_eq(&naive, &tiled));
-    println!("c[1,2] = {:.2}", tiled.get(1, 2));
-    println!("checksum = {:.2}", checksum(&tiled));
-}
-````
-
-### File: `examples/ch40_matrix_optimization_games/sparse_frontier_csr.rs`
-````
-#[derive(Debug)]
-struct CsrMatrix {
-    rows: usize,
-    cols: usize,
-    indptr: Vec<usize>,
-    indices: Vec<usize>,
-    data: Vec<f32>,
-}
-
-impl CsrMatrix {
-    fn nnz(&self) -> usize {
-        self.data.len()
-    }
-
-    fn dense_bytes(&self) -> usize {
-        self.rows * self.cols * std::mem::size_of::<f32>()
-    }
-}
-
-fn advance_frontier(csr: &CsrMatrix, frontier: &[f32]) -> Vec<u8> {
-    assert_eq!(frontier.len(), csr.rows);
-
-    let mut next = vec![0_u8; csr.cols];
-
-    for row in 0..csr.rows {
-        if frontier[row] == 0.0 {
-            continue;
-        }
-
-        let start = csr.indptr[row];
-        let end = csr.indptr[row + 1];
-
-        for edge in start..end {
-            let col = csr.indices[edge];
-            if csr.data[edge] != 0.0 {
-                next[col] = 1;
-            }
-        }
-    }
-
-    next
-}
-
-fn render(bits: &[u8]) -> String {
-    bits.iter()
-        .map(|bit| bit.to_string())
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-fn main() {
-    let graph = CsrMatrix {
-        rows: 5,
-        cols: 5,
-        indptr: vec![0, 2, 3, 5, 6, 6],
-        indices: vec![1, 2, 3, 3, 4, 4],
-        data: vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-    };
-
-    let frontier = vec![1.0, 0.0, 1.0, 0.0, 0.0];
-    let next = advance_frontier(&graph, &frontier);
-
-    println!("nnz = {}", graph.nnz());
-    println!("next frontier = {}", render(&next));
-    println!("dense bytes = {}", graph.dense_bytes());
-}
-````
-
-### File: `examples/ch40_matrix_optimization_games/cpu_gpu_tournament_scoreboard.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct RunSample {
-    name: &'static str,
-    wall_ms: f64,
-    transfer_ms: f64,
-    kernel_ms: f64,
-}
-
-fn speedup(baseline_ms: f64, candidate_ms: f64) -> f64 {
-    baseline_ms / candidate_ms
-}
-
-fn transfer_share(sample: RunSample) -> f64 {
-    sample.transfer_ms / sample.wall_ms
-}
-
-fn main() {
-    let cpu = RunSample {
-        name: "cpu_tiled",
-        wall_ms: 14.0,
-        transfer_ms: 0.0,
-        kernel_ms: 14.0,
-    };
-
-    let gpu = RunSample {
-        name: "gpu_batched",
-        wall_ms: 6.0,
-        transfer_ms: 2.0,
-        kernel_ms: 3.0,
-    };
-
-    let winner = if gpu.wall_ms < cpu.wall_ms {
-        gpu.name
-    } else {
-        cpu.name
-    };
-
-    println!("winner = {}", winner);
-    println!("gpu speedup = {:.2}", speedup(cpu.wall_ms, gpu.wall_ms));
-    println!("transfer share = {:.2}", transfer_share(gpu));
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -76,3 +76,5 @@ export { PageCh37CudaAndGpuAcceleration } from "./page-ch37-cuda-and-gpu-acceler
- export { PageCh37CudaAndGpuAccelerationExercises } from "./page-ch37-cuda-and-gpu-acceleration-exercises"
- export { PageCh38MerkleTreeGamesAndChallenges } from "./page-ch38-merkle-tree-games-and-challenges"
- export { PageCh38MerkleTreeGamesAndChallengesExercises } from "./page-ch38-merkle-tree-games-and-challenges-exercises"
- export { PageCh39GraphSearchGames } from "./page-ch39-graph-search-games"
- export { PageCh39GraphSearchGamesExercises } from "./page-ch39-graph-search-games-exercises"
-+export { PageCh40MatrixOptimizationGames } from "./page-ch40-matrix-optimization-games"
-+export { PageCh40MatrixOptimizationGamesExercises } from "./page-ch40-matrix-optimization-games-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -88,6 +88,8 @@ import {
-   PageCh37CudaAndGpuAccelerationExercises,
-   PageCh38MerkleTreeGamesAndChallenges,
-   PageCh38MerkleTreeGamesAndChallengesExercises,
-   PageCh39GraphSearchGames,
-   PageCh39GraphSearchGamesExercises,
-+  PageCh40MatrixOptimizationGames,
-+  PageCh40MatrixOptimizationGamesExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -169,6 +171,8 @@ const PAGE_COMPONENTS = [
-   PageCh37CudaAndGpuAccelerationExercises,
-   PageCh38MerkleTreeGamesAndChallenges,
-   PageCh38MerkleTreeGamesAndChallengesExercises,
-   PageCh39GraphSearchGames,
-   PageCh39GraphSearchGamesExercises,
-+  PageCh40MatrixOptimizationGames,
-+  PageCh40MatrixOptimizationGamesExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh40Output } from "./rust-simulator-ch40"
- import { simulateCh39Output } from "./rust-simulator-ch39"
- import { simulateCh38Output } from "./rust-simulator-ch38"
- import { simulateCh37Output } from "./rust-simulator-ch37"
-@@ -1017,6 +1018,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch40Output = simulateCh40Output(code, key)
-+  if (ch40Output !== null) return ch40Output
- 
-   const ch39Output = simulateCh39Output(code, key)
-   if (ch39Output !== null) return ch39Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -29,6 +29,7 @@ import { DEFAULT_CODES_CH35 } from "./default-codes-ch35"
- import { DEFAULT_CODES_CH36 } from "./default-codes-ch36"
- import { DEFAULT_CODES_CH37 } from "./default-codes-ch37"
- import { DEFAULT_CODES_CH38 } from "./default-codes-ch38"
- import { DEFAULT_CODES_CH39 } from "./default-codes-ch39"
-+import { DEFAULT_CODES_CH40 } from "./default-codes-ch40"
-@@ -988,6 +989,28 @@ export const CHAPTERS: ChapterConfig[] = [
-         description:
-           "Implement BFS with stable indices, compare graph representations, and design maze, dependency, and distributed graph-search challenges",
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch40-matrix-optimization-games",
-+    title: "Chapter 40 · Matrix Optimization Games",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch40-matrix-optimization-games",
-+        title: "Matrix Optimization Games",
-+        shortTitle: "Matrix Games",
-+        description:
-+          "Matrix storage layouts, cache-aware multiplication, SIMD opportunities, sparse vs dense tradeoffs, blocking and tiling, parallel matrix operations, GPU offload, and optimization challenge tracks",
-+        icon: "book",
-+        codeKeys: ["matrix_games_tiled_matmul", "matrix_games_sparse_frontier"],
-+      },
-+      {
-+        id: "ch40-matrix-optimization-games-exercises",
-+        title: "Chapter 40 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Implement naive and tiled multiplication variants, choose sparse or dense representations, and design a fair CPU vs GPU benchmark tournament",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
-@@ -1444,5 +1467,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH36,
-   ...DEFAULT_CODES_CH37,
-   ...DEFAULT_CODES_CH38,
-   ...DEFAULT_CODES_CH39,
-+  ...DEFAULT_CODES_CH40,
- }
-````

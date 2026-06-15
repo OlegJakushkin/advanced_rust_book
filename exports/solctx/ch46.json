@@ -1,0 +1,218 @@
+{
+ "chapterKey": "ch46",
+ "num": 46,
+ "title": "FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Map a FastAPI-style endpoint into Rust transport and service seams",
+   "objective": "Practice translating a familiar typed endpoint into Rust extractors, typed state, and one application service call without leaking HTTP inward.",
+   "starterPrompt": "Design one `POST /v1/invoices` endpoint with path or body extractors, typed application state, and an authenticated caller context.",
+   "prompts": [
+    "Which values belong in transport DTOs and which values belong in one application command?",
+    "Which shared resources belong in typed app state: pools, config, telemetry, idempotency store?",
+    "Which checks belong in middleware or auth extraction versus in the handler itself?",
+    "What should the domain service never learn about this HTTP request?"
+   ],
+   "acceptanceCriteria": [
+    "You separate transport DTOs from the application command clearly.",
+    "You put at least one real shared dependency into typed app state with a reason.",
+    "You identify at least one concern that belongs in middleware or auth extraction instead of in the domain service.",
+    "You explain why the domain model should not depend on framework request types."
+   ],
+   "hints": [
+    "Start from the handler signature you want another engineer to understand in ten seconds.",
+    "Then ask which part of that signature is transport-only versus business-relevant."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Spot transport leakage into the domain layer",
+   "objective": "Read a handler and service pair and identify where HTTP types, status semantics, or documentation concerns have crossed the wrong boundary.",
+   "starterPrompt": "A `BillingService::create_invoice` method currently accepts `CreateInvoiceRequest`, returns `Result<InvoiceDto, StatusCode>`, and mentions OpenAPI field examples in comments right above the business rule logic.",
+   "prompts": [
+    "Which parameters or return types are transport-layer concepts rather than domain or application concepts?",
+    "Which type should the service take instead of the HTTP request DTO?",
+    "Which type should the service return so the handler can translate it to HTTP later?",
+    "Where should the documentation examples and status mapping live instead?"
+   ],
+   "acceptanceCriteria": [
+    "You identify at least one transport-shaped input and one transport-shaped output that should move out of the service layer.",
+    "You propose a command or query type that is calmer for the service boundary.",
+    "You place HTTP status mapping and documentation concerns back at the transport boundary.",
+    "You explain one concrete testing or refactoring benefit of the repaired seam."
+   ],
+   "hints": [
+    "If the service could not run under a message queue or CLI boundary anymore, HTTP has probably leaked too far inward.",
+    "The calm repair usually makes the service boundary easier to unit test as plain Rust."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Refactor a handler into a testable service boundary",
+   "objective": "Implement a small typed handler that converts a request DTO into a command, calls a service, and returns one response shape without leaking transport types inward.",
+   "starterPrompt": "Take a small create-style endpoint, add an authenticated actor, map the request DTO into a command, call the service, and return a created response.",
+   "prompts": [
+    "Keep the service API free of framework request wrappers.",
+    "Use one typed caller context such as tenant plus permission bit.",
+    "Translate one domain rejection into one API-facing error at the edge.",
+    "Return a status and response payload that another test can assert deterministically."
+   ],
+   "acceptanceCriteria": [
+    "The handler translates request DTO into a separate command type.",
+    "The service boundary does not accept HTTP request DTOs directly.",
+    "The handler performs at least one authorization or edge validation check before the service call.",
+    "The runnable lab prints the expected created status, invoice ID, and tenant."
+   ],
+   "hints": [
+    "A create handler should be boring: authorize, map, call, translate.",
+    "If the domain service still takes the request DTO, the transport seam is not finished yet."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Choose code-first, spec-first, or mixed OpenAPI workflow honestly",
+   "objective": "Pick the workflow that matches team boundaries and generated-code obligations instead of choosing by fashion.",
+   "starterPrompt": "You have one Rust server, one TypeScript client, and one partner team that wants the contract reviewed before implementation lands.",
+   "prompts": [
+    "What makes code-first attractive here?",
+    "What makes spec-first attractive here?",
+    "What would a mixed workflow look like if the checked-in spec must still be CI-enforced?",
+    "Which workflow makes generated clients least surprising for the teams involved?"
+   ],
+   "acceptanceCriteria": [
+    "You choose one primary workflow and justify it from team and review boundaries.",
+    "You explain at least one tradeoff of the two alternatives.",
+    "You include one CI or artifact rule that keeps the chosen workflow honest.",
+    "You avoid claiming that one style is universally superior in every organization."
+   ],
+   "hints": [
+    "The right answer is usually the one that minimizes silent drift between server and clients.",
+    "Think about who reviews the contract and when, not only about who writes the code."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Prevent documentation drift and generated-code drift",
+   "objective": "Design a review loop that keeps handlers, OpenAPI artifacts, Swagger UI, and generated clients describing the same API over time.",
+   "starterPrompt": "A recent rollout changed one handler input field, but the checked-in spec and generated client were not regenerated. The change passed unit tests and broke one downstream team.",
+   "prompts": [
+    "Which CI check should fail first: spec diff, generated client compile, or contract fixture test?",
+    "Which artifacts should be checked into the repository and which can be generated only in CI?",
+    "How would you review Swagger UI or schema output without treating it as the only proof?",
+    "Which fields or operation IDs should be stabilized so downstream diffs stay reviewable?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least two drift-prevention checks with different jobs.",
+    "You include at least one checked artifact or snapshot strategy and one generated-client validation strategy.",
+    "You mention stable operation IDs or stable error envelopes explicitly.",
+    "You explain why documentation review still needs semantic contract assertions nearby."
+   ],
+   "hints": [
+    "The most useful drift check is the one that fails before a client release is cut from stale types.",
+    "Swagger UI helps humans, but CI still needs machine-checkable contract evidence."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design one production API surface with versioning, pagination, idempotency, tracing, metrics, and graceful shutdown",
+   "objective": "Make the non-happy-path parts of a web API explicit before the service ships.",
+   "starterPrompt": "You are designing a billing API with create, list, and lookup endpoints, one async side-effect path, and an operator requirement that canary rollout and rollback stay safe under load.",
+   "prompts": [
+    "Which routes or envelopes carry version boundaries, and how do they evolve?",
+    "Which list route wants cursor pagination and what limits should be validated at the edge?",
+    "Which create route needs an idempotency key and where does finish-once state live?",
+    "Which trace and metric fields must exist before rollout?",
+    "How does the server stop admitting and drain gracefully during deployment shutdown?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least one versioning rule, one pagination rule, and one idempotency rule.",
+    "You include at least two observability hooks such as request ID, trace ID, route, queue age, or publish latency.",
+    "You describe one graceful shutdown sequence that stops admission before exit.",
+    "You keep the explanation tied to transport and application boundaries rather than only to framework settings."
+   ],
+   "hints": [
+    "A production API design is still an ownership and pacing design once traffic is real.",
+    "If the service causes duplicate side effects during deploy shutdown, graceful shutdown was not actually graceful."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What does it mean for a domain service to stay HTTP-free in a Rust web application?",
+  "Why are typed extractors and typed state a better long-term seam than passing one raw request object around?",
+  "When is code-first OpenAPI the calm default, and when does spec-first become more honest?",
+  "Why should generated clients stay in the transport layer rather than in the domain layer?",
+  "What CI checks keep Swagger UI and generated SDKs from silently drifting away from handler behavior?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Refactor the handler away from transport leakage",
+  "filename": "handler_boundary_lab.rs",
+  "runKey": "ch46_ex_handler_boundary",
+  "expectedOutput": "status = 201\ninvoice = inv-7\ntenant = acme"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 19, 25, 41, 42, 43, and 45",
+  "Opening scenario",
+  "Mental model",
+  "Core concepts",
+  "What gives Rust a FastAPI-like feel: routers, extractors, typed state, middleware, and dependency boundaries",
+  "Choosing between Rust web frameworks without coupling the domain model to HTTP",
+  "OpenAPI as a contract: code-first, spec-first, and mixed workflows",
+  "Swagger UI integration and documentation ergonomics",
+  "Client and server code generation from OpenAPI",
+  "Request validation, typed errors, authentication hooks, and response schemas",
+  "Production API concerns: versioning, pagination, idempotency, tracing, metrics, and graceful shutdown",
+  "Testing API contracts and preventing documentation drift",
+  "What changes by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: keep the HTTP handler separate from the application service",
+  "Example 2: treat OpenAPI and Swagger as contract artifacts, not side effects",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A FastAPI-style developer experience in Rust comes from typed handlers, a documented OpenAPI contract, generated transport code, and domain services kept clear of HTTP concerns. This chapter shows where each of those boundaries belongs and how to keep the contract from drifting a",
+  "Chapter 19 covered stable wire DTOs and serialization contracts. Chapter 25 covered Tokio and service runtime boundaries. Chapter 41 covered typed errors and translation layers. Chapter 42 covered contract and integration tests. Chapter 43 covered tracing, metrics, and SLOs. Chap",
+  "A team has a working API prototype, written in something that made it easy to ship, and now needs to move it to Rust. The motivation is the usual set of production pressures: tighter and more predictable latency, real control over concurrency, and explicit handling of the failure",
+  "The requirement, stated plainly, is a single boundary rule. HTTP DTOs, the generated OpenAPI artifact, and the framework extractors all live at the transport edge. The domain services behind that edge stay independent of HTTP, so they remain easy to test, easy to reuse from a non",
+  "The shape to hold in your head is a one-way flow that crosses one boundary exactly once. A request enters as transport bytes, is decoded into an HTTP-facing DTO, is converted into a single application command or query, and only then reaches the service. The result travels back ou",
+  "Three ideas carry most of the weight in this chapter, and they are easier to hold onto if you state them before reaching for any framework. HTTP is a translation boundary rather than your domain model. The FastAPI-style feel you want comes from types and seams, not from runtime m",
+  "The productivity of a FastAPI-style stack is not one feature; it is five small pieces that line up. The router maps an HTTP method and path to one handler and nothing more. Extractors turn the messy parts of a request, such as the path, the query string, the JSON body, and the au",
+  "Those pieces compose into a request lifecycle with a fixed order. Middleware runs first and outermost, wrapping the handler so that a request ID and a tracing span exist before authentication runs, the timeout policy is in force before the handler starts real work, and an early r",
+  "The main difference from Python FastAPI is operational, not stylistic. Rust will not let you pretend a spawned task still borrows request-local state or that an auth claim magically exists everywhere. The signature is part of the ownership model: if a handler needs the caller’s i",
+  "Framework choice in Rust attracts more debate than it deserves, because the decision matters far less when the domain is properly insulated. The useful test is not which framework has the nicest extractor syntax; it is how much code would change if you swapped frameworks next yea",
+  "The deciding question is which artifact is the source of truth, because every other thing, the docs, the generated clients, and the server, is downstream of it. Code-first makes the Rust DTOs authoritative and derives the spec from them, which keeps spec and server mechanically a",
+  "The best workflow is the one that keeps drift reviewable, not the one that is purest in theory. If client teams live off generated SDKs, the spec probably deserves its own checked-in artifact and a diff gate even when Rust DTOs still generate most of it. The failure mode to desig",
+  "Swagger UI is worth treating as a real user interface, because for the teams consuming your API it is the product. It is where another engineer figures out how to call you without reading your handlers, and it is the first thing a new teammate opens. That framing changes what &ld",
+  "Generated code is convenient precisely because it is mechanical, and that is also its risk. A generator encodes its own opinions about naming, optionality, and error shape, and those opinions will not match your domain’s. The rule that keeps this healthy is to let generated types",
+  "It helps to separate two questions that often get blurred. The first is whether the request is well-formed: are the required fields present, is the page size within bounds, does the enum decode, did the path parameter parse? That is transport validation, and it belongs at the edg",
+  "A common migration mistake is validating only at the HTTP layer and then pretending the domain can never see bad state again. Transport validation and domain invariants are complementary, not interchangeable. The edge keeps malformed input out; the domain keeps invalid operations",
+  "These are the concerns that do not show up in the first demo and dominate the second year. Each is a promise the contract makes to clients over time. Versioning is the promise that a field’s meaning will not change under them. Pagination is the promise that a large result set wil",
+  "Documentation drift is rarely a missing description. It is a handler and an OpenAPI document that slowly stopped describing the same system, with no failing test to announce it. The fix is to make the contract part of the build rather than part of code review. Generate the spec i",
+  "Most engineers arriving at Rust web work already know how to build an API somewhere else, so the useful framing is not &ldquo;here is routing&rdquo; but &ldquo;here is what to unlearn.&rdquo; The patterns below describe the one mental shift each background tends to need and the t",
+  "The biggest documentation bug is often not a missing description string. It is a handler and an OpenAPI contract that silently stopped describing the same system.",
+  "The handler owns transport translation and auth. The service owns domain behavior. That seam survives framework swaps much better than a direct framework-shaped domain API.",
+  "Read create_invoice_handler top to bottom and watch the boundary work: it authorizes using the typed AuthenticatedUser, builds exactly one CreateInvoiceCommand from the request DTO, calls the service once, and maps the domain’s DomainError to an ApiError only on the way out. The ",
+  "CreateInvoiceRequest is HTTP-facing shape, not the domain-facing service contract.",
+  "The handler builds one command and the service works only from that command.",
+  "Auth becomes one caller context object, not a global ambient assumption.",
+  "Domain rejection is translated to an API-facing error only at the edge.",
+  "The example stays self-contained, but the structure matches real code-first or mixed workflows: define operations once, emit docs once, and generate thin transport code from the same artifact.",
+  "The shape to notice is that one value, the OpenApiDoc returned by build_doc, is the single source of truth. generate_code only reads it, deriving one client method per operation_id and counting one server stub per operation. Add an operation to the doc and both the generated clie",
+  "Stable operation IDs are the anchor for generated clients and docs review.",
+  "Mount docs intentionally and keep the path and audience explicit."
+ ],
+ "codeSamples": {
+  "fastapi_style_handler_service_boundary": "#![allow(dead_code)]\n\n#[derive(Debug, Clone)]\nstruct CreateInvoiceRequest {\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\n#[derive(Debug, Clone)]\nstruct CreateInvoiceCommand {\n    tenant: String,\n    customer_id: String,\n    line_totals: Vec<u64>,\n}\n\n#[derive(Debug, Clone)]\nstruct Invoice {\n    id: String,\n    tenant: String,\n    total_cents: u64,\n}\n\n#[derive(Debug)]\nenum DomainError {\n    EmptyInvoice,\n    Unauthorized,\n}\n\n#[derive(Debug)]\nenum ApiError {\n    BadRequest(&'static str),\n    Forbidden,\n}\n\nstruct InvoiceService;\n\nimpl InvoiceService {\n    fn create_invoice(&self, cmd: CreateInvoiceCommand) -> Result<Invoice, DomainError> {\n        if cmd.line_totals.is_empty() {\n            return Err(DomainError::EmptyInvoice);\n        }\n\n        let total_cents: u64 = cmd.line_totals.iter().copied().sum();\n\n        Ok(Invoice {\n            id: format!(\"inv-{}\", cmd.customer_id),\n            tenant: cmd.tenant,\n            total_cents,\n        })\n    }\n}\n\nstruct ApiState {\n    invoices: InvoiceService,\n    service_name: String,\n}\n\n#[derive(Debug)]\nstruct AuthenticatedUser {\n    tenant: String,\n    can_create: bool,\n}\n\n#[derive(Debug)]\nstruct CreatedInvoiceResponse {\n    status: u16,\n    request_id: String,\n    invoice_id: String,\n    tenant: String,\n    total_cents: u64,\n}\n\nfn create_invoice_handler(\n    state: &ApiState,\n    actor: AuthenticatedUser,\n    request_id: &str,\n    body: CreateInvoiceRequest,\n) -> Result<CreatedInvoiceResponse, ApiError> {\n    if !actor.can_create {\n        return Err(ApiError::Forbidden);\n    }\n\n    let cmd = CreateInvoiceCommand {\n        tenant: actor.tenant,\n        customer_id: body.customer_id,\n        line_totals: body.line_totals,\n    };\n\n    let created = state\n        .invoices\n        .create_invoice(cmd)\n        .map_err(|err| match err {\n            DomainError::EmptyInvoice => ApiError::BadRequest(\"invoice must contain at least one line\"),\n            DomainError::Unauthorized => ApiError::Forbidden,\n        })?;\n\n    Ok(CreatedInvoiceResponse {\n        status: 201,\n        request_id: request_id.to_string(),\n        invoice_id: created.id,\n        tenant: created.tenant,\n        total_cents: created.total_cents,\n    })\n}\n\nfn main() {\n    let state = ApiState {\n        invoices: InvoiceService,\n        service_name: String::from(\"billing-api\"),\n    };\n    let actor = AuthenticatedUser {\n        tenant: String::from(\"acme\"),\n        can_create: true,\n    };\n    let request = CreateInvoiceRequest {\n        customer_id: String::from(\"42\"),\n        line_totals: vec![1_200_u64, 3_000],\n    };\n\n    let created = create_invoice_handler(&state, actor, \"req-7\", request).unwrap();\n\n    println!(\"status = {}\", created.status);\n    println!(\"invoice = {}\", created.invoice_id);\n    println!(\"total cents = {}\", created.total_cents);\n    println!(\"request id = {}\", created.request_id);\n}",
+  "fastapi_style_openapi_codegen_scaffold": "#![allow(dead_code)]\n\n#[derive(Debug, Clone)]\nstruct ApiSchema {\n    name: &'static str,\n    required_fields: &'static [&'static str],\n}\n\n#[derive(Debug, Clone)]\nstruct ApiOperation {\n    method: &'static str,\n    path: &'static str,\n    operation_id: &'static str,\n    request: Option<ApiSchema>,\n    response: ApiSchema,\n    auth: bool,\n}\n\n#[derive(Debug)]\nstruct OpenApiDoc {\n    title: &'static str,\n    version: &'static str,\n    swagger_ui_path: &'static str,\n    operations: Vec<ApiOperation>,\n}\n\n#[derive(Debug)]\nstruct CodegenPlan {\n    client_methods: Vec<&'static str>,\n    server_stubs: usize,\n}\n\nfn build_doc() -> OpenApiDoc {\n    OpenApiDoc {\n        title: \"Billing API\",\n        version: \"2026-04\",\n        swagger_ui_path: \"/docs\",\n        operations: vec![\n            ApiOperation {\n                method: \"POST\",\n                path: \"/v1/invoices\",\n                operation_id: \"create_invoice\",\n                request: Some(ApiSchema {\n                    name: \"CreateInvoiceRequest\",\n                    required_fields: &[\"customer_id\", \"line_totals\"],\n                }),\n                response: ApiSchema {\n                    name: \"CreatedInvoiceResponse\",\n                    required_fields: &[\"invoice_id\", \"total_cents\"],\n                },\n                auth: true,\n            },\n            ApiOperation {\n                method: \"GET\",\n                path: \"/v1/invoices/{id}\",\n                operation_id: \"get_invoice\",\n                request: None,\n                response: ApiSchema {\n                    name: \"InvoiceResponse\",\n                    required_fields: &[\"invoice_id\", \"total_cents\"],\n                },\n                auth: true,\n            },\n        ],\n    }\n}\n\nfn generate_code(doc: &OpenApiDoc) -> CodegenPlan {\n    let client_methods = doc\n        .operations\n        .iter()\n        .map(|op| op.operation_id)\n        .collect::<Vec<_>>();\n\n    CodegenPlan {\n        server_stubs: doc.operations.len(),\n        client_methods,\n    }\n}\n\nfn main() {\n    let doc = build_doc();\n    let plan = generate_code(&doc);\n\n    println!(\"operations = {}\", doc.operations.len());\n    println!(\"swagger = {}\", doc.swagger_ui_path);\n    println!(\"client methods = {}\", plan.client_methods.join(\",\"));\n    println!(\"server stubs = {}\", plan.server_stubs);\n}"
+ },
+ "labReferenceSolution": null
+}

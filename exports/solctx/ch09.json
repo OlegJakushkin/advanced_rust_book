@@ -1,0 +1,223 @@
+{
+ "chapterKey": "ch09",
+ "num": 9,
+ "title": "Smart Pointers and Pinning",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Read each pointer type as an ownership statement",
+   "objective": "Restate what Box, Rc, Arc, RefCell, Mutex, and Weak each encode without conflating ownership count with mutation authority.",
+   "starterPrompt": "The chapter argues that a smart pointer encodes ownership count, mutation authority, thread sharing, and address stability. For each of Box<T>, Rc<T>, Arc<T>, RefCell<T>, Mutex<T>, and Weak<T>, write one sentence naming exactly what it provides and one naming what it does NOT provide.",
+   "prompts": [
+    "State the owner count each type implies: one, many on one thread, or many across threads.",
+    "Say which types add mutation through a shared handle and where the aliasing rule is enforced (compile time, runtime panic, or lock acquisition).",
+    "Explain why Weak<T> is described as a non-owning edge and what upgrade() returns.",
+    "Identify which single type in the list speaks to address stability rather than ownership."
+   ],
+   "acceptanceCriteria": [
+    "Box<T> is described as one owner plus heap indirection, with no sharing, reference counting, or interior mutability.",
+    "Rc<T> and Arc<T> are both shared ownership, differing only in non-atomic versus atomic counting and therefore single-thread versus cross-thread use.",
+    "RefCell<T> is named as runtime-checked borrowing (panic on violation), Mutex<T> as exclusive access after lock acquisition, and neither is presented as adding owners by itself.",
+    "Weak<T> is identified as not keeping the allocation alive, with upgrade() returning Option<Rc<T>> or Option<Arc<T>>; Pin is the only address-stability item."
+   ],
+   "hints": [
+    "Ownership count and mutation authority are independent questions; a composite like Rc<RefCell<T>> answers both.",
+    "Reread the 'Choosing the right pointer type' section: owners first, then thread boundary, then mutation model."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace the strong and weak edges in the tree sample",
+   "objective": "Read the chapter's Node sample and account for every reference-count change and borrow that occurs at runtime.",
+   "starterPrompt": "Work through the smart_pointers_tree sample, where Node holds parent: RefCell<Weak<Node>> and children: RefCell<Vec<Rc<Node>>>. Explain why the graph stays acyclic and what each printed line reports.",
+   "prompts": [
+    "After root.children.borrow_mut().push(Rc::clone(&leaf)), state leaf's strong count and why it changed.",
+    "After *leaf.parent.borrow_mut() = Rc::downgrade(&root), state root's strong count and weak count.",
+    "Explain why leaf.parent.borrow().upgrade() must be handled as an Option rather than dereferenced directly.",
+    "Justify the final value of Rc::strong_count(&root) printed by the program."
+   ],
+   "acceptanceCriteria": [
+    "The answer states that pushing Rc::clone(&leaf) raises leaf's strong count to 2, and that downgrade adds a weak (not strong) count to root.",
+    "Rc::strong_count(&root) is correctly explained as 1, because only the leaf-to-root edge is weak and no second strong handle to root exists.",
+    "The answer explains that upgrade() returns Option because a Weak does not keep the allocation alive, so the owner may already be gone.",
+    "The reader identifies the children edge as the owning (strong) edge and the parent edge as the observational (weak) edge, which is why no cycle forms."
+   ],
+   "hints": [
+    "Each Rc::clone bumps the strong count; Rc::downgrade bumps the weak count instead.",
+    "A strong cycle is two strong edges that point at each other; here one direction is deliberately weak."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Build a single-thread cache with Rc plus interior mutability",
+   "objective": "Compose shared ownership with the smallest sufficient interior-mutability tool instead of reaching for RefCell by reflex.",
+   "starterPrompt": "Implement a single-thread counter cache shared by several handles: a struct Stats holding hits: Cell<u32> and a label: String, wrapped as Rc<Stats>. Provide fn record_hit(stats: &Rc<Stats>) that increments the count and fn snapshot(stats: &Rc<Stats>) -> u32 that reads it.",
+   "prompts": [
+    "Choose Cell<u32> rather than RefCell<u32> and justify the choice in one sentence.",
+    "Implement record_hit using get and set (or a single update of the copied value), without handing out an interior reference.",
+    "Clone the Rc<Stats> into a second handle and show that both handles observe the same incremented count.",
+    "State what would change if a field needed an interior &mut reference instead of copy-out semantics."
+   ],
+   "acceptanceCriteria": [
+    "Stats uses Cell<u32> for the count, and record_hit mutates it through a shared &Rc<Stats> without &mut.",
+    "snapshot returns the current count by value and does not borrow an interior reference.",
+    "Two cloned Rc handles are shown to read the same updated count, demonstrating shared ownership of one allocation.",
+    "The answer notes that Cell is correct here because only whole-value copy/replace is needed, and RefCell would be required only if interior references were handed out."
+   ],
+   "hints": [
+    "Cell::get copies the value out; Cell::set replaces it; no borrow token is involved.",
+    "Cloning an Rc adds an owner of the same allocation, so both handles see one shared Cell."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "implementation",
+   "title": "Poll a hand-written future through Pin",
+   "objective": "Drive an address-sensitive value to completion using Pin and the poll contract from the chapter's pinning sample.",
+   "starterPrompt": "Following the smart_pointers_pin_poll sample, implement a future struct Ticker { remaining: u8 } whose poll returns Poll::Pending while remaining is above zero (decrementing each call) and Poll::Ready(\"fired\") at zero. Box::pin it and poll it in a loop until ready.",
+   "prompts": [
+    "Give poll the exact signature fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>.",
+    "Recover a mutable reference to the fields with self.get_mut() and explain why that is permitted here.",
+    "Build a no-op Waker and Context, pin the future with Box::pin, and poll via Future::poll(task.as_mut(), &mut cx).",
+    "Count how many Pending results precede the single Ready for remaining = 3."
+   ],
+   "acceptanceCriteria": [
+    "poll has the signature taking Pin<&mut Self> and returns Poll::Ready(\"fired\") only when remaining reaches zero.",
+    "self.get_mut() is used to reach the fields, with a note that it is sound because Ticker is movable (Unpin).",
+    "The driver pins with Box::pin and polls task.as_mut() in a loop until Poll::Ready is returned.",
+    "For remaining = 3 the program reports three Pending polls before the Ready result."
+   ],
+   "hints": [
+    "get_mut is available because a plain struct of Copy fields is Unpin; the !Unpin restriction is what blocks projection elsewhere.",
+    "Pin<&mut Self> is the temporary pinned view; Box::pin gives the owned pinned storage you poll repeatedly."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Break a reference cycle and fix a misused pointer",
+   "objective": "Diagnose a leak caused by two strong edges and a thread-safety mismatch, then repair both with the chapter's rules.",
+   "starterPrompt": "A single-thread graph defines Node { parent: RefCell<Option<Rc<Node>>>, children: RefCell<Vec<Rc<Node>>> } and is then moved across a thread boundary inside an Rc. The parent never drops, and the cross-thread move fails to compile. Find and fix both defects.",
+   "prompts": [
+    "Explain why a strong parent edge plus a strong children edge prevents either strong count from reaching zero.",
+    "Change the parent edge to the correct non-owning type and adjust how the parent is set and read.",
+    "Explain why Rc<Node> cannot cross a thread boundary and name the minimal change for the cross-thread case.",
+    "State whether switching to Arc alone makes shared mutation safe, and what additional mechanism is required."
+   ],
+   "acceptanceCriteria": [
+    "The leak is correctly attributed to a strong-strong cycle, with neither side reaching a strong count of zero.",
+    "The parent field is changed to RefCell<Weak<Node>>, set via Rc::downgrade and read via upgrade() returning an Option.",
+    "The answer states Rc<Node> is not Send/Sync because its count is non-atomic, and that Arc<Node> is the cross-thread replacement.",
+    "The answer makes clear that Arc fixes ownership count only, and shared mutation across threads still needs a Mutex (or message passing)."
+   ],
+   "hints": [
+    "Owning edges stay strong; observational back-edges become weak.",
+    "Arc<Mutex<T>> reads as shared ownership plus synchronized mutation, two separate decisions."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose pointer types for a mixed-ownership service",
+   "objective": "Translate a service's ownership, threading, and mutation requirements into concrete composite pointer types.",
+   "starterPrompt": "Design the storage types for the service in the opening scenario: recursive parser state with a single owner, planning data shared on one thread, a schema shared read-only across worker threads, retry coordination mutated by several threads, and a future stored to be polled later.",
+   "prompts": [
+    "Assign a pointer type to each of the five concerns and justify owner count and thread boundary for each.",
+    "For each shared-and-mutable concern, name the enforcement model and read the composite type literally (for example, what Arc<Mutex<T>> means).",
+    "Explain why the stored future uses Pin<Box<dyn Future>> rather than a plain Box.",
+    "Flag the operational concerns the locking choice introduces (lock scope, contention, poisoning, deadlock)."
+   ],
+   "acceptanceCriteria": [
+    "Recursive parser state is Box<T> (one owner, heap indirection for finite size); shared planning data is Rc<T> or Rc<RefCell<T>> on one thread.",
+    "The cross-thread read-only schema is Arc<T>, and the cross-thread mutable retry state is Arc<Mutex<T>>, each justified by owner count then thread boundary then mutation model.",
+    "The stored future is Pin<Box<dyn Future>>, justified by the future's address-sensitive state machine needing to stay put while polled.",
+    "The answer names at least two operational concerns the Mutex introduces, such as lock scope, contention, poisoning, or deadlock risk."
+   ],
+   "hints": [
+    "Answer the questions in order: how many owners, one thread or many, does the shared value mutate, under which model.",
+    "Read composites as layered statements; the type literal already documents the runtime story."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What does Box<T> provide, and which three things that people often associate with smart pointers does it deliberately NOT provide?",
+  "Rc<T> and Arc<T> both give shared ownership; what is the single implementation difference between them, and what consequence does it have for thread boundaries?",
+  "Cell<T> and RefCell<T> are both single-thread interior-mutability tools; when must you choose RefCell<T> instead of Cell<T>, and what failure mode does RefCell add?",
+  "Why can reference counting alone never reclaim a cycle, and what edge change turns a cyclic graph back into a collectable acyclic one?",
+  "What invariant does Pin<T> protect, why does Future::poll take Pin<&mut Self>, and why does the distinction not matter for ordinary Unpin types?"
+ ],
+ "lab": {
+  "title": "Runnable lab · strong edges own, weak edges observe",
+  "filename": "weak_parent_edge_lab.rs",
+  "runKey": "ch09_ex_weakedge",
+  "expectedOutput": "root children = 1\nleaf parent = root\nroot strong = 1\nroot weak = 1\nleaf parent (after root drop) = none",
+  "helperText": "Complete the attach function so the parent owns the child through a strong Rc and the child only observes the parent through a Weak handle. The printed counts and the post-drop lookup confirm the graph is acyclic.",
+  "initialCode": "use std::cell::RefCell;\nuse std::rc::{Rc, Weak};\n\n#[derive(Debug)]\nstruct Node {\n    name: String,\n    parent: RefCell<Weak<Node>>,\n    children: RefCell<Vec<Rc<Node>>>,\n}\n\nimpl Node {\n    fn new(name: &str) -> Rc<Node> {\n        Rc::new(Node {\n            name: String::from(name),\n            parent: RefCell::new(Weak::new()),\n            children: RefCell::new(Vec::new()),\n        })\n    }\n}\n\n// TODO: attach `child` under `parent` so the parent owns the child with a\n// strong edge and the child observes the parent with a weak edge.\nfn attach(_parent: &Rc<Node>, _child: &Rc<Node>) {\n    // TODO: push a strong Rc::clone of `child` into `parent.children`,\n    // then set `child.parent` to a weak handle via Rc::downgrade.\n}\n\nfn parent_name(node: &Rc<Node>) -> String {\n    node.parent\n        .borrow()\n        .upgrade()\n        .map(|p| p.name.clone())\n        .unwrap_or_else(|| String::from(\"none\"))\n}\n\nfn main() {\n    let root = Node::new(\"root\");\n    let leaf = Node::new(\"leaf\");\n\n    attach(&root, &leaf);\n\n    println!(\"root children = {}\", root.children.borrow().len());\n    println!(\"leaf parent = {}\", parent_name(&leaf));\n    println!(\"root strong = {}\", Rc::strong_count(&root));\n    println!(\"root weak = {}\", Rc::weak_count(&root));\n    println!(\"leaf parent (after root drop) = {}\", {\n        drop(root);\n        parent_name(&leaf)\n    });\n}\n"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 05, 07, and 08",
+  "Opening scenario",
+  "A good review order",
+  "Mental model",
+  "Core concepts",
+  "Box<T>: heap ownership",
+  "Rc<T>: single-threaded shared ownership",
+  "Arc<T>: thread-safe shared ownership",
+  "Interior mutability: moving the borrow check somewhere else",
+  "RefCell<T>: runtime borrow checking",
+  "Cell<T> and interior mutability",
+  "Mutex<T>: ownership under synchronization",
+  "Weak<T> and cyclic references",
+  "Pin<T> and immovable values",
+  "Pin<Box<T>> and Pin<&mut T>",
+  "Choosing the right pointer type",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: shared tree edges with weak back-references",
+  "Example 2: polling a pinned future with Box::pin",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Smart pointers encode ownership count, mutation authority, thread sharing, and address stability. This chapter uses Box, Rc, Arc, Weak, interior mutability, and Pin as production design choices.",
+  "Chapter 05 introduced ownership inside structs. Chapter 07 separated move, copy, and clone. Chapter 08 explained why some low-level invariants matter enough to be audited explicitly. This chapter brings those threads together around the standard smart pointers and pinning model.",
+  "A service combines recursive parser state, shared planning data, cross-thread schemas, mutable retry coordination, and pinned async work. The business requirement is to encode each ownership and movement rule in the pointer type: single owner, shared owner, synchronized mutation,",
+  "Box<T> means one owner plus heap indirection. It does not imply sharing, reference counting, or interior mutability. It is the right answer when the pointee should still have one owner but the outer type needs recursive shape, a smaller stack footprint, or a stable-sized field.",
+  "What to look at: the box is a thin owning handle that lives wherever the field lives, while the pointee it owns sits on the heap. That indirection is what lets a recursive type have a finite size, because the field is one pointer wide no matter how deep the chain goes.",
+  "Think of it as owned heap storage, not as “shared pointer lite.”",
+  "Rc<T> is shared ownership inside one thread. Cloning an Rc adds another owner by incrementing a non-atomic count. Because the count is not atomic, Rc<T> is not for thread boundaries.",
+  "What to look at: several handles point at one allocation, and the allocation carries a count. Each clone bumps the count; each drop lowers it; the value is freed only when the count reaches zero. The data itself is shared and read-only through these handles.",
+  "If you later need shared mutation as well, that is a second decision. Many single-thread designs use Rc<RefCell<T>>, but you should read that type honestly: multiple owners plus runtime borrow checking.",
+  "Arc<T> is the cross-thread sibling of Rc<T>. The reference count is atomic, so cloning is safe across threads. The atomic work is usually modest, but it is not free.",
+  "The key correction is this: Arc<T> solves ownership count, not arbitrary mutation safety. If multiple threads need mutation, add a second mechanism such as a lock or redesign toward message passing. Also remember that thread use still depends on the inner T satisfying the relevan",
+  "What to look at: all three of the types below let you mutate through a shared handle, which ordinary borrowing forbids. The difference is purely where and how the aliasing rule is enforced. A Cell<T> sidesteps borrowing by only swapping whole values, a RefCell<T> keeps the same r",
+  "RefCell<T> lets shared owners borrow mutably at runtime. The same borrowing law still exists, but violations become runtime panics instead of compile-time errors. That is useful in single-thread graphs, UI trees, and other genuinely dynamic borrow patterns. It is also a tradeoff ",
+  "Cell<T> is the smaller, calmer interior-mutability tool when you only need to copy out, replace, or swap values. It works well for counters, flags, and small cached scalars in one thread. Unlike RefCell<T>, it does not hand out interior references.",
+  "Mutex<T> provides interior mutability by handing out exclusive access only after lock acquisition. It is the shared-state sibling of ordinary exclusive borrowing. Lock scope, contention, poisoning policy, and deadlock risk are now operational concerns.",
+  "Reference counting alone cannot collect cycles. If parent owns child and child also owns parent through a strong Rc or Arc, neither side reaches a strong count of zero. The usual repair is simple: owning edges stay strong, observational back-edges become weak.",
+  "A Weak<T> does not keep the allocation alive. Calling upgrade() returns Option<Rc<T>> or Option<Arc<T>>, which forces you to handle the “owner already gone” case explicitly.",
+  "Pinning matters when moving a value would break an address-sensitive invariant. The classic example is future polling: Future::poll takes Pin<&mut Self>. The compiler can generate state machines whose internal references assume the future stays put while polled.",
+  "Pinning does not stop all mutation. It stops moves that would invalidate the address-sensitive part of the invariant. For most ordinary types, this distinction does not matter because they are effectively movable and implement Unpin.",
+  "Pin<Box<T>> means you own the value and pin the pointee in its heap allocation. This is common when storing futures you want to poll later. Pin<&mut T> is the temporary pinned view used when actually operating on the pinned value.",
+  "The sharp edge is projection. For !Unpin types, you cannot casually recover a plain &mut T because that would re-enable movement. Later async and unsafe chapters revisit this with deeper machinery.",
+  "What to look at: the choice is a short series of independent questions, not a single menu pick. Answer them in order, and the type usually falls out. How many owners are real? If many, do they live on one thread or cross thread boundaries? Does anything need to mutate the shared ",
+  "Once owner count and thread boundary are settled, the remaining question is whether the shared value also needs mutation, and under which enforcement model:",
+  "A useful correction for senior engineers is this: pointer choice is often two or three independent questions layered together. Arc<Mutex<T>> means shared ownership and synchronized mutation. Rc<RefCell<T>> means shared ownership and runtime borrow checking on one thread. Read the",
+  "Most senior engineers do not meet smart pointers as a blank slate; they arrive with a pointer model from another language. The useful thing to know is which part of that model carries over and which part will quietly mislead you. The shift is almost never about which type maps to",
+  "Smart pointers are not escape hatches from ownership design. They are ownership design written into the type. If the type looks complicated, the runtime story is probably complicated too.",
+  "The children are strongly owned. The parent edge is weak, so the graph stays acyclic.",
+  "What to look at: the two edges between root and leaf are deliberately different kinds. The root owns the leaf through a strong Rc in its children list, while the leaf only observes the root through a Weak parent pointer. Trace the two arrows in the diagram, then notice that the l",
+  "Quick check: change the node names or add another child. The useful signal is not the printout itself. It is that the ownership graph reads clearly from the types: strong edges own, weak edges observe.",
+  "A child can discover its parent only by upgrading a weak pointer. The parent is not kept alive by the child."
+ ],
+ "codeSamples": {
+  "smart_pointers_tree": "use std::cell::RefCell;\nuse std::rc::{Rc, Weak};\n\n#[derive(Debug)]\nstruct Node {\n    name: String,\n    parent: RefCell<Weak<Node>>,\n    children: RefCell<Vec<Rc<Node>>>,\n}\n\nfn main() {\n    let root = Rc::new(Node {\n        name: String::from(\"root\"),\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n\n    let leaf = Rc::new(Node {\n        name: String::from(\"leaf\"),\n        parent: RefCell::new(Weak::new()),\n        children: RefCell::new(Vec::new()),\n    });\n\n    root.children.borrow_mut().push(Rc::clone(&leaf));\n    *leaf.parent.borrow_mut() = Rc::downgrade(&root);\n\n    let parent_name = leaf\n        .parent\n        .borrow()\n        .upgrade()\n        .map(|node| node.name.clone())\n        .unwrap_or_else(|| String::from(\"none\"));\n\n    println!(\"root children = {}\", root.children.borrow().len());\n    println!(\"leaf parent = {}\", parent_name);\n    println!(\"root strong = {}\", Rc::strong_count(&root));\n}",
+  "smart_pointers_pin_poll": "use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\nstruct Countdown {\n    remaining: u8,\n}\n\nimpl Future for Countdown {\n    type Output = &'static str;\n\n    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        let this = self.get_mut();\n\n        if this.remaining == 0 {\n            Poll::Ready(\"done\")\n        } else {\n            this.remaining -= 1;\n            Poll::Pending\n        }\n    }\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn main() {\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut task = Box::pin(Countdown { remaining: 2 });\n\n    loop {\n        match Future::poll(task.as_mut(), &mut cx) {\n            Poll::Ready(value) => {\n                println!(\"ready = {}\", value);\n                break;\n            }\n            Poll::Pending => {\n                println!(\"pending = {}\", task.as_ref().get_ref().remaining);\n            }\n        }\n    }\n}"
+ },
+ "labReferenceSolution": "use std::cell::RefCell;\nuse std::rc::{Rc, Weak};\n\n#[derive(Debug)]\nstruct Node {\n    name: String,\n    parent: RefCell<Weak<Node>>,\n    children: RefCell<Vec<Rc<Node>>>,\n}\n\nimpl Node {\n    fn new(name: &str) -> Rc<Node> {\n        Rc::new(Node {\n            name: String::from(name),\n            parent: RefCell::new(Weak::new()),\n            children: RefCell::new(Vec::new()),\n        })\n    }\n}\n\n// Parent owns the child with a strong edge; child observes the parent\n// with a weak edge, so the two-node graph stays acyclic.\nfn attach(parent: &Rc<Node>, child: &Rc<Node>) {\n    parent.children.borrow_mut().push(Rc::clone(child));\n    *child.parent.borrow_mut() = Rc::downgrade(parent);\n}\n\nfn parent_name(node: &Rc<Node>) -> String {\n    node.parent\n        .borrow()\n        .upgrade()\n        .map(|p| p.name.clone())\n        .unwrap_or_else(|| String::from(\"none\"))\n}\n\nfn main() {\n    let root = Node::new(\"root\");\n    let leaf = Node::new(\"leaf\");\n\n    attach(&root, &leaf);\n\n    println!(\"root children = {}\", root.children.borrow().len());\n    println!(\"leaf parent = {}\", parent_name(&leaf));\n    println!(\"root strong = {}\", Rc::strong_count(&root));\n    println!(\"root weak = {}\", Rc::weak_count(&root));\n    println!(\"leaf parent (after root drop) = {}\", {\n        drop(root);\n        parent_name(&leaf)\n    });\n}\n"
+}

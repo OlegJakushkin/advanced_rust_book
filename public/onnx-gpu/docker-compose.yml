@@ -1,0 +1,22 @@
+# Real ONNX inference on the GPU — Chapter 54.
+# Requires an NVIDIA GPU, Docker, and the NVIDIA Container Toolkit.
+#
+#   docker compose build
+#   docker compose run --rm onnx
+#
+# If GPU passthrough doesn't apply on `compose run` for your version:
+#   docker run --rm --gpus all rust-onnx-gpu
+
+services:
+  onnx:
+    build:
+      context: .
+    image: rust-onnx-gpu
+    working_dir: /work
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

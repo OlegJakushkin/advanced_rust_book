@@ -1,4 +1,6 @@
 import { simulatePracticeOutput } from "./rust-simulator-practice"
+import { simulateCh56Output } from "./rust-simulator-ch56"
+import { simulateCh55Output } from "./rust-simulator-ch55"
 import { simulateCh54Output } from "./rust-simulator-ch54"
 import { simulateCh53Output } from "./rust-simulator-ch53"
 import { simulateCh52Output } from "./rust-simulator-ch52"
@@ -1035,6 +1037,12 @@ export function simulateRustExecution(code: string, key?: string, filename = "ma
 
   const practiceOutput = simulatePracticeOutput(code, key)
   if (practiceOutput !== null) return practiceOutput
+
+  const ch56Output = simulateCh56Output(code, key)
+  if (ch56Output !== null) return ch56Output
+
+  const ch55Output = simulateCh55Output(code, key)
+  if (ch55Output !== null) return ch55Output
 
   const ch54Output = simulateCh54Output(code, key)
   if (ch54Output !== null) return ch54Output

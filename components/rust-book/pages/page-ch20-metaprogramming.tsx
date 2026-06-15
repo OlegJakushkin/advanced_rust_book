@@ -1,41 +1,46 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, GitCompare, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Macros rewrite syntax before Rust type-checks the result",
-    body: "A macro is not a runtime callback. It is a compile-time syntax transform. Declarative macros pattern-match token trees. Procedural macros receive token streams, inspect them, and emit new Rust tokens.",
+    title: "A macro rewrites syntax before the type checker ever runs",
+    body: "A macro is not a runtime callback and not a function that happens to run early. It is a transform that takes the tokens you wrote and produces different tokens, and that substitution finishes before name resolution, borrow checking, trait solving, or monomorphization begin. Declarative macros pattern-match the token tree arm by arm; procedural macros receive a raw token stream, inspect it as data, and emit a fresh stream. In both cases the compiler then treats the output exactly as if a human had typed it, which is why a macro can change what code exists but cannot bend the rules that code must obey afterward.",
   },
   {
-    title: "Metaprogramming is justified when syntax is the real duplication",
-    body: "If the real problem is repeated expressions, repeated items, or repeated impl blocks, a macro may be right. If the real problem is ordinary value transformation, type abstraction, or behavior variation, a function, generic, trait, or enum is usually calmer.",
+    title: "Reach for a macro only when the duplication is genuinely syntactic",
+    body: "The honest test is to name what is actually repeated. If it is repeated expressions, repeated items, or repeated impl blocks that no function signature can capture because the shape itself varies, a macro earns its place. If it is repeated value transformation, a repeated type relationship, or repeated behavior, then a function, a generic, a trait, or an enum will compose better with the rest of the language and the tooling. Most regrettable macros are type-design problems wearing a syntax-problem costume.",
   },
   {
-    title: "A public macro is a public syntax API",
-    body: "Once other crates write code against your macro call shape, you own that call shape. Macro stability is not only about generated behavior. It is also about patterns, diagnostics, and how understandable expansion remains six months later.",
+    title: "A public macro is a public syntax API you have to keep",
+    body: "The moment another crate writes code against your macro's call shape, that call shape is part of your stable surface, exactly like a public function signature. Maintaining it is not only about keeping the generated behavior correct. It is about keeping the accepted patterns coherent, keeping the compile errors legible when callers get it wrong, and keeping the expansion something a reviewer can still understand six months later. Clever pattern arms age into compatibility liabilities faster than almost any other Rust API.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Rust `macro_rules!` is not a template system and not a textual preprocessor clone. Generics solve Rust's template-shaped problems. Macros solve syntax-shaped problems. Compared with the C preprocessor, `macro_rules!` is token-based and hygienic.",
+    body: "Resist the urge to map macros onto either of the two C++ tools you already know. Templates are Rust's generics, not its macros, so type-shaped duplication should go to generics. The C preprocessor is the closer analogy, but the trap is treating macro_rules! as textual substitution: it matches token trees rather than character ranges, and it is hygienic, so an introduced local cannot silently capture or clobber a name at the call site. The familiar preprocessor footguns mostly do not exist here.",
   },
   {
     title: "C# background",
-    body: "Derive and attribute macros are closer to compile-time source transformation than to runtime reflection. If you know attributes and source generators, that instinct helps. The correction is that Rust keeps the whole mechanism inside the compiler pipeline and type-checks the emitted Rust afterward.",
+    body: "The instinct to compare derive and attribute macros to runtime reflection is the thing to unlearn. They sit much closer to Roslyn source generators: compile-time, source-level, with no metadata to query at runtime. The shift is that the emitted code is just more Rust, fed straight back into the same compiler, so anything it produces still has to pass borrow checking and trait resolution. There is no reflective escape hatch waiting at runtime to paper over a generation mistake.",
   },
   {
     title: "Go background",
-    body: "Go often pushes metaprogramming toward `go generate`, templates, or external codegen tools. Rust can still do offline generation, but it also has first-class compile-time macros when the call-site syntax itself should remain part of the API.",
+    body: "Go deliberately keeps codegen outside the language with go generate and external tools, so the mental shift is that Rust offers a genuine choice rather than one path. Offline generation is still available and still the right call for large or schema-driven surfaces, but Rust also has first-class compile-time macros for the cases where the call-site syntax itself should be part of the API. The new question Go never forced you to ask is which of the two a given problem deserves.",
+  },
+  {
+    title: "Python background",
+    body: "Python metaprogramming is overwhelmingly a runtime affair: decorators, metaclasses, and getattr hooks all reshape behavior while the program is running. Rust moves every bit of that work to compile time, before main exists. The payoff is that the generated structure is fully fixed and type-checked before anything runs, but the cost is that a macro cannot consult a value, a type's inferred traits, or any runtime state to decide what to emit. If your design wants information that only exists at runtime, a macro is the wrong tool.",
   },
 ]
 
@@ -243,8 +248,10 @@ export function PageCh20Metaprogramming() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Metaprogramming is a build-time tool for removing repetitive syntax while preserving clear APIs. This chapter
-          covers macros and generated code as maintainable compile-time infrastructure.
+          Metaprogramming in Rust is a build-time tool for removing repetitive syntax while preserving clear APIs. This
+          chapter treats macros and generated code as maintainable compile-time infrastructure: when each kind earns its
+          place, how expansion fits into the compiler pipeline, and where a plain function, generic, or offline generator
+          is the calmer answer.
         </p>
       </div>
 
@@ -280,14 +287,31 @@ export function PageCh20Metaprogramming() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service platform contains repeated route declarations, DTO metadata, validation boilerplate, and generated
-            adapter code. The business requirement is to remove structural repetition without hiding runtime behavior:
-            use functions for value logic, declarative macros for small syntax patterns, procedural macros for item-level
-            generation, and build-time codegen for external schemas.
+            Picture a service platform that has grown a familiar set of repetitions: route declarations that all follow the
+            same method-path-auth shape, DTO metadata duplicated next to every struct, validation boilerplate copied across
+            handlers, and adapter glue generated by hand from an external schema. Each of these looks like a candidate for
+            metaprogramming, but they are not the same kind of problem, and the same tool does not fit all four. The goal of
+            this chapter is to remove the structural repetition without hiding runtime behavior behind decorative syntax.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The four mechanisms map onto four distinct shapes of duplication. Plain functions, generics, and traits handle
+            anything where the variation is in values, types, or behavior. Declarative macros handle small, local
+            syntax patterns. Procedural macros handle item-level generation that has to read the structure of a type or an
+            attribute. Build-time codegen handles surfaces whose source of truth lives outside Rust entirely. The skill is
+            matching the shape, not reaching for the most powerful tool by reflex.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
-            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Read the decision as a ladder you climb only when the rung below genuinely cannot hold the weight. Each step up
+              buys expressive power and pays for it in compile time, diagnostics, and the size of the API surface you commit
+              to keeping stable.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[Repetition spotted] --> Q1{Variation is values,<br/>types, or behavior?}\n  Q1 -->|yes| Fn[Function, generic,<br/>trait, or enum]\n  Q1 -->|no, it is syntax| Q2{External source<br/>or large surface?}\n  Q2 -->|yes| Gen[Build script or<br/>offline generator]\n  Q2 -->|no| Q3{Needs item structure<br/>or attributes?}\n  Q3 -->|no, local pattern| Decl[macro_rules!]\n  Q3 -->|yes| Proc[Procedural macro]`}
+              caption="The decision ladder: most repetition is not syntactic at all. Only after ruling out functions, generics, and offline generation do the two macro forms come into play."
+            />
+            <ol className="mt-4 space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Start with a normal function, generic, trait, or enum and confirm why it is insufficient.</li>
               <li>If the duplication is syntax-shaped inside Rust, try <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">macro_rules!</code> first.</li>
               <li>If the API must attach to items, inspect attributes, or emit impls from type definitions, consider a procedural macro.</li>
@@ -308,6 +332,18 @@ export function PageCh20Metaprogramming() {
                 <p className="text-sm text-muted-foreground leading-6">{point.body}</p>
               </div>
             ))}
+          </div>
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-2">Where expansion sits in the pipeline</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The single fact that explains most macro behavior is ordering. Expansion runs near the front of compilation,
+              and every safety check you rely on runs on the output. A macro can decide what code exists; it cannot decide
+              what that code is allowed to do.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Src[Source tokens] --> Exp[Macro expansion]\n  Exp --> Names[Name resolution]\n  Names --> Borrow[Borrow checking]\n  Borrow --> Traits[Trait solving]\n  Traits --> Mono[Monomorphization and codegen]`}
+              caption="Macros transform tokens at the first stage. Borrow checking and trait solving run afterward on the expanded code, exactly as if you had written it by hand."
+            />
           </div>
         </section>
 
@@ -339,7 +375,25 @@ export function PageCh20Metaprogramming() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Procedural macros</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Procedural macros are Rust functions that run at compile time, take a token stream in, and return a token
+              stream out. They come in three forms, distinguished by what they are attached to and what they receive. The
+              shape below is worth fixing in your head before reading the cards: a derive sees a copy of the type and adds
+              alongside it, an attribute receives the item and replaces it, and a function-like macro receives whatever
+              tokens sit inside its delimiters.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph Derive["proc_macro_derive"]\n    D1[Type definition] --> D2[Generated impls<br/>added next to it]\n  end\n  subgraph Attr["proc_macro_attribute"]\n    A1[Annotated item] --> A2[Rewritten or wrapped<br/>item replaces it]\n  end`}
+              caption="The two item-attached forms: a derive leaves the type intact and adds impls beside it, while an attribute consumes the item it sits on and replaces it with a rewritten version."
+            />
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The third form is not attached to an item at all. It receives whatever tokens sit inside its call delimiters:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  subgraph Func["proc_macro function-like"]\n    F1[Tokens inside the call] --> F2[New items<br/>or expressions]\n  end`}
+              caption="The function-like form: it expands an arbitrary token blob into new items or expressions, with no surrounding item to inspect."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {proceduralMacroCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -359,7 +413,20 @@ export function PageCh20Metaprogramming() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Token streams</h4>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              A procedural macro never sees your program as values or as a resolved type graph. It sees a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">TokenStream</code>: a flat sequence of
+              identifiers, literals, punctuation, and grouped sub-streams, each carrying a span that points back at the
+              original source. Most real proc macros parse that stream into a syntax tree with the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">syn</code> crate, build new code with{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">quote</code>, and convert back to a token
+              stream for the compiler. The diagram shows that round trip.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  In[Input TokenStream] --> Parse[Parse with syn]\n  Parse --> AST[Syntax tree plus spans]\n  AST --> Build[Build new code with quote]\n  Build --> Out[Output TokenStream]\n  Out --> CC[Compiler type-checks output]`}
+              caption="The typical proc-macro round trip: tokens in, parse to a syntax tree, generate new tokens, hand them back to the compiler for the usual checks."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
               {tokenStreamCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -369,7 +436,10 @@ export function PageCh20Metaprogramming() {
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                One practical consequence follows from this immediately: if your macro design needs inferred types or trait resolution to decide what to generate, the macro is probably the wrong tool. That information is not available in the way many first designs hope.
+                One practical consequence follows immediately. Because the macro only ever holds syntax, it cannot consult
+                inferred types or resolved trait impls to decide what to generate: that information simply does not exist yet
+                at expansion time. If a design depends on knowing a field's concrete type or whether some trait is
+                implemented, the macro is fighting the pipeline, and a different approach will be calmer.
               </p>
             </div>
           </div>
@@ -427,16 +497,34 @@ export function PageCh20Metaprogramming() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Translating prior instincts</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">If you are coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Every mainstream language has some form of metaprogramming, and that prior experience is the most common source
+            of wrong instincts here. The cards below name the one mental-model shift each background tends to need. The
+            through-line is that Rust does this work at compile time, on syntax, and feeds the result back through the same
+            type checker that judges hand-written code.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <p className="text-sm text-muted-foreground leading-6">
+              The shared correction across all four: do not pick a macro because the borrow checker, the trait system, or
+              type design felt inconvenient. A macro can change the syntax you write, but it cannot exempt the resulting
+              code from any of those rules. When the friction is about ownership or types, the fix lives in ownership or
+              types, not in a layer that runs before they are even checked.
+            </p>
           </div>
         </section>
 
@@ -504,6 +592,18 @@ export function PageCh20Metaprogramming() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: both the caller and the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">sum_values!</code> macro define a binding
+              called <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">total</code>, yet the final{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">outer total = 40</code> proves they never
+              collide. Hygiene gives the macro's internal name a different identity from the caller's, so expansion cannot
+              accidentally overwrite a variable that happens to share a name.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Caller["Caller: let total = 40"] --> Call["sum_values!(1, 2, 3)"]\n  Call --> Expand["Expansion: let total = 0; total += ..."]\n  Expand --> Hyg{Same identifier text}\n  Hyg -->|hygiene keeps them distinct| Sep["Macro total separate from caller total"]\n  Sep --> Out["sum = 6, caller total still 40"]`}
+              caption="The macro's internal total and the caller's total share spelling but not identity. Hygiene keeps the expansion from clobbering the caller's binding."
+            />
             <RustCodeEditor
               code={codes.metaprogramming_macro_rules_hygiene}
               onChange={(newCode) => updateCode("metaprogramming_macro_rules_hygiene", newCode)}
@@ -560,6 +660,19 @@ export function PageCh20Metaprogramming() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: each line in the macro call is one route, and the recursive{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">@auth</code> arms turn the{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">public</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">private</code> markers into ordinary
+              booleans. The whole DSL expands to nothing more exotic than a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;Route&gt;</code> of plain structs,
+              which is exactly why it stays reviewable.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Call["routes! { GET /health public, ... }"] --> Per[For each entry]\n  Per --> M[stringify! method]\n  Per --> P[path literal]\n  Per --> A["@auth arm to bool"]\n  M --> R[Route value]\n  P --> R\n  A --> R\n  R --> Vec["Vec of Route structs"]`}
+              caption="Each DSL entry expands into one Route struct, and the call as a whole becomes a plain vector of explicit values with no hidden IO or allocation policy."
+            />
             <RustCodeEditor
               code={codes.metaprogramming_compile_time_dsl}
               onChange={(newCode) => updateCode("metaprogramming_compile_time_dsl", newCode)}

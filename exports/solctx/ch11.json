@@ -1,0 +1,212 @@
+{
+ "chapterKey": "ch11",
+ "num": 11,
+ "title": "Hash Maps and Sets",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose map, set, or tree from the contract",
+   "objective": "Practice choosing `HashMap`, `HashSet`, `BTreeMap`, or `BTreeSet` from semantics rather than familiarity.",
+   "starterPrompt": "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports range-like prefix reviews.",
+   "prompts": [
+    "Which workload is really key-value association?",
+    "Which workload is only membership and deduplication?",
+    "Which workload needs deterministic iteration order as part of the external contract?",
+    "Which choice is about ordering rather than expected lookup speed?"
+   ],
+   "acceptanceCriteria": [
+    "You choose `HashMap` for the unordered key-value counter.",
+    "You choose `HashSet` for membership and deduplication.",
+    "You choose an ordered tree variant when stable sorted iteration is part of the boundary contract.",
+    "You justify the structure in operational terms rather than only by naming the type."
+   ],
+   "hints": [
+    "Ask whether order is part of the job before defaulting to a hash table.",
+    "If the value is just 'present or absent,' a set is usually the clearer structure."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Remove duplicate lookups with Entry API",
+   "objective": "Read a read-modify-write path and replace repeated lookup logic with a single-entry update path.",
+   "starterPrompt": "You inherit a counter update that does `contains_key`, then `get_mut`, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
+   "prompts": [
+    "What duplicate work is the original shape doing?",
+    "Which `entry` helper best fits: `or_insert`, `or_default`, or `and_modify`?",
+    "What changes if the caller already owns the key versus only borrows it?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that the original code repeats key hashing and bucket lookup work.",
+    "You choose an Entry API shape that expresses the update in one path.",
+    "You call out the difference between an owned insert path and a borrowed read path precisely."
+   ],
+   "hints": [
+    "Think in terms of 'one key, one update path.'",
+    "Entry API is especially valuable when mutation depends on presence or absence."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement borrowed lookup for owned string keys",
+   "objective": "Use borrowed lookup on a string-keyed map or set without allocating a fresh `String` on the read path.",
+   "starterPrompt": "Implement one or both helpers: `fn route_count(counts: &HashMap<String, usize>, route: &str) -> usize` and `fn is_active(active: &HashSet<String>, route: &str) -> bool`.",
+   "prompts": [
+    "Keep the lookup parameter as `&str`.",
+    "Do not allocate `route.to_string()` in the lookup path.",
+    "Return a copied numeric result or a boolean result, not a borrowed reference from the helper."
+   ],
+   "acceptanceCriteria": [
+    "The lookup parameter stays borrowed as `&str`.",
+    "The implementation uses borrowed lookup such as `get(route)` or `contains(route)`.",
+    "The helper does not allocate a fresh owned string just to read the collection."
+   ],
+   "hints": [
+    "String-keyed maps and sets usually already support the borrowed lookup you want.",
+    "The return type can stay small and owned even when the lookup itself borrows."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Make output deterministic on purpose",
+   "objective": "Repair a test or operator-facing render path that accidentally depends on hash iteration order.",
+   "starterPrompt": "A snapshot test iterates a `HashMap<String, usize>` directly and intermittently changes order across runs. Refactor the render path.",
+   "prompts": [
+    "Should the internal storage stay hashed while the render path sorts or projects?",
+    "Would `BTreeMap` be simpler if every caller wants stable order anyway?",
+    "What tradeoff are you accepting between update behavior and output behavior?"
+   ],
+   "acceptanceCriteria": [
+    "You stop treating hash iteration order as stable.",
+    "You propose either sorting at the boundary or using `BTreeMap` as the primary representation when order is always required.",
+    "You justify the tradeoff in terms of contract clarity, not only making tests pass."
+   ],
+   "hints": [
+    "Stable order is a data-structure choice or a render-step choice. Pick one deliberately.",
+    "If the only place that needs order is output, a projection step is often enough."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Separate owned update paths from borrowed read paths",
+   "objective": "Explain the stable standard-library tradeoff between Entry API and borrowed string lookup.",
+   "starterPrompt": "You are counting borrowed request routes as `&str`. A teammate writes `counts.entry(route.to_string()).or_insert(0)`. Review whether that is correct, what it optimizes, and what it still costs.",
+   "prompts": [
+    "What duplicate work does Entry remove?",
+    "What cost remains on the borrowed string path?",
+    "When is that still the right design, and when would you revisit it?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that Entry removes duplicate table lookups on the update path.",
+    "You explicitly note that `route.to_string()` still allocates an owned key.",
+    "You describe at least one case where the design is acceptable and one case where the remaining allocation may matter enough to revisit."
+   ],
+   "hints": [
+    "This is a good senior-level distinction: fewer lookups is not the same thing as zero allocation.",
+    "Do not answer with slogans like `Entry is always faster.`"
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose a hasher and threat model deliberately",
+   "objective": "Practice the performance-versus-resilience tradeoff behind custom hashers.",
+   "starterPrompt": "You are reviewing two systems: an internal analytics worker keyed by trusted numeric IDs, and an internet-facing API gateway keyed by client-controlled strings. Decide whether either should move away from the default hasher.",
+   "prompts": [
+    "Which workload is trusted and measured enough to justify experimentation?",
+    "Which workload should treat collision behavior as part of its threat model?",
+    "What benchmark or observability data would you require before approving a hasher change?",
+    "What documentation note belongs in the code review if the hasher changes?"
+   ],
+   "acceptanceCriteria": [
+    "You keep the public, attacker-controlled path conservative unless there is a very strong reason not to.",
+    "You describe the trusted internal path as a candidate for measurement rather than automatic change.",
+    "You name at least one production signal such as CPU profile, allocation profile, p99 latency, or collision-sensitive behavior.",
+    "You document the trust boundary and tradeoff clearly."
+   ],
+   "hints": [
+    "Hasher choice is partly a security decision and partly a performance decision.",
+    "A faster internal benchmark is not enough if the public threat model changed underneath it."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is `get(\"key\")` on a `HashMap<String, V>` often better than `get(&\"key\".to_string())`?",
+  "What does the Entry API optimize, and what does it not magically optimize away?",
+  "When is a `HashSet<T>` clearer than `HashMap<T, bool>`?",
+  "Why is `HashMap` iteration order the wrong thing to rely on for stable output?",
+  "What extra question appears the moment you consider a custom hasher on a public boundary?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Entry update, borrowed lookup, stable render",
+  "filename": "hash_maps_lab.rs",
+  "runKey": "ch11_ex_hash_maps_lab",
+  "expectedOutput": "api = Some(2)\nsorted = api=2,billing=1",
+  "initialCode": "use std::collections::{BTreeMap, HashMap};\n\nfn record_owned(counts: &mut HashMap<String, usize>, route: String) {\n    if counts.contains_key(&route) {\n        let next = counts[&route] + 1;\n        counts.insert(route, next);\n    } else {\n        counts.insert(route, 1);\n    }\n}\n\nfn lookup(counts: &HashMap<String, usize>, route: &str) -> Option<usize> {\n    counts.get(&route.to_string()).copied()\n}\n\nfn render_sorted(counts: &HashMap<String, usize>) -> String {\n    counts\n        .iter()\n        .map(|(route, count)| format!(\"{}={}\", route, count))\n        .collect::<Vec<_>>()\n        .join(\",\")\n}\n\nfn main() {\n    let mut counts = HashMap::new();\n    record_owned(&mut counts, String::from(\"api\"));\n    record_owned(&mut counts, String::from(\"billing\"));\n    record_owned(&mut counts, String::from(\"api\"));\n\n    println!(\"api = {:?}\", lookup(&counts, \"api\"));\n    println!(\"sorted = {}\", render_sorted(&counts));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 06, 07, and 10",
+  "Opening scenario",
+  "A reliable review order",
+  "Mental model",
+  "Core concepts",
+  "HashMap fundamentals",
+  "Ownership of keys and values",
+  "Borrowed lookups",
+  "Entry API",
+  "Custom hashers",
+  "BTreeMap vs HashMap",
+  "Stable ordering considerations",
+  "Hashing performance and denial-of-service tradeoffs",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: owned key handoff plus Entry API",
+  "Example 2: borrowed lookup for reads, ordered projection for output",
+  "Exercises",
+  "Next chapter",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Hash maps and sets sit on critical lookup paths. This chapter covers key ownership, borrowed lookup, entry-based updates, deterministic output, and hashing policy for production data access.",
+  "Chapter 06 explained durable handles versus temporary borrows in collections. Chapter 07 separated moves, copies, and clones. Chapter 10 covered contiguous storage and allocation-aware API shape. This chapter applies those same design instincts to hashed and ordered associative c",
+  "An ingress service maintains route counters, active feature flags, in-memory indexes, and deterministic operator-facing configuration dumps. The business requirement is explicit key ownership and lookup policy: own normalized keys in collections, borrow for read paths, update wit",
+  "Use HashMap when you want expected fast key lookup and update, and key order is not part of the external contract. Use HashSet when the value is really membership and deduplication rather than key-value association.",
+  "Sets are not a secondary topic. In production code they often replace improvised boolean maps, duplicate filtering passes, or repeated linear searches over vectors. If the question is “have I seen this key already?”, a set is usually the right structure.",
+  "The whole API divides cleanly along one line: which calls move data across the table boundary and which only borrow across it. Insert is the one inbound move; remove and into_iter are the outbound moves; everything on the read path borrows and leaves the table owning what it owne",
+  "The same table also has two paths that move data back out:",
+  "That ownership story matters operationally. If your parser already produced an owned route key, the map can take it directly. If your request path only has a borrowed `&str`, you can often look up by borrow without allocating, but storing a new entry still requires some owned key",
+  "The reason a table of owned String keys accepts a borrowed &str query is a small trait relationship rather than magic: the lookup methods are generic over a borrowed form of the key, and String can be borrowed as str with matching equality and hashing. The diagram shows that brid",
+  "One of Rust's best collection features is borrowed lookup. A HashMap can be queried by &str. A HashSet can test membership with &str.",
+  "This is usually what you want on the read path. Store owned strings once. Query them by borrowed slices. That avoids allocating just to answer a membership or lookup question. For standard string keys, the equality and hashing behavior line up the way you expect.",
+  "The Entry API is the right tool when one key path does read-modify-write work: counters, last-seen timestamps, aggregation, or “initialize if absent, then mutate.” It removes duplicate table lookups and makes the intent obvious.",
+  "There is one nuance worth keeping explicit: with ordinary stable std Entry APIs, the entry key itself is owned. If your key path is a borrowed `&str`, `entry(route.to_owned())` still allocates the owned key. That can still be the right design, but do not pretend the allocation di",
+  "The practical rule is simple: Entry is perfect when the caller already owns the key. Borrowed lookup is perfect when you only need to read. Treat those as two different fast paths.",
+  "A standard library hash map has a third type parameter for the build hasher. In ordinary code you rarely need to name it. The default choice uses randomized state and is a strong default for public or untrusted inputs because collision behavior is part of your operational risk su",
+  "Faster non-randomized or domain-specific hashers can be a good fit for trusted internal workloads with measured hot paths, especially when keys are small and frequent. But that is an engineering decision, not a reflex. Benchmark first. Document the trust boundary. Keep security p",
+  "The choice between the four collections is two yes-or-no questions, not a performance debate. First: do you need a value per key, or only membership? That picks map versus set. Second: does anything downstream depend on iteration order? That picks the hashed variant versus the or",
+  "If operators, tests, logs, snapshots, or downstream systems care about output order, plain hash iteration is the wrong boundary contract. Choose an ordered structure or sort at the render edge.",
+  "A common production pattern is this: keep the hot mutable index in a HashMap, then project into a BTreeMap or a sorted vector only when you emit deterministic output. If ordering is needed everywhere, start ordered.",
+  "Every one of these languages gives you a dictionary and a set, so the data structure is not the new part. What changes in Rust is who owns the key after you insert it, and the fact that reading does not have to build a key at all. The cards below name the one mental-model shift e",
+  "The collection choice is not only about asymptotic lookup speed. In real systems it also shapes ownership, determinism, test stability, memory pressure, and how resilient the service is to hostile key patterns.",
+  "When the caller already owns the key, Entry is the clean update path: one table lookup, direct mutation, and no extra duplicate logic.",
+  "What to look at: entry(route) is a single trip into the table. If the slot is missing it is created with or_insert(0); either way you get a mutable reference and add one in place. There is no separate contains_key branch and no second lookup. Follow the two paths in the diagram, ",
+  "The route key is moved into the map. The returned entry reference mutates the stored counter in place.",
+  "No duplicated `contains_key` branch, no second hash-table lookup, and no ambiguity about who owns the key.",
+  "Store owned strings once. Query them by borrow. Project into an ordered structure only when stable render order matters.",
+  "What to look at: this is a pipeline with three distinct stages. The reads in the middle, get(\"api\") and contains(\"worker\"), borrow the owned-string keys without allocating. Only at the render edge does into_iter().collect() move the entries into a BTreeMap so output is determinis",
+  "get(\"api\") and contains(\"worker\") do not need fresh owned strings.",
+  "The set answers membership directly. There is no need for a parallel boolean map when membership is the only question.",
+  "Converting to a BTreeMap gives deterministic output without pretending hash iteration order was stable all along."
+ ],
+ "codeSamples": {
+  "hash_maps_sets_entry_api": "use std::collections::HashMap;\n\nfn record_hit(counts: &mut HashMap<String, usize>, route: String) {\n    let slot = counts.entry(route).or_insert(0);\n    *slot += 1;\n}\n\nfn main() {\n    let mut counts = HashMap::with_capacity(4);\n\n    record_hit(&mut counts, String::from(\"api\"));\n    record_hit(&mut counts, String::from(\"api\"));\n    record_hit(&mut counts, String::from(\"billing\"));\n\n    println!(\"api = {}\", counts.get(\"api\").copied().unwrap_or(0));\n    println!(\"billing = {}\", counts.get(\"billing\").copied().unwrap_or(0));\n    println!(\"routes = {}\", counts.len());\n}",
+  "hash_maps_sets_borrowed_lookup_ordered": "use std::collections::{BTreeMap, HashMap, HashSet};\n\nfn main() {\n    let mut active = HashSet::new();\n    active.insert(String::from(\"api\"));\n    active.insert(String::from(\"worker\"));\n\n    let mut counts = HashMap::new();\n    counts.insert(String::from(\"worker\"), 3);\n    counts.insert(String::from(\"api\"), 2);\n    counts.insert(String::from(\"billing\"), 1);\n\n    let api_count = counts.get(\"api\").copied().unwrap_or(0);\n    let has_worker = active.contains(\"worker\");\n\n    let ordered: BTreeMap<_, _> = counts.into_iter().collect();\n    let ordered_text = ordered\n        .iter()\n        .map(|(name, count)| format!(\"{}={}\", name, count))\n        .collect::<Vec<_>>()\n        .join(\",\");\n\n    println!(\"api count = {}\", api_count);\n    println!(\"has worker = {}\", has_worker);\n    println!(\"ordered = {}\", ordered_text);\n}"
+ },
+ "labReferenceSolution": null
+}

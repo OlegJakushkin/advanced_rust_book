@@ -1,0 +1,214 @@
+{
+ "chapterKey": "ch36",
+ "num": 36,
+ "title": "Distributed Tasks Profiling",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Design metrics for worker saturation on purpose",
+   "objective": "Choose a small metric set that distinguishes healthy throughput from hidden backlog and retry amplification.",
+   "starterPrompt": "You run three worker pools: fast CPU tasks, slow GPU tasks, and a reducer pool. Decide which counters, gauges, and histograms each pool should expose.",
+   "prompts": [
+    "Which counters describe admission, completion, retries, and duplicate suppression?",
+    "Which gauges describe visible backlog, in-flight work, and oldest message age?",
+    "Which histograms describe queue wait, run time, and end-to-end latency?",
+    "Which labels would create dangerous cardinality if you added them mechanically?"
+   ],
+   "acceptanceCriteria": [
+    "You include at least one counter, one gauge, and one histogram family with a clear reason.",
+    "You distinguish worker saturation from queue saturation explicitly.",
+    "You name at least one label you would forbid, such as task ID or trace ID."
+   ],
+   "hints": [
+    "A good metric set tells you whether the pain is admission, execution, or replay.",
+    "Low-cardinality aggregate signals belong in metrics. Per-task identity belongs elsewhere."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Trace a tail-latency incident across logs, metrics, and traces",
+   "objective": "Practice reconstructing one slow path when mean handler time still looks calm.",
+   "starterPrompt": "Metrics show queue age rising. Handler p50 is flat. A trace shows one task waited 900 ms before claim and only 70 ms in the handler. Logs show the same task retried twice before success.",
+   "prompts": [
+    "Which system layer is actually dominating end-to-end latency here?",
+    "Which metric should have alerted earlier than handler p50?",
+    "Which log fields or trace fields make the retry path attributable to one task?",
+    "What first mitigation would you test before optimizing handler CPU?"
+   ],
+   "acceptanceCriteria": [
+    "You identify queue wait or replay, not handler CPU, as the dominant layer.",
+    "You choose at least one metric and one identity field that make the incident explainable.",
+    "You propose one mitigation tied to the real bottleneck, such as worker budget, retry cap, or queue split."
+   ],
+   "hints": [
+    "If queue wait is already dominant, a faster handler may not move the p99 enough to matter.",
+    "The most useful answer names one task identity and one queue identity."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a retry-storm window summary",
+   "objective": "Compute worker saturation, retry rate, and a storm flag from one profiling window.",
+   "starterPrompt": "Implement helpers over `WindowStats` so one profiling sample can report saturation, retry rate, and whether the window already looks storm-like.",
+   "prompts": [
+    "Use worker saturation as busy workers divided by total workers.",
+    "Use retry rate as retried work divided by claimed work.",
+    "Make the storm rule explicit with one saturation threshold and one retry-rate threshold.",
+    "Keep the helper side-effect free so the lab stays easy to test."
+   ],
+   "acceptanceCriteria": [
+    "The helper computes saturation and retry rate correctly.",
+    "The storm rule is visible in code rather than hidden in prose.",
+    "The runnable lab prints the expected saturation, retry rate, and storm flag."
+   ],
+   "hints": [
+    "This is a metric and policy drill, not a transport drill.",
+    "The point is to make the threshold logic reviewable."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a profiling surface that hides queue latency",
+   "objective": "Add the missing instrumentation and IDs so traces and logs can explain backlog instead of only handler execution.",
+   "starterPrompt": "A worker system emits handler spans but never records enqueue time, claim time, or the queue name in any structured field.",
+   "prompts": [
+    "Which timestamps belong in the task envelope or trace events?",
+    "Which log fields should appear on both the enqueue and worker side?",
+    "Would you model queue wait as one explicit span or as derived time between two events?",
+    "How would you keep the extra data low-cost enough for the hot path?"
+   ],
+   "acceptanceCriteria": [
+    "You add or describe enqueue and claim visibility explicitly.",
+    "You include at least one stable correlation field such as task ID or trace ID.",
+    "You mention one cost-control tactic, such as aggregate metrics plus sampled detailed traces."
+   ],
+   "hints": [
+    "You do not need all detail at full volume. You do need enough detail to explain one incident path.",
+    "If the queue name is invisible, multi-queue tail analysis gets much harder."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Profile a task graph by critical path instead of average stage time",
+   "objective": "Replace stage-local averages with graph-aware signals that reveal reducer lag and join bottlenecks.",
+   "starterPrompt": "A DAG pipeline shows acceptable mean time in every worker stage, yet end-to-end time keeps growing as fan-out width increases.",
+   "prompts": [
+    "Which graph signal should you add: critical-path time, frontier size, reducer backlog, or all three?",
+    "Where does queue wait belong in the graph accounting?",
+    "How would you prove a join stage is the real bottleneck rather than one upstream worker?",
+    "What would you sample or trace to keep the graph story attributable?"
+   ],
+   "acceptanceCriteria": [
+    "You include at least one graph-aware signal beyond per-stage averages.",
+    "You keep queue wait inside the graph story rather than outside it.",
+    "You propose one attribution field or trace pattern for fan-out and fan-in nodes."
+   ],
+   "hints": [
+    "A graph can be locally healthy and globally slow at the same time.",
+    "The critical path is the first honest simplification."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Capacity-plan a distributed worker fleet with retries and slow-stage isolation",
+   "objective": "Choose queue splits, worker budgets, and observability targets from arrival rate, service time, and failure profile.",
+   "starterPrompt": "You are designing `ingest -> parse -> enrich -> store -> notify`, with 180 task submissions per second, one long-running specialist stage, and a requirement that oldest visible age stay under 2 seconds in steady state.",
+   "prompts": [
+    "Which stage deserves its own queue or worker pool instead of sharing one global budget?",
+    "How would you include retry traffic in the worker estimate?",
+    "Which metrics would tell you that the 2-second oldest-age budget is about to fail?",
+    "What drain-time or shutdown goal belongs in the same capacity plan?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least one queue or worker split deliberately.",
+    "You include retries in the capacity story instead of treating them as rare noise.",
+    "You mention at least three observability hooks such as oldest visible age, busy workers, retry rate, or reducer backlog.",
+    "You include one shutdown or drain-time target alongside steady-state throughput."
+   ],
+   "hints": [
+    "Capacity planning without replay traffic usually underestimates the real budget.",
+    "Oldest visible age is often a better operational target than average queue depth alone."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is queue latency often a better first incident signal than mean handler time?",
+  "What makes a retry storm a load-amplification problem instead of only an error-rate problem?",
+  "Why should task ID and trace ID stay out of metric labels but stay present in logs and traces?",
+  "What does critical-path time explain that stage-local averages do not explain?",
+  "Why should capacity planning include drain time and retry traffic, not only steady-state throughput?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Retry-storm window summary",
+  "filename": "retry_storm_window_lab.rs",
+  "runKey": "ch36_ex_retry_storm_window",
+  "expectedOutput": "saturation = 0.90\nretry rate = 0.40\nstorm = true",
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct WindowStats {\n    claimed: u32,\n    retried: u32,\n    busy_workers: u32,\n    total_workers: u32,\n}\n\nfn saturation(_stats: &WindowStats) -> f64 {\n    0.0\n}\n\nfn retry_rate(_stats: &WindowStats) -> f64 {\n    0.0\n}\n\nfn retry_storm(_stats: &WindowStats) -> bool {\n    false\n}\n\nfn main() {\n    let stats = WindowStats {\n        claimed: 100,\n        retried: 40,\n        busy_workers: 9,\n        total_workers: 10,\n    };\n\n    println!(\"saturation = {:.2}\", saturation(&stats));\n    println!(\"retry rate = {:.2}\", retry_rate(&stats));\n    println!(\"storm = {}\", retry_storm(&stats));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 25, 26, 30, 31, and 35",
+  "Opening scenario",
+  "At a glance",
+  "Operator questions to keep asking",
+  "Mental model",
+  "Core concepts",
+  "End-to-end latency, queue latency, and worker saturation",
+  "Retry storms and tail latency",
+  "Distributed tracing",
+  "Metrics design",
+  "Correlating logs, metrics, and traces",
+  "Profiling task graphs",
+  "Capacity planning",
+  "How this looks coming from another language",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: end-to-end latency, queue latency, saturation, and retry rate",
+  "Example 2: profile a task graph by critical path",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "When work travels through brokers, leases, worker pools, and reducers, &ldquo;slow&rdquo; stops being a single number. This chapter is about taking the latency a user actually feels and splitting it into the layers that produced it — queue wait, worker execution, retries, fan-out",
+  "Chapter 25 covered Tokio runtime behavior, Chapter 26 covered task orchestration and backpressure, Chapter 30 covered at-least-once broker delivery, Chapter 31 covered leases and distributed task graphs, and Chapter 35 covered profiling discipline. This chapter applies those idea",
+  "A media-processing pipeline starts getting complaints that uploads take &ldquo;forever&rdquo; to finish, yet every dashboard the team trusts looks healthy. Handler time is flat. CPU is moderate. Error rates are normal. The handler traces show a job running in a few hundred millis",
+  "The business requirement is to profile that whole trip, not just the handler. A submitted job waits in a queue, gets claimed under a lease, runs in a worker, calls a downstream service, possibly retries, and only then commits a durable completion record. Each of those segments ha",
+  "Read the path below as a stopwatch with several intermediate splits. The arrows are where time accumulates; the labels underneath name the metric that watches each split. The single most common mistake is to stare at handler run while the real cost is sitting in queue wait or hid",
+  "These three measurements are the backbone of everything else in the chapter, and they answer different questions. End-to-end latency tells you what the user feels. Queue latency tells you how long work waited before anyone touched it. Worker saturation tells you whether there is ",
+  "The practical rule is short enough to keep on a sticky note: if end-to-end latency rises while handler run time stays flat, the time is being spent before the handler, not inside it. The first question is queueing or admission — backlog, lease contention, a closed pool — not inne",
+  "A retry storm is a feedback loop, and that loop is what makes it dangerous. Some tasks start failing, the broker redelivers them, the redeliveries add to arrival rate, the higher arrival rate pushes workers past saturation, saturation causes more timeouts, and the timeouts produc",
+  "The good news is that a storm announces itself before it becomes catastrophic. Retry rate rises, queue age rises, worker saturation rises, and the oldest visible message drifts far above the median — usually in that order. If those four signals share a dashboard, you get minutes ",
+  "In a single process, a tracing library can stitch spans together automatically because they share a call stack. The moment work crosses a broker, that stack is gone — the worker that picks up a message has no idea where it came from unless the message itself carries the context. ",
+  "The envelope below is the minimum that makes correlation possible. The two fields most teams forget are the ones that matter most under load: attempt lets you separate the first try from the third when a storm hits, and parent_task_id is what lets a fan-out graph reassemble itsel",
+  "Three shapes of metric answer three different kinds of question, and choosing the wrong shape is a common way to end up with dashboards that cannot answer the question you actually have. Counters answer &ldquo;how much of this happened?&rdquo; Gauges answer &ldquo;what is the lev",
+  "Metrics, traces, and logs are three views of the same incident, and they are only useful together if a single identity threads through all three. The checklist below is really one idea repeated: pick a small set of fields and a shared timestamp vocabulary, then carry them everywh",
+  "That correlation buys you a calm, repeatable order of investigation under pressure. The point of the sequence below is the direction of travel: you start from the aggregate that paged you and narrow toward a single record, instead of reading four tools in parallel and trying to m",
+  "When a job is a DAG rather than a single handler, the intuition that &ldquo;total time is the sum of the stages&rdquo; quietly becomes wrong. Stages that run in parallel overlap, so adding their durations double-counts time the system never spent. The number that predicts complet",
+  "Look at the graph below. After parse, the work forks into enrich and store, which run at the same time, and notify waits for both. The completion time is governed by whichever fork is slower, not by their sum. That is exactly what the formula under the diagram computes: the max o",
+  "Capacity planning for a worker fleet rests on two old results that are worth keeping in your head. The first is Little&rsquo;s Law: the average number of items in flight equals arrival rate times the time each item spends in the system. The second is the queueing cliff: as utiliz",
+  "The two lines below are deliberately rough planning rules, not a simulator. The first sizes a pool from how fast work arrives and how long each task runs; the second estimates how much work is in flight at any moment. The trap to avoid is plugging in happy-path numbers — arrival ",
+  "Most senior engineers arrive with a profiling reflex that worked well on their previous stack and quietly misleads them here. The shift is the same in every case: the expensive thing has moved out of one process and into the spaces between processes — queues, leases, retries, and",
+  "The fastest way to misprofile a distributed worker system is to measure only handler CPU and call the rest “overhead.” Queue age, retries, fan-in, and replay often are the system.",
+  "Both examples are deliberately small enough to read in one sitting and to run in the editor below them. The first builds the four-signal window an operator should see at a glance; the second computes a critical path through a DAG. Run each one to confirm the baseline output, then",
+  "The point is not one magic metric. The point is that queue wait, run time, and retry pressure belong in one window summary before the incident page fills with guesses.",
+  "What to look at: the code takes one batch of completed-task samples and folds it down into four headline numbers. Follow the data flow in the diagram first — raw samples in on the left, four independent reductions in the middle (percentiles for the latencies, a ratio for saturati",
+  "The four reductions then converge back into a single operator window:",
+  "Queue wait plus run time gives a far better first diagnostic than handler time alone.",
+  "The queue p95 is often the first overload signal visible to operators.",
+  "Busy workers divided by total workers is simple, but it becomes useful only when read beside queue age.",
+  "Retry rate belongs in the same window because retries are load, not only failure bookkeeping.",
+  "One graph stage can be locally fast and still sit on the longest path after queue time and dependency lag are both counted.",
+  "What to look at: this is the graph from the concepts section above, but now each stage carries two costs instead of one — the time it waited in its queue plus the time it actually ran. The algorithm walks the DAG and, for every node, keeps the longest finishing time among its par"
+ ],
+ "codeSamples": {
+  "distributed_profiling_latency_window": "#[derive(Debug, Clone, Copy)]\nstruct WindowStats {\n    claimed: u32,\n    completed: u32,\n    retried: u32,\n    queue_p95_ms: u64,\n    run_p95_ms: u64,\n    busy_workers: u32,\n    total_workers: u32,\n}\n\nfn end_to_end_p95_ms(stats: &WindowStats) -> u64 {\n    stats.queue_p95_ms + stats.run_p95_ms\n}\n\nfn worker_saturation(stats: &WindowStats) -> f64 {\n    stats.busy_workers as f64 / stats.total_workers as f64\n}\n\nfn retry_rate(stats: &WindowStats) -> f64 {\n    stats.retried as f64 / stats.claimed as f64\n}\n\nfn main() {\n    let stats = WindowStats {\n        claimed: 120,\n        completed: 110,\n        retried: 18,\n        queue_p95_ms: 140,\n        run_p95_ms: 320,\n        busy_workers: 17,\n        total_workers: 20,\n    };\n\n    println!(\"e2e p95 = {}\", end_to_end_p95_ms(&stats));\n    println!(\"queue p95 = {}\", stats.queue_p95_ms);\n    println!(\"worker saturation = {:.2}\", worker_saturation(&stats));\n    println!(\"retry rate = {:.2}\", retry_rate(&stats));\n}",
+  "distributed_profiling_task_graph": "type StageId = usize;\n\n#[derive(Debug)]\nstruct Stage {\n    name: &'static str,\n    deps: Vec<StageId>,\n    queue_ms: u64,\n    run_ms: u64,\n}\n\nfn critical_path(stages: &[Stage]) -> (u64, &'static str) {\n    let mut totals = vec![0_u64; stages.len()];\n    let mut best = 0_u64;\n    let mut tail = \"none\";\n\n    for (id, stage) in stages.iter().enumerate() {\n        let upstream = stage\n            .deps\n            .iter()\n            .map(|&dep| totals[dep])\n            .max()\n            .unwrap_or(0);\n\n        totals[id] = upstream + stage.queue_ms + stage.run_ms;\n\n        if totals[id] >= best {\n            best = totals[id];\n            tail = stage.name;\n        }\n    }\n\n    (best, tail)\n}\n\nfn main() {\n    let stages = vec![\n        Stage {\n            name: \"fetch\",\n            deps: vec![],\n            queue_ms: 20,\n            run_ms: 70,\n        },\n        Stage {\n            name: \"parse\",\n            deps: vec![0],\n            queue_ms: 30,\n            run_ms: 90,\n        },\n        Stage {\n            name: \"enrich\",\n            deps: vec![1],\n            queue_ms: 40,\n            run_ms: 120,\n        },\n        Stage {\n            name: \"store\",\n            deps: vec![1],\n            queue_ms: 10,\n            run_ms: 60,\n        },\n        Stage {\n            name: \"notify\",\n            deps: vec![2, 3],\n            queue_ms: 15,\n            run_ms: 30,\n        },\n    ];\n\n    let (critical_path_ms, tail_stage) = critical_path(&stages);\n    let total_queued: u64 = stages.iter().map(|stage| stage.queue_ms).sum();\n\n    println!(\"critical path ms = {}\", critical_path_ms);\n    println!(\"tail stage = {}\", tail_stage);\n    println!(\"queued ms = {}\", total_queued);\n}"
+ },
+ "labReferenceSolution": null
+}

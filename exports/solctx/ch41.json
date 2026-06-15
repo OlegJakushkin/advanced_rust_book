@@ -1,0 +1,217 @@
+{
+ "chapterKey": "ch41",
+ "num": 41,
+ "title": "Error Handling in Large Systems",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose Option, Result, panic, or process abort from the caller's ability to act",
+   "objective": "Practice separating ordinary absence, recoverable failure, and broken invariants before one error type grows into a junk drawer.",
+   "starterPrompt": "Classify four events: an optional request header is missing, a database call times out, a user attempts an invalid state transition, and an internal invariant says two states cannot coexist but now both do.",
+   "prompts": [
+    "Which event is local absence best modeled as Option first?",
+    "Which events are recoverable and should become Result with a typed error?",
+    "Which event is an invariant break more honestly modeled as panic or crash policy?",
+    "Where would you translate the typed error if the next boundary is HTTP, AMQP, or FFI?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish Option, Result, and panic in operational terms rather than by style.",
+    "You classify at least one domain failure separately from one infrastructure failure.",
+    "You explain one translation step at a boundary instead of assuming the same contract survives everywhere unchanged."
+   ],
+   "hints": [
+    "Ask first what the caller can still do next.",
+    "If the process state is broken, the question may no longer be 'how do I return an error?'"
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Separate domain and infrastructure errors in one service path",
+   "objective": "Read one mixed error surface and decide which variants belong to the domain layer, which belong to adapters, and which belong to top-level translation.",
+   "starterPrompt": "A billing service currently returns `anyhow::Result<()>` from deep inside the domain model and mixes `invalid transition`, `SQL timeout`, and `missing queue channel` into one free-form message chain.",
+   "prompts": [
+    "Which failures belong in a domain error enum and why?",
+    "Which failures belong in infrastructure or adapter errors and why?",
+    "Where should anyhow still remain useful after the separation?",
+    "Which caller actions become easier once the surface is typed again?"
+   ],
+   "acceptanceCriteria": [
+    "You move at least one business-rule failure out of the infrastructure bucket.",
+    "You keep anyhow or an equivalent aggregated error layer only where pattern matching has stopped being useful.",
+    "You name at least one caller action that typed separation enables, such as retry, reject, or dead-letter."
+   ],
+   "hints": [
+    "A typed contract is most useful where the next layer still branches on it.",
+    "A service shell can still aggregate rich context after lower layers stay typed."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Convert panic-based parsing into typed errors",
+   "objective": "Replace unwrap-driven control flow with a small typed contract that distinguishes missing input from invalid input.",
+   "starterPrompt": "Refactor `parse_port` so it returns `Result<u16, ConfigError>` with separate `MissingPort` and `InvalidPort` variants instead of panicking.",
+   "prompts": [
+    "Keep the error type small and specific.",
+    "Use `ok_or` or an equivalent explicit missing-input branch.",
+    "Use `map_err` or an equivalent parse-failure branch.",
+    "Return the parsed port directly on success instead of logging inside the helper."
+   ],
+   "acceptanceCriteria": [
+    "The parser no longer panics for routine invalid input.",
+    "Missing and malformed input are distinguishable in the return type.",
+    "The runnable lab prints the expected missing, invalid, and success cases."
+   ],
+   "hints": [
+    "This is the same contract repair many real config loaders need first.",
+    "A small enum is often enough to make the whole caller path calmer."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Add context to async task propagation",
+   "objective": "Repair a spawned async path so join failure, inner failure, and boundary context stay separate and reviewable.",
+   "starterPrompt": "You inherit `tokio::spawn(async move { do_work(job).await })` followed by `.await?`, but the resulting error text never says whether the task failed to join or the inner operation failed after joining.",
+   "prompts": [
+    "Where should you add context before the spawn boundary and after the await?",
+    "Why is `JoinHandle<Result<T, E>>` a two-layer error surface instead of one?",
+    "Which fields belong in the context message: job ID, queue name, attempt, resource name?",
+    "When should cancellation be modeled distinctly from ordinary inner failure?"
+   ],
+   "acceptanceCriteria": [
+    "You describe the join layer and the inner error layer separately.",
+    "You add at least one useful context message at the operation layer and one at the task layer.",
+    "You explain one case where cancellation or shutdown should not be collapsed into a generic timeout string."
+   ],
+   "hints": [
+    "A task panic is not the same incident as a typed adapter or domain failure.",
+    "Context should name the operation, not just repeat the same low-level noun again."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Translate a Rust error contract across FFI without leaking internals",
+   "objective": "Replace a foreign-facing Rust-shaped error surface with one the other runtime can actually consume and stabilize.",
+   "starterPrompt": "A native plugin boundary currently exposes `pub extern \"C\" fn run(ptr: *const u8, len: usize) -> anyhow::Result<u64>`.",
+   "prompts": [
+    "Which public boundary types should replace anyhow::Result here?",
+    "How will null input, invalid UTF-8, and internal failure be distinguished?",
+    "Which error detail should stay inside the Rust-side log or trace instead of escaping directly over the ABI?",
+    "How would you test the status boundary with a tiny native harness?"
+   ],
+   "acceptanceCriteria": [
+    "You translate the boundary into status codes, out parameters, or another explicit ABI-safe contract.",
+    "You distinguish at least two foreign-visible failure classes clearly.",
+    "You keep richer Rust internals behind the wrapper instead of leaking them as the public ABI story."
+   ],
+   "hints": [
+    "Another runtime cannot safely consume your internal anyhow chain as if it were a stable public type.",
+    "Boring ABI contracts are a feature, not a failure of imagination."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design one error contract for HTTP, queue workers, and a native plugin",
+   "objective": "Make retryability, caller action, boundary translation, and logging discipline explicit across several large-system seams at once.",
+   "starterPrompt": "You are designing `HTTP request -> domain check -> async worker -> database -> native risk plugin -> publish outcome`, and you want another team to operate the failure modes without reverse-engineering your code.",
+   "prompts": [
+    "Which failures should be visible as domain errors, infrastructure errors, and top-level service errors?",
+    "Which failures are retryable, which are terminal, and where should that policy live?",
+    "Which boundary should log the error, and which boundary should only translate and return it?",
+    "What trace or log fields belong on every failure path to make the incident reconstructable later?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least one domain error, one infrastructure error, and one translated service or transport contract.",
+    "You make retryable versus terminal classification explicit instead of relying on message text.",
+    "You identify one boundary that logs and another that only translates to avoid duplicate noise.",
+    "You mention at least two observability fields such as request ID, task ID, attempt, queue, or plugin call name."
+   ],
+   "hints": [
+    "A large-system error model is easier to operate when retry policy and logging policy are visible in different places on purpose.",
+    "The same failure should not need five log lines before an operator can tell what actually happened."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "When is Option enough, and when should the boundary promote absence into Result?",
+  "Why are domain errors and infrastructure errors worth keeping distinct even if both eventually become one HTTP response or one queue outcome?",
+  "What is the practical split between thiserror and anyhow in a large Rust system?",
+  "Why does a spawned task usually create a two-layer error surface rather than one?",
+  "Why should a boundary usually log once rather than at every layer that propagates the same error upward?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Replace panic-based parsing with typed errors",
+  "filename": "typed_error_lab.rs",
+  "runKey": "ch41_ex_typed_errors",
+  "expectedOutput": "missing = Err(MissingPort)\nbad = Err(InvalidPort)\nok = Ok(8080)",
+  "initialCode": "#[derive(Debug, PartialEq, Eq)]\nenum ConfigError {\n    MissingPort,\n    InvalidPort,\n}\n\nfn parse_port(raw: Option<&str>) -> Result<u16, ConfigError> {\n    let text = raw.unwrap();\n    Ok(text.parse::<u16>().unwrap())\n}\n\nfn main() {\n    println!(\"missing = {:?}\", parse_port(None));\n    println!(\"bad = {:?}\", parse_port(Some(\"oops\")));\n    println!(\"ok = {:?}\", parse_port(Some(\"8080\")));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 16, 17, 24, 28, 30, and 40",
+  "Opening scenario",
+  "A practical decision order",
+  "At a glance",
+  "Caller-action checklist",
+  "How to think about this coming from another language",
+  "Mental model",
+  "Core concepts",
+  "Choosing between Option, Result, and a typed enum",
+  "When to reach for thiserror and when to reach for anyhow",
+  "Adding context without burying the source",
+  "Recoverable versus unrecoverable failures",
+  "Errors that cross an async task boundary",
+  "Errors that cross a C ABI boundary",
+  "Keeping domain errors and infrastructure errors apart",
+  "Logging a failure once, at the right layer",
+  "Designing the error contract you expose to callers",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: separate domain and infrastructure errors with typed contracts",
+  "Example 2: add context across async boundaries without losing the source error",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "In a system with many layers, error handling stops being about formatting one message and becomes interface design. This chapter treats Rust errors as production contracts: how to keep domain failures, infrastructure failures, retry policy, and operator context distinct, and how ",
+  "Chapter 16 established domain invariants and domain errors. Chapter 17 introduced Result-first refactoring. Chapter 24 explained async state machines and await boundaries. Chapter 28 covered FFI translation. Chapter 30 covered retries and dead-letter policy at broker boundaries. ",
+  "Picture a multi-tenant billing platform. A request arrives over HTTP, the service publishes some internal work to a broker, it calls a native risk-scoring plugin over a C ABI, and it fans out a handful of async enrichment tasks before answering. A single charge can therefore fail",
+  "The requirement the team agrees on is one error policy per boundary. Domain errors stay in domain language and never mention SQL or TCP. Infrastructure errors stay actionable so a caller can retry or dead-letter. Retries are classified explicitly rather than guessed from a messag",
+  "Each of those five dependencies can fail differently. The return path collapses those failures back into a single caller-facing contract:",
+  "The in-browser editors simulate output so you can focus on contract shape. In a real Cargo project, the worked examples use ecosystem crates such as thiserror, anyhow, and tokio.",
+  "Most senior engineers do not arrive at Rust error handling with a blank slate; they arrive with an exception habit, a runtime habit, or an err-string habit. The shift that matters is not which crate to import. It is where failure becomes visible and who is responsible for decidin",
+  "These three are not interchangeable styles; they encode three different statements about a failure. An Option says a value may simply be absent and that absence is unremarkable. A Result says the operation can fail in a way the caller is expected to handle. A typed error enum goe",
+  "A reliable large-system rule is simple: if the caller needs classification, use a typed error. If the caller only needs one local branch on absence, Option is often enough. Promote absence into a typed Result exactly where the contract becomes meaningful.",
+  "These two crates are not competitors; they answer different questions and most production systems use both. The deciding factor is whether a downstream layer still needs to branch on the error. If it does, you want a named enum with named variants, and thiserror generates the ted",
+  "This is the usual operational split: typed enums when a downstream layer still branches on the error, rich context wrappers when the boundary is already top-level orchestration and the next action is mostly logging, surfacing, or exiting.",
+  "Context is the answer to the question an operator will ask at 3 a.m.: what was the system trying to do when this failed? A low-level error like \"file not found\" is true but useless on its own; wrapped with \"loading worker config\" it becomes diagnosable. The discipline is to add c",
+  "The dividing line is not how serious the failure feels; it is whether any caller, anywhere up the stack, has a sensible response. Bad input, a rejected business action, or one flaky dependency all have responses, so they belong in a Result. A violated invariant has no sensible re",
+  "A panic is not Rust's version of a normal business exception. It is the language saying the program's own assumptions are broken badly enough that continuing may be wrong.",
+  "When you spawn a task, you create two stacked failure layers, and a lot of bugs come from forgetting the outer one. The inner layer is whatever the task body returns: an IO error, a domain rejection, an anyhow::Error. The outer layer is the join result, which tells you whether th",
+  "The key lesson is that async failures usually have a task layer and an operation layer. Handle both deliberately instead of collapsing them into one generic timeout or one generic string.",
+  "A C ABI cannot carry a Rust enum, an anyhow::Error, or the unwinding that a panic implies; letting any of those escape across the boundary is undefined behavior, not a missed opportunity for richness. So the boundary becomes a deliberate narrowing: the rich error stays on the Rus",
+  "This is deliberately boring. That is a virtue. The richer Rust-side error chain should stay behind the wrapper where another Rust layer can still use it safely.",
+  "The #[unsafe(no_mangle)] attribute-wrapper syntax assumes the Rust 2024 edition (rustc 1.82 or newer). On older toolchains, write the bare #[no_mangle] attribute instead.",
+  "This is the single distinction that keeps a large error model from rotting. A domain error speaks the language of the business: an order is empty, a transition is invalid, a quota is exhausted. An infrastructure error speaks the language of the machinery: a row is missing, a conn",
+  "From that single classify-and-translate point, the service shapes the failure for whichever boundary comes next:",
+  "The most common logging mistake in a layered system is not too little logging; it is the same failure logged five times on its way up, each line slightly reworded, until the incident channel is a hall of mirrors. The cure is to pick the one layer where the failure becomes operati",
+  "A public error contract is an API surface, and it ages like one. The discipline is to expose only what the caller can act on, to keep the retryable-versus-terminal distinction visible somewhere other than a substring of a message, and to resist the catch-all error bag that means ",
+  "The hardest production mistake is often not one missing match arm. It is a failure contract that never said which layer owned retry, which layer owned translation, and which layer should have logged the incident only once.",
+  "Both editors simulate their output so you can focus on the shape of the contract rather than on toolchain setup. Read the short pointer and the diagram above each listing first, then run the code and try changing the inputs to see how the error path reshapes.",
+  "The service boundary preserves domain language for invalid business state and infrastructure language for missing storage state, then translates both into one service-facing error enum.",
+  "What to look at: trace one charge through the function. The store lookup starts life as an Option, gets promoted into an infrastructure error when the row is missing, while the empty-order check raises a domain error in business language. Both reach the service layer, which folds",
+  "The store lookup is locally an Option, then promoted into a typed infrastructure error at the service boundary.",
+  "Domain and infrastructure failures stay distinct enough that the next layer can still map or retry them honestly.",
+  "The caller sees one service error type, but the error chain still preserves which layer actually failed."
+ ],
+ "codeSamples": {
+  "error_handling_typed_contracts": "use std::collections::HashMap;\nuse thiserror::Error;\n\n#[derive(Debug, Clone)]\nstruct Order {\n    id: &'static str,\n    lines: Vec<u64>,\n}\n\n#[derive(Debug, Error)]\nenum DomainError {\n    #[error(\"order {order_id} has no lines\")]\n    EmptyOrder { order_id: &'static str },\n}\n\n#[derive(Debug, Error)]\nenum InfraError {\n    #[error(\"order {order_id} not found in store\")]\n    MissingOrder { order_id: &'static str },\n}\n\n#[derive(Debug, Error)]\nenum ServiceError {\n    #[error(transparent)]\n    Domain(#[from] DomainError),\n    #[error(transparent)]\n    Infra(#[from] InfraError),\n}\n\nfn load_order<'a>(\n    store: &'a HashMap<&'static str, Order>,\n    order_id: &'static str,\n) -> Result<&'a Order, InfraError> {\n    store\n        .get(order_id)\n        .ok_or(InfraError::MissingOrder { order_id })\n}\n\nfn total_cents(order: &Order) -> Result<u64, DomainError> {\n    if order.lines.is_empty() {\n        return Err(DomainError::EmptyOrder {\n            order_id: order.id,\n        });\n    }\n\n    Ok(order.lines.iter().copied().sum())\n}\n\nfn bill_order(\n    store: &HashMap<&'static str, Order>,\n    order_id: &'static str,\n) -> Result<u64, ServiceError> {\n    let order = load_order(store, order_id)?;\n    Ok(total_cents(order)?)\n}\n\nfn main() {\n    let mut store = HashMap::new();\n    store.insert(\n        \"ord-ok\",\n        Order {\n            id: \"ord-ok\",\n            lines: vec![1200_u64, 3000],\n        },\n    );\n    store.insert(\n        \"ord-empty\",\n        Order {\n            id: \"ord-empty\",\n            lines: vec![],\n        },\n    );\n\n    println!(\"ok = {}\", bill_order(&store, \"ord-ok\").unwrap());\n    println!(\"missing = {}\", bill_order(&store, \"ord-missing\").unwrap_err());\n    println!(\"empty = {}\", bill_order(&store, \"ord-empty\").unwrap_err());\n}",
+  "error_handling_async_context": "use anyhow::{Context, Result};\nuse std::io::{self, ErrorKind};\n\nasync fn read_artifact(name: &'static str) -> Result<&'static str> {\n    match name {\n        \"manifest\" => Ok(\"ready\"),\n        _ => Err(io::Error::new(ErrorKind::NotFound, \"missing blob\").into()),\n    }\n}\n\n#[tokio::main]\nasync fn main() -> Result<()> {\n    let manifest = tokio::spawn(async {\n        read_artifact(\"manifest\")\n            .await\n            .context(\"loading manifest\")\n    })\n    .await\n    .context(\"manifest task failed\")??;\n\n    let failed = read_artifact(\"lockfile\")\n        .await\n        .context(\"loading lockfile\")\n        .err()\n        .map(|err| format!(\"{:#}\", err))\n        .unwrap_or_else(|| String::from(\"none\"));\n\n    println!(\"manifest = {}\", manifest);\n    println!(\"failed = {}\", failed);\n\n    Ok(())\n}"
+ },
+ "labReferenceSolution": null
+}

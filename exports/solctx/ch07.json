@@ -1,0 +1,208 @@
+{
+ "chapterKey": "ch07",
+ "num": 7,
+ "title": "Copying Data vs Cloning Data",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Classify each duplication event correctly",
+   "objective": "Practice separating moves, implicit copies, explicit clones, and plain borrows in one small flow.",
+   "starterPrompt": "Classify the operation at each marked line in a function that uses `RequestId(u64)`, `String`, `&str`, and `Arc<Schema>` values.",
+   "prompts": [
+    "Which line is a move because the type is non-Copy and ownership transfers?",
+    "Which line is an implicit copy because the type is `Copy`?",
+    "Which line is an explicit clone of owned data?",
+    "Which line is only a borrow and therefore not duplication at all?"
+   ],
+   "acceptanceCriteria": [
+    "You classify each event using Rust terms rather than vague 'copy-like' language.",
+    "You distinguish shared ownership via `Arc::clone` from deep cloning of inner data.",
+    "You explain one case where borrowing removes the need for duplication entirely."
+   ],
+   "hints": [
+    "Ask whether the old binding still owns the value afterward.",
+    "The spelling at the call site is a clue: plain assignment, `.clone()`, `Arc::clone`, or `&value`."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the hidden allocation budget",
+   "objective": "Read a small service path and identify which operations are cheap scalar copies, which clone heap data, and which merely add shared owners.",
+   "starterPrompt": "Review a request path that duplicates a `RequestId`, clones a `String` route key, and clones an `Arc<Schema>`. Write a short cost review for the function.",
+   "prompts": [
+    "Which operation is almost certainly trivial bitwise duplication?",
+    "Which operation likely duplicates heap-backed bytes?",
+    "Which operation increments a reference count instead of deep-cloning the schema?",
+    "Where would you replace cloning with borrowing if the helper only reads?"
+   ],
+   "acceptanceCriteria": [
+    "You identify a scalar or small ID-style copy correctly.",
+    "You identify at least one heap-backed `Clone` correctly.",
+    "You explain `Arc::clone` as another shared owner rather than a deep copy.",
+    "You propose one borrowing repair that would remove unnecessary allocation."
+   ],
+   "hints": [
+    "Read the field types first. Costs tend to follow ownership shape.",
+    "A review answer should say what happened operationally, not just 'this is expensive.'"
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement Clone manually for a realistic type",
+   "objective": "Write a correct manual `Clone` implementation for a type with owned and scalar fields.",
+   "starterPrompt": "Implement `Clone` for `JobTemplate { service: String, steps: Vec<String>, retries: usize }` so cloning preserves the data and later mutations to the clone do not affect the original.",
+   "prompts": [
+    "Clone the owned fields explicitly.",
+    "Copy the scalar field directly.",
+    "Do not implement `Copy` for this type."
+   ],
+   "acceptanceCriteria": [
+    "Your type implements `Clone` manually, not through a placeholder or stub.",
+    "Owned fields are duplicated correctly.",
+    "Mutating the clone after creation does not change the original value.",
+    "You keep the type non-`Copy` because implicit duplication would be misleading here."
+   ],
+   "hints": [
+    "Use `.clone()` on `String` and `Vec<String>`.",
+    "A `usize` does not need a `clone()` call in practice. Copying the value is enough."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Remove unnecessary clones from a read-only API",
+   "objective": "Repair an API that clones owned strings where borrowing would express the contract more accurately.",
+   "starterPrompt": "A helper `fn route_label(route: String) -> String` is called only to log and compare route text. Refactor the API so callers stop cloning route strings just to satisfy the signature.",
+   "prompts": [
+    "What should the parameter type become if the helper only reads?",
+    "Should the return type stay owned or become borrowed?",
+    "Which call sites can lose `.clone()` after the change?"
+   ],
+   "acceptanceCriteria": [
+    "Your refactor changes the signature to borrow when read-only access is enough.",
+    "You remove at least one unnecessary clone from the caller side.",
+    "You explain why borrowing communicates the contract more clearly than taking ownership here."
+   ],
+   "hints": [
+    "If the helper only inspects text, start with `&str`.",
+    "A better signature usually fixes more than one clone at once."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Decide whether a type should implement Copy",
+   "objective": "Practice the conservative rule set for implementing `Copy` safely.",
+   "starterPrompt": "Evaluate whether each type should implement `Copy`: `RequestId(u64)`, `Span { start: usize, end: usize }`, `SessionKey(String)`, `SharedSchema(Arc<str>)`, and `SocketOwner(TcpStream)`.",
+   "prompts": [
+    "Which ones satisfy Rust's mechanical rules for `Copy`?",
+    "Which ones would still be a semantic mistake even if the shape looked small?",
+    "Where is explicit `Clone` or no duplication trait the better signal?"
+   ],
+   "acceptanceCriteria": [
+    "You approve `Copy` only for types where implicit duplication is trivial and unsurprising.",
+    "You reject `Copy` for heap-owning or resource-owning types.",
+    "You explain why `Arc<T>` being cheap to clone does not make the wrapper automatically a good `Copy` candidate."
+   ],
+   "hints": [
+    "The `Copy` checklist is stricter than 'this seems lightweight.'",
+    "Resource ownership and shared ownership deserve visible APIs."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose receivers and duplication boundaries together",
+   "objective": "Design a small service API where receiver choice and duplication policy line up.",
+   "starterPrompt": "You are building a `ConfigBuilder`, a long-lived `ServiceConfig`, and a `publish` step that fans work out to multiple workers. Choose where methods should take `self`, `&self`, or `&mut self`, and where cloning is legitimate.",
+   "prompts": [
+    "Which method should consume `self` because it finalizes the builder?",
+    "Which methods only need `&self` for inspection or borrowed views?",
+    "Which mutations should use `&mut self` rather than rebuilding with a fresh clone?",
+    "At the worker fan-out boundary, do you move, clone, or share through `Arc`?"
+   ],
+   "acceptanceCriteria": [
+    "You use receiver choices to express ownership transitions clearly.",
+    "You justify at least one explicit clone in economic or semantic terms.",
+    "You avoid both extremes: cloning everything and forcing everything through shared ownership.",
+    "You name one tradeoff involving allocation, atomic cost, or API clarity."
+   ],
+   "hints": [
+    "Builders often end with a consuming `build(self)` or `finish(self)`.",
+    "Fan-out work may justify `Arc` when the underlying data is truly shared."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What is the practical difference between moving a `String`, copying a `u64`, and cloning an `Arc<T>`?",
+  "Why is `Copy` intentionally much narrower than 'cheap enough to duplicate'?",
+  "When is `Cow<'a, str>` a better API than always returning `String`?",
+  "Why is `Arc::clone` not the same thing as deep-cloning the inner value?",
+  "How do receiver choices reduce unnecessary cloning in production APIs?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Manual Clone implementation",
+  "filename": "manual_clone_lab.rs",
+  "runKey": "ch07_ex_manual_clone",
+  "expectedOutput": "original = billing 2\ncloned = billing 3\nretries = 2",
+  "initialCode": "#[derive(Debug)]\nstruct JobTemplate {\n    service: String,\n    steps: Vec<String>,\n    retries: usize,\n}\n\nimpl Clone for JobTemplate {\n    fn clone(&self) -> Self {\n        Self {\n            service: String::new(),\n            steps: Vec::new(),\n            retries: self.retries,\n        }\n    }\n}\n\nfn main() {\n    let original = JobTemplate {\n        service: String::from(\"billing\"),\n        steps: vec![String::from(\"parse\"), String::from(\"persist\")],\n        retries: 2,\n    };\n\n    let mut cloned = original.clone();\n    cloned.steps.push(String::from(\"notify\"));\n\n    println!(\"original = {} {}\", original.service, original.steps.len());\n    println!(\"cloned = {} {}\", cloned.service, cloned.steps.len());\n    println!(\"retries = {}\", cloned.retries);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 04, 05, and 06",
+  "Opening scenario",
+  "A fast decision order",
+  "Mental model",
+  "How this lands by background",
+  "Core concepts",
+  "Three different events, not one blurry idea",
+  "What Copy and Clone share, and where they differ",
+  "Topics this chapter treats as source of truth",
+  "Reference-counted cloning is sharing, not copying",
+  "When is implementing Copy safe?",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: move, Copy, Clone, and receiver choices in one pass",
+  "Example 2: clone-on-write normalization and cheap shared ownership",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Whether a value moves, copies, or clones decides latency, memory use, and what an API promises about ownership. This chapter separates those events so that a reader, and a code reviewer, can always tell which one is happening and why the cost was chosen on purpose.",
+  "Chapter 04 explained ownership and borrowing. Chapter 05 moved those rules into struct design. Chapter 06 showed why resizable collections make handle choice matter. This chapter adds the duplication model on top: when values move, when they copy, when they clone, and how to keep",
+  "A request service fans work out to several workers and keeps retry state for failed jobs. The requirement is a reviewable duplication policy: borrow read-only data on hot paths, move owned jobs at boundaries, copy tiny values implicitly when that is safe, and clone only where ind",
+  "When you hit a value that needs to be used more than once, walk these questions in order. The first one that answers yes is usually the right tool, and the diagram after it shows the same decision as a single path.",
+  "When a duplicate is genuinely needed, the second half decides which kind:",
+  "Most engineers do not meet move, Copy, and Clone with a blank slate. They arrive with a duplication model from another language, and the useful question is which part of that model transfers and which part quietly misleads. The shift is almost never about API names. It is about w",
+  "The whole chapter rests on keeping three things apart. A move hands a single value from one owner to the next. A copy is an implicit bitwise duplicate that a type opts into for small values. A clone is an explicit, possibly expensive duplication that you write by hand. The diagra",
+  "Copy and Clone behave differently: in both cases the source stays usable. The split is who pays and whether the duplication is implicit or written down.",
+  "These two traits are related, not independent. Clone is the general duplication trait. Copy is a marker that sits on top of Clone and adds a promise: the duplicate is a trivial bitwise copy, so the language may make it implicit and leave the original usable. That relationship is ",
+  "The other families stay Clone-only on purpose. Heap-owning and reference-counted types can duplicate, but never implicitly:",
+  "The most common confusion in this whole topic is treating an Arc clone as if it deep-copied the inner value. It does not. Both handles point at the same allocation; the clone only bumps a counter so the allocation lives until the last handle is dropped. That is what makes it chea",
+  "A useful default is conservative: if the type owns heap memory, file descriptors, sockets, locks, or any state where two implicit duplicates would be misleading, it should not be Copy. The compiler enforces the mechanical half of this (no Drop, all fields Copy); the semantic half",
+  "&ldquo;Just clone it&rdquo; is not always wrong. It becomes wrong when the review can no longer explain why independent ownership is needed, or when the hidden allocation cost shows up in the hot path later.",
+  "One tiny ID copies, one config clones explicitly, one method reads by &self, one mutates by &mut self, and one consumes by self.",
+  "What to look at: follow the live config. It is mutated through &mut self, then explicitly cloned so the consuming replace_name(self, ...) can take the clone by value while the original keeps living. The diagram traces that single value; the code is the same path written out.",
+  "Quick check: run the baseline, then try removing the .clone() before replace_name. The compiler refuses, because replace_name(self) would move live away and the last line still reads it. That is the move-versus-clone decision made concrete.",
+  "RequestId is a tiny value. Implicit duplication is predictable and the original stays valid.",
+  "live.clone() creates a second independent config before the consuming builder-style call.",
+  "&self views, &mut self mutates, and self finalizes or transforms ownership.",
+  "Borrow the common case with Cow, allocate only on transformation, and use Arc::clone when shared ownership is the real model.",
+  "What to look at: normalize_label branches on whether the input already fits the normalized form. An already-clean label returns Cow::Borrowed with no allocation; a dirty one returns Cow::Owned and pays once. The Arc lines are a second, separate idea: cloning a handle adds a share",
+  "The Arc lines are a separate idea: cloning a handle adds a shared owner rather than copying the string.",
+  "Quick check: change the labels and rerun. Inputs that already fit the normalized form stay borrowed; transformed inputs become owned. The Arc side shows the other distinction: cheap shared ownership is still not the same as deep cloning.",
+  "Cow lets the API return a borrowed value when no rewrite is needed.",
+  "The owned branch pays for normalization once, at the boundary that actually needs it.",
+  "Arc::clone increments the count. It does not copy the underlying schema string.",
+  "The repository also includes standalone Rust files under examples/ch07_copying_data_vs_cloning_data/ so the chapter can be reviewed outside the web editor as ordinary Rust source.",
+  "The companion exercise page asks you to classify operations as move, copy, or clone, implement Clone manually for a realistic type, decide when Copy is safe, remove unnecessary clones from an API, and choose receiver forms deliberately."
+ ],
+ "codeSamples": {
+  "copying_data_moves_copy_clone": "#[derive(Debug, Copy, Clone)]\nstruct RequestId(u64);\n\n#[derive(Debug, Clone)]\nstruct ServiceConfig {\n    name: String,\n    retries: usize,\n}\n\nimpl ServiceConfig {\n    fn name(&self) -> &str {\n        &self.name\n    }\n\n    fn bump_retries(&mut self) {\n        self.retries += 1;\n    }\n\n    fn replace_name(self, next: &str) -> Self {\n        Self {\n            name: next.to_string(),\n            retries: self.retries,\n        }\n    }\n}\n\nfn main() {\n    let request = RequestId(42);\n    let request_copy = request;\n\n    let mut live = ServiceConfig {\n        name: String::from(\"ingest-v1\"),\n        retries: 1,\n    };\n    live.bump_retries();\n\n    let replaced = live.clone().replace_name(\"ingest-v2\");\n\n    println!(\"request id copy = {}\", request_copy.0);\n    println!(\"live retries = {}\", live.retries);\n    println!(\"builder consumed = {}\", replaced.name());\n    println!(\"current name = {}\", live.name());\n}",
+  "copying_data_cow_arc": "use std::borrow::Cow;\nuse std::sync::Arc;\n\nfn normalize_label(input: &str) -> Cow<'_, str> {\n    if input.bytes().all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'-')) {\n        Cow::Borrowed(input)\n    } else {\n        Cow::Owned(input.trim().to_ascii_lowercase().replace(' ', \"-\"))\n    }\n}\n\nfn main() {\n    let borrowed = normalize_label(\"ready\");\n    let owned = normalize_label(\"Mixed Case\");\n    let schema = Arc::new(String::from(\"event.v1\"));\n    let worker_schema = Arc::clone(&schema);\n\n    println!(\"borrowed = {}\", borrowed);\n    println!(\"owned = {}\", owned);\n    println!(\"strong count = {}\", Arc::strong_count(&worker_schema));\n}"
+ },
+ "labReferenceSolution": null
+}

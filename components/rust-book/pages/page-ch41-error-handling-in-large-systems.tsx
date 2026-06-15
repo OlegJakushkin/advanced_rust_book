@@ -1,41 +1,46 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Errors are contracts between layers, not strings for later archaeology",
-    body: "A good Rust error design tells the caller what failed, what kind of failure it was, and what action still makes sense. In a large system, that contract matters more than the formatting of one message.",
+    title: "An error is a contract, not a string to read later",
+    body: "When a function returns a failure, it is making a promise to its caller about what went wrong, what kind of failure it was, and what action still makes sense. In a small program you can get away with a printable message; in a large system that contract is the load-bearing part, because some other layer has to decide whether to retry, reject, translate, or give up. Design the contract first and let the message follow from it, not the other way around.",
   },
   {
-    title: "Choose the error shape from the caller's needs",
-    body: "Use Option when local absence is normal and the caller only needs branch control. Use Result when the caller can retry, map, classify, log, or surface the failure. Use panic only for violated invariants or unrecoverable process state.",
+    title: "Let the caller's next move pick the error shape",
+    body: "Before you reach for a type, ask what the code one level up will do with the failure. If absence is ordinary and the caller only needs a local branch, an Option is enough. If the caller can retry, map, classify, log with structure, or surface the failure to a user, that is a Result with a meaningful error type. A panic is reserved for the cases where there is no sensible next move at all because a program invariant has been violated.",
   },
   {
-    title: "Every boundary adds translation pressure",
-    body: "Async tasks, brokers, FFI, HTTP, and storage adapters all want errors shaped a little differently. Rust is calmest when each layer keeps its own error type and only translates at the boundary that actually changes the contract.",
+    title: "Each boundary wants the error shaped differently",
+    body: "An async task, a message broker, a C ABI, an HTTP handler, and a storage adapter each expect failures in their own vocabulary. The calmest large systems do not force one universal error type through all of them; they let every layer keep an error type it can reason about and translate only at the boundary where the contract genuinely changes. Translation is a deliberate act, performed once, at a named seam.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Rust does not use exceptions as the ordinary systems-programming control path. Result<T, E> is explicit in the signature, so recoverability, retry, and translation decisions stay visible instead of being hidden in unwind behavior.",
+    body: "Stop reaching for exceptions and the invisible unwind path as your normal failure channel. In Rust the failure type is part of the function signature, so whether a call can fail, what kind of failure it is, and who is responsible for handling it are all visible at the call site rather than discovered when something throws three frames away. The trap is treating a Result like a checked exception you must immediately rethrow; instead, design the error type so the caller has a real decision to make.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of one ambient exception hierarchy and more in terms of layer-specific contracts. A domain rule violation, a timeout, and a task join failure are different operational events and should usually stay different in Rust.",
+    body: "Drop the instinct toward one ambient exception hierarchy that everything inherits from. A rejected business rule, a request timeout, and a background task that panicked are three different operational events, and Rust rewards keeping them as distinct typed variants instead of collapsing them into a shared base class. The mental shift is that you classify failures at design time, in the type, rather than at catch time, in a chain of catch blocks.",
   },
   {
     title: "Go background",
-    body: "Rust overlaps with Go by making normal failure explicit in return values, but it pushes harder on typed classification. Instead of a growing pile of wrapped strings, a senior Rust codebase usually keeps richer enums close to the layer that can still act on them.",
+    body: "You already make failure explicit in return values, so the half-step is comfortable. The thing that is different is how far Rust pushes typed classification: rather than accumulating wrapped strings that the next layer has to substring-match, a senior Rust codebase keeps a small enum close to the layer that can still act on the failure. Think less err != nil with a formatted message, more a variant the caller can pattern-match and route.",
+  },
+  {
+    title: "Python background",
+    body: "There is no implicit propagate-until-something-catches behavior at the HTTP edge, and no convention of catching a broad Exception near the top. Fallibility is in the type, and the question driving everything is what the caller can still do: retry, reject with a 4xx, dead-letter, or surface a 5xx. The trap is wanting one giant error type that mirrors a broad except; Rust prefers narrow typed errors near the domain and one rich wrapper only at the very top.",
   },
 ]
 
@@ -227,8 +232,10 @@ export function PageCh41ErrorHandlingInLargeSystems() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Large systems need error contracts that separate domain failures, infrastructure failures, retry policy, and
-          operator context. This chapter covers Rust error handling as a production interface.
+          In a system with many layers, error handling stops being about formatting one message and becomes interface
+          design. This chapter treats Rust errors as production contracts: how to keep domain failures, infrastructure
+          failures, retry policy, and operator context distinct, and how to translate between them only where the meaning
+          actually changes.
         </p>
       </div>
 
@@ -270,11 +277,32 @@ export function PageCh41ErrorHandlingInLargeSystems() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A multi-tenant billing platform accepts HTTP requests, publishes internal work, calls a native risk plugin,
-            and fans out async enrichment tasks. The business requirement is one error policy per boundary: domain errors
-            remain domain language, infrastructure errors remain actionable, retries are classified, and operator context
-            is logged once with stable identifiers.
+            Picture a multi-tenant billing platform. A request arrives over HTTP, the service publishes some internal work
+            to a broker, it calls a native risk-scoring plugin over a C ABI, and it fans out a handful of async enrichment
+            tasks before answering. A single charge can therefore fail in five different vocabularies at once: a business
+            rule can reject it, a database row can be missing, the broker can be unreachable, the native plugin can return
+            a status code, and a spawned task can panic. The job of this chapter is to keep those vocabularies from
+            bleeding into each other.
           </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            The requirement the team agrees on is one error policy per boundary. Domain errors stay in domain language and
+            never mention SQL or TCP. Infrastructure errors stay actionable so a caller can retry or dead-letter. Retries
+            are classified explicitly rather than guessed from a message. And every failure is logged exactly once, at the
+            layer where it becomes operationally meaningful, with stable identifiers an operator can correlate later. The
+            diagram below shows where those translation boundaries sit.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Client -->|HTTP| Handler\n  Handler --> Service\n  Service --> Domain[domain rules]\n  Service --> Store[(database)]\n  Service --> Broker[[message broker]]\n  Service --> Plugin[native risk plugin]\n  Service --> Tasks[async enrichment]`}
+            caption="Request path: one charge fans out from the service into five dependencies, each speaking its own vocabulary."
+          />
+          <p className="text-sm text-muted-foreground leading-6">
+            Each of those five dependencies can fail differently. The return path collapses those failures back into a
+            single caller-facing contract:
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Domain[domain rules] -->|domain error| Service\n  Store[(database)] -->|infra error| Service\n  Broker[[message broker]] -->|infra error| Service\n  Plugin[native risk plugin] -->|status code| Service\n  Tasks[async enrichment] -->|join + inner| Service\n  Service -->|one translated error| Handler\n  Handler -->|status code + log once| Client`}
+            caption="Return path: the service is the single seam where five vocabularies are translated into one caller-facing contract and logged once."
+          />
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
@@ -319,6 +347,27 @@ export function PageCh41ErrorHandlingInLargeSystems() {
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How to think about this coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Most senior engineers do not arrive at Rust error handling with a blank slate; they arrive with an exception
+            habit, a runtime habit, or an err-string habit. The shift that matters is not which crate to import. It is
+            where failure becomes visible and who is responsible for deciding what happens next. Find your background
+            below and read the trap as much as the rule.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
@@ -339,7 +388,17 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Result and Option; error enums</h4>
+            <h4 className="font-semibold text-foreground mb-3">Choosing between Option, Result, and a typed enum</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              These three are not interchangeable styles; they encode three different statements about a failure. An{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Option</code> says a value may simply be
+              absent and that absence is unremarkable. A{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code> says the operation can
+              fail in a way the caller is expected to handle. A typed error enum goes one step further and says the caller
+              may need to tell those failures apart. The common repair in real code is to keep an Option local and promote
+              it into a typed Result at exactly the boundary where missing data stops being routine and becomes a contract
+              violation.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {resultOptionCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -361,7 +420,18 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">thiserror and anyhow</h4>
+            <h4 className="font-semibold text-foreground mb-3">When to reach for thiserror and when to reach for anyhow</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              These two crates are not competitors; they answer different questions and most production systems use both.
+              The deciding factor is whether a downstream layer still needs to branch on the error. If it does, you want a
+              named enum with named variants, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">thiserror</code> generates the tedious{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Display</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">From</code> boilerplate while keeping the
+              structure intact. If the only remaining job is to attach context and surface or log the failure, a single
+              opaque <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">anyhow::Error</code> with a rich
+              context chain is lighter and just as honest.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {crateCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -383,7 +453,14 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Context propagation</h4>
+            <h4 className="font-semibold text-foreground mb-3">Adding context without burying the source</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Context is the answer to the question an operator will ask at 3 a.m.: what was the system trying to do when
+              this failed? A low-level error like &quot;file not found&quot; is true but useless on its own; wrapped with
+              &quot;loading worker config&quot; it becomes diagnosable. The discipline is to add context at the moments
+              where meaning changes and to add it once, never re-stating the same low-level text at every frame on the way
+              up.
+            </p>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {contextNotes.map((note) => (
                 <li key={note}>{note}</li>
@@ -392,7 +469,18 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Recoverable vs unrecoverable errors</h4>
+            <h4 className="font-semibold text-foreground mb-3">Recoverable versus unrecoverable failures</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The dividing line is not how serious the failure feels; it is whether any caller, anywhere up the stack, has
+              a sensible response. Bad input, a rejected business action, or one flaky dependency all have responses, so
+              they belong in a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code>. A
+              violated invariant has no sensible response because the program is now in a state it was designed never to
+              reach, and that is the narrow place a panic is correct. The decision usually flows like this.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A[A call can fail] --> B{Is absence just normal?}\n  B -->|yes| C[Option]\n  B -->|no| D{Can any caller respond?}\n  D -->|retry / reject / translate| E[Result with typed error]\n  D -->|nothing sensible to do| F{Is a program invariant broken?}\n  F -->|yes| G[panic]\n  F -->|no| E`}
+              caption="Route by the caller's options, not by how alarming the failure sounds. Panic is the dead end reserved for broken invariants."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {recoverabilityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -410,7 +498,18 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Error handling across async boundaries</h4>
+            <h4 className="font-semibold text-foreground mb-3">Errors that cross an async task boundary</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When you spawn a task, you create two stacked failure layers, and a lot of bugs come from forgetting the
+              outer one. The inner layer is whatever the task body returns: an IO error, a domain rejection, an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">anyhow::Error</code>. The outer layer is
+              the join result, which tells you whether the task even finished normally or instead panicked or was
+              cancelled. A panicked task is a different operational event from a missing file, and collapsing them into one
+              string hides exactly the distinction an operator needs. The snippet below is worth reading carefully: notice
+              the two separate <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.context(...)</code>{" "}
+              calls and the double <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">??</code> at the
+              end, which unwraps the join layer first and then the inner layer.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -420,11 +519,15 @@ export function PageCh41ErrorHandlingInLargeSystems() {
                 </ul>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
-                <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+                <MermaidDiagram
+                  chart={`flowchart TD\n  Spawn[tokio spawn] --> Body[task body runs]\n  Body -->|inner result| Inner{Ok or Err}\n  Inner -->|Ok| Joined[returns to join]\n  Inner -->|Err: context loading manifest| Joined\n  Spawn --> Join{Join result}\n  Join -->|panic or cancel| JoinErr[context manifest task failed]\n  Join -->|finished| Joined\n  Joined -->|unwrap join then inner| Caller[caller sees one error]`}
+                  caption="A spawned task has a join layer and an inner layer; the double ?? unwraps both, and each gets its own context."
+                />
+                <pre className="mt-3 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                   <code className="font-mono text-foreground">{asyncSnippet}</code>
                 </pre>
                 <p className="mt-3 text-sm text-muted-foreground leading-6">
-                  The key lesson is that async failures often have a transport layer and a task layer. Handle both
+                  The key lesson is that async failures usually have a task layer and an operation layer. Handle both
                   deliberately instead of collapsing them into one generic timeout or one generic string.
                 </p>
               </div>
@@ -432,7 +535,18 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Error handling across FFI</h4>
+            <h4 className="font-semibold text-foreground mb-3">Errors that cross a C ABI boundary</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A C ABI cannot carry a Rust enum, an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">anyhow::Error</code>, or the unwinding
+              that a panic implies; letting any of those escape across the boundary is undefined behavior, not a missed
+              opportunity for richness. So the boundary becomes a deliberate narrowing: the rich error stays on the Rust
+              side, and the foreign caller receives the smallest contract it can actually honor, usually a small{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">#[repr(C)]</code> status enum plus
+              out-parameters. In the code below, look at the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Status</code>{" "}
+              enum: each variant is an integer the other runtime can switch on, and the detailed Rust reason never leaves
+              the wrapper.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -442,7 +556,11 @@ export function PageCh41ErrorHandlingInLargeSystems() {
                 </ul>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
-                <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+                <MermaidDiagram
+                  chart={`flowchart TD\n  Rich["rich Rust error"] --> Wrap["extern C wrapper"]\n  Wrap -->|catch_unwind| Wrap\n  Wrap -->|map to integer| Status["repr C status enum"]\n  Wrap -->|fill out param| Out["out pointer"]\n  Status --> Foreign["C, C-sharp, Python caller"]\n  Out --> Foreign\n  Rich -.stays behind boundary.-> Wrap`}
+                  caption="The detailed error stays on the Rust side; the foreign caller sees only a status code and out-parameters."
+                />
+                <pre className="mt-3 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                   <code className="font-mono text-foreground">{ffiSnippet}</code>
                 </pre>
                 <p className="mt-3 text-sm text-muted-foreground leading-6">
@@ -460,7 +578,27 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Domain errors vs infrastructure errors</h4>
+            <h4 className="font-semibold text-foreground mb-3">Keeping domain errors and infrastructure errors apart</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              This is the single distinction that keeps a large error model from rotting. A domain error speaks the
+              language of the business: an order is empty, a transition is invalid, a quota is exhausted. An infrastructure
+              error speaks the language of the machinery: a row is missing, a connection was refused, a task join failed.
+              The two stay separate as they travel up, and the service layer is the one place that combines them and
+              decides how the next boundary should see the result, whether that is an HTTP status, a broker nack, or a CLI
+              exit code. The layering looks like this.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  D[Domain layer] -->|domain error: empty order| S[Service layer]\n  I[Infrastructure layer] -->|infra error: row missing| S\n  S -->|classify + translate| T{Next boundary}\n  T --> Cont[continues below]`}
+              caption="Domain and infrastructure errors stay distinct until the service layer, where classification becomes operational policy."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              From that single classify-and-translate point, the service shapes the failure for whichever boundary comes
+              next:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  T{Next boundary} --> H[HTTP status]\n  T --> B[broker nack / dead-letter]\n  T --> C[CLI exit code]\n  T --> F[FFI status code]`}
+              caption="The one classification point fans out into a per-boundary contract: HTTP status, broker nack, CLI exit code, or FFI status code."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {layeringCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -472,7 +610,15 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Logging errors correctly</h4>
+            <h4 className="font-semibold text-foreground mb-3">Logging a failure once, at the right layer</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The most common logging mistake in a layered system is not too little logging; it is the same failure logged
+              five times on its way up, each line slightly reworded, until the incident channel is a hall of mirrors. The
+              cure is to pick the one layer where the failure becomes operationally meaningful, log it there with
+              structured fields, and let every layer below simply return the error. Severity should track the caller&apos;s
+              reality too: a rejected business command is not an error-level event just because it came back as a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code>.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {loggingRules.map((rule) => (
                 <div key={rule} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -483,7 +629,14 @@ export function PageCh41ErrorHandlingInLargeSystems() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Designing error contracts</h4>
+            <h4 className="font-semibold text-foreground mb-3">Designing the error contract you expose to callers</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              A public error contract is an API surface, and it ages like one. The discipline is to expose only what the
+              caller can act on, to keep the retryable-versus-terminal distinction visible somewhere other than a substring
+              of a message, and to resist the catch-all error bag that means nothing in particular. When the contract has
+              to stay stable across teams or languages, translate your internal crates and variants at the boundary rather
+              than leaking them, because once another runtime depends on a variant you can no longer freely rename it.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {contractRules.map((rule) => (
                 <div key={rule} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -493,17 +646,6 @@ export function PageCh41ErrorHandlingInLargeSystems() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
         <section className="space-y-4">
@@ -549,6 +691,11 @@ export function PageCh41ErrorHandlingInLargeSystems() {
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Both editors simulate their output so you can focus on the shape of the contract rather than on toolchain
+            setup. Read the short pointer and the diagram above each listing first, then run the code and try changing the
+            inputs to see how the error path reshapes.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -572,6 +719,17 @@ export function PageCh41ErrorHandlingInLargeSystems() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: trace one charge through the function. The store lookup starts life as an{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Option</code>, gets promoted into an
+              infrastructure error when the row is missing, while the empty-order check raises a domain error in business
+              language. Both reach the service layer, which folds them into a single service-facing enum without erasing
+              which layer actually failed. The flow is below; the code follows.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Lookup[store.get order] -->|Some| Check{order has lines?}\n  Lookup -->|None: ok_or| Infra[infra error: not found]\n  Check -->|no| Domain[domain error: empty order]\n  Check -->|yes| Total[compute total]\n  Infra --> Service[service error enum]\n  Domain --> Service\n  Total -->|Ok 4200| Caller[caller]\n  Service -->|preserves source layer| Caller`}
+              caption="Absence becomes an infra error; an invalid order becomes a domain error; the service enum carries both without losing which layer failed."
+            />
             <RustCodeEditor
               code={codes.error_handling_typed_contracts}
               onChange={(newCode) => updateCode("error_handling_typed_contracts", newCode)}
@@ -632,6 +790,18 @@ export function PageCh41ErrorHandlingInLargeSystems() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: there are two paths through this code. The manifest path succeeds and returns{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ready</code>. The lockfile path fails at
+              the IO layer with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">missing blob</code>,
+              and the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.context(&quot;loading
+              lockfile&quot;)</code> call wraps it so the final message reads as a chain rather than a bare cause. Notice
+              the original IO reason is still visible at the tail; context adds meaning, it does not replace the source.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Run[run async path] --> M[load manifest]\n  Run --> L[load lockfile]\n  M -->|Ok| MOut[manifest = ready]\n  L -->|Err: missing blob| Ctx[context: loading lockfile]\n  Ctx -->|wraps, keeps source| Out[loading lockfile: missing blob]\n  MOut --> Caller[caller]\n  Out --> Caller`}
+              caption="The success path returns a value; the failure path attaches operation context while the underlying IO reason survives in the chain."
+            />
             <RustCodeEditor
               code={codes.error_handling_async_context}
               onChange={(newCode) => updateCode("error_handling_async_context", newCode)}

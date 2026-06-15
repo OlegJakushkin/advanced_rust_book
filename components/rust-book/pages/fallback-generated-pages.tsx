@@ -192,9 +192,9 @@ const MAIN_PAGE_CONFIG: Record<string, MainPageConfig> = {
       ["zokrates_ethereum_verifier_boundary", "Ethereum verifier boundary"],
     ],
   },
-  "ch54-no-std-rust-constrained-runtime-derivatives": {
+  "ch56-no-std-rust-constrained-runtime-derivatives": {
     intro: "Constrained targets need explicit runtime surfaces for allocation, panic handling, IO, startup, and host calls. This chapter covers no_std Rust as a portability and assurance strategy.",
-    exercisePageId: "ch54-no-std-rust-constrained-runtime-derivatives-exercises",
+    exercisePageId: "ch56-no-std-rust-constrained-runtime-derivatives-exercises",
     examples: [
       ["no_std_portable_surface", "Portable core/alloc/std surface split"],
       ["no_std_fixed_capacity_dma", "Fixed-capacity DMA-style pool"],
@@ -267,9 +267,9 @@ const EXERCISE_PAGE_CONFIG: Record<string, ExercisePageConfig> = {
     intro: "Review artifact custody, verifier inputs, rollout policy, and toolchain drift before a proof workflow becomes a production dependency.",
     backPageId: "ch52-zokrates-workflows-ethereum-verifiers",
   },
-  "ch54-no-std-rust-constrained-runtime-derivatives-exercises": {
+  "ch56-no-std-rust-constrained-runtime-derivatives-exercises": {
     intro: "Practice designing core/alloc/std boundaries, fixed-capacity data paths, and constrained-runtime audits without losing testability.",
-    backPageId: "ch54-no-std-rust-constrained-runtime-derivatives",
+    backPageId: "ch56-no-std-rust-constrained-runtime-derivatives",
   },
 }
 
@@ -483,9 +483,9 @@ export const PageCh52ZoKratesWorkflowsAndEthereumVerifiers = makeMainPage(
 export const PageCh52ZoKratesWorkflowsAndEthereumVerifiersExercises = makeExercisePage(
   "ch52-zokrates-workflows-ethereum-verifiers-exercises"
 )
-export const PageCh54NoStdRustConstrainedRuntimeDerivativesExercises = makeExercisePage(
-  "ch54-no-std-rust-constrained-runtime-derivatives-exercises"
+export const PageCh56NoStdRustConstrainedRuntimeDerivativesExercises = makeExercisePage(
+  "ch56-no-std-rust-constrained-runtime-derivatives-exercises"
 )
-export const PageCh54NoStdRustConstrainedRuntimeDerivatives = makeMainPage(
-  "ch54-no-std-rust-constrained-runtime-derivatives"
+export const PageCh56NoStdRustConstrainedRuntimeDerivatives = makeMainPage(
+  "ch56-no-std-rust-constrained-runtime-derivatives"
 )

@@ -1,0 +1,26 @@
+[package]
+name = "runner"
+version = "0.0.0"
+edition = "2021"
+# Generic "run any snippet" crate. run-book copies the requested .rs file to
+# src/main.rs and `cargo run`s it; these dependencies cover every crate the book
+# corpus references (except ort / wasm_bindgen, which need a special toolchain).
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1"
+crossbeam = "0.8"
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+futures = "0.3"
+
+[[bin]]
+name = "runner"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2

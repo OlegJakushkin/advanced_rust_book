@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -50,15 +51,19 @@ const traitRequirements = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "`HashMap` is closest to `std::unordered_map`, `HashSet` to `std::unordered_set`, and the B-tree variants to `std::map` and `std::set`. The Rust difference is that borrowed lookup and ownership transfer are part of ordinary API design, not only a convention.",
+    body: "Your instinct is that the map stores values and you reach in with operator[] or find. The shift in Rust is that insert moves the key in, so the table now owns it, and lookup goes the other way: you query an owned-string table with a borrowed slice and never allocate to ask a question. There is no silent default-construct-on-missing-key; the entry API is the explicit version of that idea, and it hands you exactly one path into the slot.",
   },
   {
     title: "C# background",
-    body: "`Dictionary<TKey, TValue>` and `HashSet<T>` will feel familiar, but Rust makes ownership visible. Inserting a `String` key moves it. Looking up by `&str` borrows. Deterministic output is a separate choice, not something hash iteration promises.",
+    body: "Dictionary and HashSet feel familiar, but the GC has been hiding the ownership question. In Rust, putting a string key in moves it, reading is a borrow, and removing hands the value back to you. The other shift is determinism: a .NET dictionary's enumeration order is unspecified and so is Rust's, but Rust makes you choose an ordered structure on purpose rather than discovering the dependency in a failing snapshot test.",
   },
   {
     title: "Go background",
-    body: "Go maps are easy to reach for, but iteration order is not something you should depend on. Rust asks the same discipline and adds one more explicit question: who owns the key and value after this call?",
+    body: "A Go map is the obvious default and its iteration order is deliberately randomized, so you already know not to depend on it. Rust keeps that discipline and adds one question Go never forces: after this insert, who owns the key and the value? The payoff is borrowed lookup, the thing Go cannot express cleanly, where you query a map of owned strings with a string slice and pay nothing to do it.",
+  },
+  {
+    title: "Python background",
+    body: "A dict or set takes anything hashable and you never think about who holds the object. Rust splits that into two facts you now state explicitly: the key type must be Eq plus Hash, and the table owns the keys you put in. The upside is that the same map answers reads through a borrowed &str without building a new key object, which is the allocation Python quietly performs every time you index by a fresh string.",
   },
 ]
 
@@ -95,6 +100,7 @@ export function PageCh11HashMapsAndSets() {
   const chapter06PageIndex = getPageIndexById("ch06-ownership-inside-vectors")
   const chapter07PageIndex = getPageIndexById("ch07-copying-data-vs-cloning-data")
   const chapter10PageIndex = getPageIndexById("ch10-arrays-slices-and-vectors")
+  const chapter12PageIndex = getPageIndexById("ch12-matrices-and-multidimensional-data")
   const exercisesPageIndex = getPageIndexById("ch11-hash-maps-and-sets-exercises")
 
   const page = PAGES[pageIndex]
@@ -226,6 +232,24 @@ export function PageCh11HashMapsAndSets() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Ownership of keys and values</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The whole API divides cleanly along one line: which calls move data across the table boundary and which only
+              borrow across it. Insert is the one inbound move; remove and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">into_iter</code> are the outbound moves;
+              everything on the read path borrows and leaves the table owning what it owned before. Hold that picture and
+              the rest of the chapter is mostly choosing the right edge for each call site.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Caller[Caller owns key and value] -->|insert moves in| Map[(HashMap owns entries)]\n  Map -->|get and contains borrow| Read[Read path keeps borrow]\n  Map -->|iter borrows| Loop[Borrowed iteration]\n  Map --> Cont[outbound moves below]`}
+              caption="Inbound: insert moves owned data in; read paths borrow and leave ownership where it was."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The same table also has two paths that move data back out:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Cont[(HashMap owns entries)] -->|remove moves out| Out[Caller owns value again]\n  Cont -->|into_iter consumes| Drain[Table consumed, items moved out]`}
+              caption="Outbound: remove moves one value back out; into_iter consumes the table and moves every item out."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -260,6 +284,18 @@ export function PageCh11HashMapsAndSets() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Borrowed lookups</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The reason a table of owned <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code>{" "}
+              keys accepts a borrowed <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{"&str"}</code>{" "}
+              query is a small trait relationship rather than magic: the lookup methods are generic over a borrowed form of
+              the key, and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code> can be borrowed
+              as <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">str</code> with matching equality and
+              hashing. The diagram shows that bridge; the code below is what it looks like at the call site.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Q["&str query"] -->|same Eq and Hash| Bridge["Borrow bridge: String borrows as str"]\n  Bridge --> Slot["Owned String key in table"]\n  Slot -->|match| Hit["Some borrowed value"]\n  Slot -->|no match| Miss[None]`}
+              caption="The query type and the stored key share equality and hashing through a borrow relationship, so no owned key is built to look one up."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
@@ -343,6 +379,16 @@ assert!(active.contains("worker"));`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">{`BTreeMap vs HashMap`}</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The choice between the four collections is two yes-or-no questions, not a performance debate. First: do you
+              need a value per key, or only membership? That picks map versus set. Second: does anything downstream depend
+              on iteration order? That picks the hashed variant versus the ordered B-tree variant. Answer those two and the
+              type falls out.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[What do you store] -->|value per key| Map[Need a map]\n  Start -->|only membership| Set[Need a set]\n  Map -->|order matters| BMap[BTreeMap]\n  Map -->|order does not matter| HMap[HashMap]\n  Set -->|order matters| BSet[BTreeSet]\n  Set -->|order does not matter| HSet[HashSet]`}
+              caption="Two questions decide the collection: value-per-key versus membership, then ordered iteration versus not."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <div className="font-medium text-foreground mb-2">{`HashMap / HashSet`}</div>
@@ -398,16 +444,26 @@ assert!(active.contains("worker"));`}</code>
             </ul>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Every one of these languages gives you a dictionary and a set, so the data structure is not the new part. What
+            changes in Rust is who owns the key after you insert it, and the fact that reading does not have to build a key
+            at all. The cards below name the one mental-model shift each background tends to trip over, not the API spelling,
+            which you can read off the standard library in a minute.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -474,6 +530,20 @@ assert!(active.contains("worker"));`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at:{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">entry(route)</code> is a single trip into
+              the table. If the slot is missing it is created with{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">or_insert(0)</code>; either way you get a
+              mutable reference and add one in place. There is no separate{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">contains_key</code> branch and no second
+              lookup. Follow the two paths in the diagram, then read the same fork in{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">record_hit</code>.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Call[record_hit with owned route] --> Entry[entry on one lookup]\n  Entry -->|key present| Found[Existing counter]\n  Entry -->|key absent| New[or_insert 0 creates slot]\n  Found --> Bump[Add one in place]\n  New --> Bump\n  Bump --> Store[Stored count updated]`}
+              caption="Both the present and absent cases converge on one mutable reference, so the update is a single table access."
+            />
             <RustCodeEditor
               code={codes.hash_maps_sets_entry_api}
               onChange={(newCode) => updateCode("hash_maps_sets_entry_api", newCode)}
@@ -524,6 +594,19 @@ assert!(active.contains("worker"));`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: this is a pipeline with three distinct stages. The reads in the middle,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">get("api")</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">contains("worker")</code>, borrow the
+              owned-string keys without allocating. Only at the render edge does{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">into_iter().collect()</code> move the
+              entries into a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">BTreeMap</code> so output
+              is deterministic. The diagram is that pipeline; the three printed lines are its three outputs.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Build[Insert owned String keys] --> HMap[(HashMap and HashSet)]\n  HMap -->|borrowed &str reads| Reads[api count and has worker]\n  HMap -->|into_iter collect| BMap[(BTreeMap, ordered)]\n  BMap --> Render[Deterministic ordered line]`}
+              caption="Build with owned keys, read by borrow, and only convert to an ordered structure at the moment output order has to be stable."
+            />
             <RustCodeEditor
               code={codes.hash_maps_sets_borrowed_lookup_ordered}
               onChange={(newCode) => updateCode("hash_maps_sets_borrowed_lookup_ordered", newCode)}
@@ -585,6 +668,24 @@ assert!(active.contains("worker"));`}</code>
           </Button>
         </section>
 
+        <section className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-3">Next chapter</h3>
+              <p className="text-sm text-muted-foreground leading-6">
+                Hashed and ordered associative collections cover keyed access. Chapter 12 turns to matrices and
+                multidimensional data, where the question shifts from who owns a key to how a logical grid maps onto one
+                contiguous block of memory. The same ownership and borrowing instincts carry over; the new concern is
+                layout, indexing, and the cost of the access pattern.
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => setCurrentPage(chapter12PageIndex)} className="gap-2 shrink-0">
+              Continue to Chapter 12
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </section>
+
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
@@ -599,391 +700,3 @@ assert!(active.contains("worker"));`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch11-hash-maps-and-sets-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Choose map, set, or tree from the contract",
-    objective: "Practice choosing `HashMap`, `HashSet`, `BTreeMap`, or `BTreeSet` from semantics rather than familiarity.",
-    starterPrompt:
-      "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports range-like prefix reviews.",
-    prompts: [
-      "Which workload is really key-value association?",
-      "Which workload is only membership and deduplication?",
-      "Which workload needs deterministic iteration order as part of the external contract?",
-      "Which choice is about ordering rather than expected lookup speed?",
-    ],
-    acceptanceCriteria: [
-      "You choose `HashMap` for the unordered key-value counter.",
-      "You choose `HashSet` for membership and deduplication.",
-      "You choose an ordered tree variant when stable sorted iteration is part of the boundary contract.",
-      "You justify the structure in operational terms rather than only by naming the type.",
-    ],
-    hints: [
-      "Ask whether order is part of the job before defaulting to a hash table.",
-      "If the value is just “present or absent,” a set is usually the clearer structure.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Remove duplicate lookups with Entry API",
-    objective: "Read a read-modify-write path and replace repeated lookup logic with a single-entry update path.",
-    starterPrompt:
-      "You inherit a counter update that does `contains_key`, then `get_mut`, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
-    prompts: [
-      "What duplicate work is the original shape doing?",
-      "Which `entry` helper best fits: `or_insert`, `or_default`, or `and_modify`?",
-      "What changes if the caller already owns the key versus only borrows it?",
-    ],
-    acceptanceCriteria: [
-      "You explain that the original code repeats key hashing and bucket lookup work.",
-      "You choose an Entry API shape that expresses the update in one path.",
-      "You call out the difference between an owned insert path and a borrowed read path precisely.",
-    ],
-    hints: [
-      "Think in terms of “one key, one update path.”",
-      "Entry API is especially valuable when mutation depends on presence or absence.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Implement borrowed lookup for owned string keys",
-    objective: "Use borrowed lookup on a string-keyed map or set without allocating a fresh `String` on the read path.",
-    starterPrompt:
-      "Implement one or both helpers: `fn route_count(counts: &HashMap<String, usize>, route: &str) -> usize` and `fn is_active(active: &HashSet<String>, route: &str) -> bool`.",
-    prompts: [
-      "Keep the lookup parameter as `&str`.",
-      "Do not allocate `route.to_string()` in the lookup path.",
-      "Return a copied numeric result or a boolean result, not a borrowed reference from the helper.",
-    ],
-    acceptanceCriteria: [
-      "The lookup parameter stays borrowed as `&str`.",
-      "The implementation uses borrowed lookup such as `get(route)` or `contains(route)`.",
-      "The helper does not allocate a fresh owned string just to read the collection.",
-    ],
-    hints: [
-      "String-keyed maps and sets usually already support the borrowed lookup you want.",
-      "The return type can stay small and owned even when the lookup itself borrows.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Make output deterministic on purpose",
-    objective: "Repair a test or operator-facing render path that accidentally depends on hash iteration order.",
-    starterPrompt:
-      "A snapshot test iterates a `HashMap<String, usize>` directly and intermittently changes order across runs. Refactor the render path.",
-    prompts: [
-      "Should the internal storage stay hashed while the render path sorts or projects?",
-      "Would `BTreeMap` be simpler if every caller wants stable order anyway?",
-      "What tradeoff are you accepting between update behavior and output behavior?",
-    ],
-    acceptanceCriteria: [
-      "You stop treating hash iteration order as stable.",
-      "You propose either sorting at the boundary or using `BTreeMap` as the primary representation when order is always required.",
-      "You justify the tradeoff in terms of contract clarity, not only making tests pass.",
-    ],
-    hints: [
-      "Stable order is a data-structure choice or a render-step choice. Pick one deliberately.",
-      "If the only place that needs order is output, a projection step is often enough.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Separate owned update paths from borrowed read paths",
-    objective: "Explain the stable standard-library tradeoff between Entry API and borrowed string lookup.",
-    starterPrompt:
-      "You are counting borrowed request routes as `&str`. A teammate writes `counts.entry(route.to_string()).or_insert(0)`. Review whether that is correct, what it optimizes, and what it still costs.",
-    prompts: [
-      "What duplicate work does Entry remove?",
-      "What cost remains on the borrowed string path?",
-      "When is that still the right design, and when would you revisit it?",
-    ],
-    acceptanceCriteria: [
-      "You explain that Entry removes duplicate table lookups on the update path.",
-      "You explicitly note that `route.to_string()` still allocates an owned key.",
-      "You describe at least one case where the design is acceptable and one case where the remaining allocation may matter enough to revisit.",
-    ],
-    hints: [
-      "This is a good senior-level distinction: fewer lookups is not the same thing as zero allocation.",
-      "Do not answer with slogans like “Entry is always faster.”",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose a hasher and threat model deliberately",
-    objective: "Practice the performance-versus-resilience tradeoff behind custom hashers.",
-    starterPrompt:
-      "You are reviewing two systems: an internal analytics worker keyed by trusted numeric IDs, and an internet-facing API gateway keyed by client-controlled strings. Decide whether either should move away from the default hasher.",
-    prompts: [
-      "Which workload is trusted and measured enough to justify experimentation?",
-      "Which workload should treat collision behavior as part of its threat model?",
-      "What benchmark or observability data would you require before approving a hasher change?",
-      "What documentation note belongs in the code review if the hasher changes?",
-    ],
-    acceptanceCriteria: [
-      "You keep the public, attacker-controlled path conservative unless there is a very strong reason not to.",
-      "You describe the trusted internal path as a candidate for measurement rather than automatic change.",
-      "You name at least one production signal such as CPU profile, allocation profile, p99 latency, or collision-sensitive behavior.",
-      "You document the trust boundary and tradeoff clearly.",
-    ],
-    hints: [
-      "Hasher choice is partly a security decision and partly a performance decision.",
-      "A faster internal benchmark is not enough if the public threat model changed underneath it.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "Why is `get(\"key\")` on a `HashMap<String, V>` often better than `get(&\"key\".to_string())`?",
-  "What does the Entry API optimize, and what does it not magically optimize away?",
-  "When is a `HashSet<T>` clearer than `HashMap<T, bool>`?",
-  "Why is `HashMap` iteration order the wrong thing to rely on for stable output?",
-  "What extra question appears the moment you consider a custom hasher on a public boundary?",
-]
-
-const workingLoop = [
-  "State whether the operation is an owned update path or a borrowed read path.",
-  "Ask whether ordering is part of the contract or only an output concern.",
-  "Remove duplicate lookups before you chase smaller micro-optimizations.",
-  "If hashing policy changes, document both the benchmark reason and the trust boundary.",
-]
-
-export function PageCh11HashMapsAndSetsExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 21
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 11 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice choosing the right associative collection, separating owned updates from borrowed reads, and making
-          determinism and hashing policy explicit rather than accidental.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a collection-design review. The answer is rarely just “use a map.” The better
-                answer explains ownership of keys, read-path borrowing, update-path lookup count, and whether ordering or
-                denial-of-service posture belongs in the contract.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(20)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 11
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Associative collection drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Entry update, borrowed lookup, stable render"
-          description={
-            <>
-              Fix the starter so the owned update path uses the Entry API, the lookup path borrows{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">&str</code> directly, and the final
-              render is deterministic through an ordered projection.
-            </>
-          }
-          filename="hash_maps_lab.rs"
-          runKey="ch11_ex_hash_maps_lab"
-          expectedOutput={"api = Some(2)\nsorted = api=2,billing=1"}
-          helperText={
-            <>
-              Tip: on stable standard-library APIs, Entry is the right tool for an owned-key update path. Borrowed lookup
-              is the right tool for reads. The ordered render can be a{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`BTreeMap`}</code> projection.
-            </>
-          }
-          initialCode={`use std::collections::{BTreeMap, HashMap};\n\nfn record_owned(counts: &mut HashMap<String, usize>, route: String) {\n    if counts.contains_key(&route) {\n        let next = counts[&route] + 1;\n        counts.insert(route, next);\n    } else {\n        counts.insert(route, 1);\n    }\n}\n\nfn lookup(counts: &HashMap<String, usize>, route: &str) -> Option<usize> {\n    counts.get(&route.to_string()).copied()\n}\n\nfn render_sorted(counts: &HashMap<String, usize>) -> String {\n    counts\n        .iter()\n        .map(|(route, count)| format!(\"{}={}\", route, count))\n        .collect::<Vec<_>>()\n        .join(\",\")\n}\n\nfn main() {\n    let mut counts = HashMap::new();\n    record_owned(&mut counts, String::from(\"api\"));\n    record_owned(&mut counts, String::from(\"billing\"));\n    record_owned(&mut counts, String::from(\"api\"));\n\n    println!(\"api = {:?}\", lookup(&counts, \"api\"));\n    println!(\"sorted = {}\", render_sorted(&counts));\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to read a map or set API in ownership terms, use Entry API where
-            the key path is truly an update path, keep read paths allocation-light through borrowed lookup, and decide
-            whether stable ordering or hasher policy belongs in the design rather than in an after-the-fact fix.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch11_hash_maps_and_sets/entry_api_owned_keys.rs`
-````
-use std::collections::HashMap;
-
-fn record_hit(counts: &mut HashMap<String, usize>, route: String) {
-    let slot = counts.entry(route).or_insert(0);
-    *slot += 1;
-}
-
-fn main() {
-    let mut counts = HashMap::with_capacity(4);
-
-    record_hit(&mut counts, String::from("api"));
-    record_hit(&mut counts, String::from("api"));
-    record_hit(&mut counts, String::from("billing"));
-
-    println!("api = {}", counts.get("api").copied().unwrap_or(0));
-    println!("billing = {}", counts.get("billing").copied().unwrap_or(0));
-    println!("routes = {}", counts.len());
-}
-````
-
-### File: `examples/ch11_hash_maps_and_sets/borrowed_lookup_and_ordered_output.rs`
-````
-use std::collections::{BTreeMap, HashMap, HashSet};
-
-fn main() {
-    let mut active = HashSet::new();
-    active.insert(String::from("api"));
-    active.insert(String::from("worker"));
-
-    let mut counts = HashMap::new();
-    counts.insert(String::from("worker"), 3);
-    counts.insert(String::from("api"), 2);
-    counts.insert(String::from("billing"), 1);
-
-    let api_count = counts.get("api").copied().unwrap_or(0);
-    let has_worker = active.contains("worker");
-
-    let ordered: BTreeMap<_, _> = counts.into_iter().collect();
-    let ordered_text = ordered
-        .iter()
-        .map(|(name, count)| format!("{}={}", name, count))
-        .collect::<Vec<_>>()
-        .join(",");
-
-    println!("api count = {}", api_count);
-    println!("has worker = {}", has_worker);
-    println!("ordered = {}", ordered_text);
-}
-````

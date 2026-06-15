@@ -1,0 +1,206 @@
+{
+ "chapterKey": "ch26",
+ "num": 26,
+ "title": "Task Libraries and Parallel Execution",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose Tokio, Rayon, Crossbeam, or futures utilities from the workload",
+   "objective": "Practice mapping scheduling shape to the library that matches it instead of treating concurrency libraries as interchangeable.",
+   "starterPrompt": "Classify four cases: a TCP accept loop with many idle sockets, a large batch scoring pass over numeric data, a thread-based pipeline with bounded handoff between worker stages, and a local set of futures you want to poll as they complete without spawning each one.",
+   "prompts": [
+    "Which case wants Tokio tasks because waiting is the dominant cost?",
+    "Which case wants Rayon because CPU saturation over one data set is the real job?",
+    "Which case wants Crossbeam because thread-based coordination and bounded queues are the model?",
+    "Which case wants `FuturesUnordered` because the futures themselves are the unit of composition?"
+   ],
+   "acceptanceCriteria": [
+    "You assign each workload to a plausible primary tool and justify it with scheduling shape.",
+    "You distinguish spawned tasks from locally composed futures clearly.",
+    "You keep CPU-bound and IO-bound workloads separate instead of solving both with one library by reflex."
+   ],
+   "hints": [
+    "Start with the dominant cost: waiting or CPU.",
+    "Then ask whether the unit is a spawned task, a local future, a pool job, or a channel message."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find CPU-bound work left on Tokio workers",
+   "objective": "Read a task orchestration path and identify where `spawn_blocking`, Rayon, or a dedicated pool should replace inline CPU work.",
+   "starterPrompt": "A Tokio request handler reads from a socket, parses a large batch, computes a heavy checksum inline, then awaits a database call and publishes to a queue.",
+   "prompts": [
+    "Which steps are naturally async waits and should stay on the runtime?",
+    "Which step monopolizes a runtime worker and should move out of the ordinary async path?",
+    "Would `spawn_blocking` be enough here, or is a real CPU pool more honest if the batch stage dominates the service?",
+    "Which production metric would confirm runtime starvation or blocking-pool overload?"
+   ],
+   "acceptanceCriteria": [
+    "You separate waiting-heavy steps from CPU-heavy steps clearly.",
+    "You move at least one step to `spawn_blocking` or a CPU pool with a reason.",
+    "You mention one observability hook such as runtime latency, queue depth, or blocking-pool backlog."
+   ],
+   "hints": [
+    "Async is not the same as parallel CPU work.",
+    "The right boundary often appears where owned input can move into a blocking closure or pool job cleanly."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a bounded worker queue",
+   "objective": "Build a small queue boundary where admission is explicit and producer speed cannot grow memory without limit.",
+   "starterPrompt": "Implement a small worker handoff using either `tokio::sync::mpsc::channel` with a capacity or `crossbeam::channel::bounded`, then count accepted jobs and one retryable job explicitly.",
+   "prompts": [
+    "Keep the queue capacity visible in code.",
+    "Move owned work items through the queue rather than sharing mutable state directly.",
+    "Count a retryable item separately from accepted normal work.",
+    "Add a small cancellation flag or stop condition."
+   ],
+   "acceptanceCriteria": [
+    "The design uses a bounded queue rather than an unbounded default.",
+    "Work crosses the boundary by ownership transfer.",
+    "The runnable lab prints the expected capacity, accepted count, retry count, and cancellation flag."
+   ],
+   "hints": [
+    "A bounded queue is already a policy decision. Keep it visible.",
+    "If the queue owns admission, the producer should not need a broad shared lock to publish work."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair async orchestration with cancellation and retry",
+   "objective": "Refactor a spawned-task pipeline so cancellation and retry policy live in one visible orchestration layer.",
+   "starterPrompt": "You inherit a Tokio service that spawns child tasks but has no stop signal and retries failed work by recursively calling itself from inside the task body.",
+   "prompts": [
+    "Where should the stop signal live: `watch`, `oneshot`, timeout, or explicit abort handle?",
+    "Where should the retry counter and backoff policy live so the task body stays small?",
+    "Would `JoinSet` or `FuturesUnordered` make completion handling easier to centralize?",
+    "How will the service stop admitting work before draining in-flight tasks?"
+   ],
+   "acceptanceCriteria": [
+    "You move retry budgeting out of ad hoc recursion and into one orchestration policy.",
+    "You add an explicit cancellation or shutdown path.",
+    "You choose either spawned-task orchestration or local-future orchestration with a reason tied to the workload."
+   ],
+   "hints": [
+    "A retry loop hidden inside the task body is often harder to cap and harder to observe.",
+    "Cancellation is easier to reason about when admission, draining, and timeouts are one visible control flow."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Choose thread pools and backpressure for a mixed service",
+   "objective": "Map waiting-heavy, CPU-heavy, and coordination-heavy stages to the right pools and admission controls.",
+   "starterPrompt": "You are designing `accept -> parse -> enrich -> persist -> publish`, with bursty traffic, a CPU-heavy enrichment stage, and operator requirements for clean rolling shutdown.",
+   "prompts": [
+    "Which stages stay on Tokio runtime workers and which move to a CPU pool or `spawn_blocking`?",
+    "Which internal queues should be bounded, and where should a semaphore or concurrency cap sit?",
+    "Would the enrichment stage rather use Rayon directly than a large number of small blocking tasks?",
+    "What metrics would you require before calling the design production-ready?"
+   ],
+   "acceptanceCriteria": [
+    "You place at least one bounded queue or concurrency cap deliberately.",
+    "You choose a real CPU boundary rather than leaving enrichment inline on runtime workers.",
+    "You mention at least two observability hooks such as queue depth, in-flight task count, blocking-pool backlog, or shutdown latency."
+   ],
+   "hints": [
+    "One service can legitimately use Tokio and Rayon together.",
+    "The budget should follow the expensive stage, not only the front-door accept loop."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Design a task API another team can operate safely",
+   "objective": "Make cancellation, ownership, retry, and result shape explicit in the public API of a task-oriented subsystem.",
+   "starterPrompt": "You are publishing a library for internal teams to submit work to a background pipeline. The library may run on Tokio for IO-heavy users and use CPU pools for batch-heavy users.",
+   "prompts": [
+    "What does the submission API own, and what should it borrow only locally?",
+    "How will callers specify or inherit queue capacity, concurrency caps, or retry budget?",
+    "How does the API surface cancellation: drop semantics, signal handles, timeout wrappers, or explicit stop methods?",
+    "What outcome type should callers receive so success, retryable failure, and cancellation are distinguishable?"
+   ],
+   "acceptanceCriteria": [
+    "You define an owned submission boundary rather than a lifetime-heavy spawned-work API.",
+    "You make at least one resource budget visible to callers or configuration.",
+    "You give callers a clear cancellation path and a structured outcome type.",
+    "You mention one testing hook and one observability hook for the API."
+   ],
+   "hints": [
+    "A task library is easier to operate when the budgets are first-class rather than hidden constants.",
+    "The cleanest API usually makes success, retry, and cancellation explicit at the type level or in a clearly named result enum."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What practical signal tells you a workload wants Tokio instead of Rayon?",
+  "When is `FuturesUnordered` calmer than `JoinSet`, and when is the reverse true?",
+  "Why is a bounded queue already an API and overload decision, not only an implementation detail?",
+  "What is the difference between cancellation as task drop, cancellation as explicit signal, and retry as policy?",
+  "Why should CPU-heavy work have its own budget even inside an async service?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Bounded queue with retry and cancellation",
+  "filename": "bounded_queue_retry_lab.rs",
+  "runKey": "ch26_ex_bounded_queue_retry",
+  "expectedOutput": "capacity = 2\naccepted = 2\nretried = 1\ncancelled = true",
+  "initialCode": "fn main() {\n    let (tx, rx) = crossbeam::channel::bounded::<&'static str>(2);\n\n    let worker = std::thread::spawn(move || {\n        let mut accepted = 0;\n        let mut retried = 0;\n        let mut cancelled = false;\n\n        while let Ok(job) = rx.recv() {\n            if job == \"retry\" {\n                retried += 0;\n            } else {\n                accepted += 1;\n            }\n        }\n\n        (accepted, retried, cancelled)\n    });\n\n    tx.send(\"parse\").unwrap();\n    tx.send(\"retry\").unwrap();\n    tx.send(\"flush\").unwrap();\n    drop(tx);\n\n    let (accepted, retried, cancelled) = worker.join().unwrap();\n\n    println!(\"capacity = {}\", 2);\n    println!(\"accepted = {}\", accepted);\n    println!(\"retried = {}\", retried);\n    println!(\"cancelled = {}\", cancelled);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 22 through 25",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "The tool families at a glance",
+  "Async task orchestration",
+  "CPU-bound vs IO-bound workloads",
+  "Thread pools",
+  "Backpressure and bounded queues",
+  "Cancellation and retry patterns",
+  "Designing task APIs",
+  "What changes by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: Tokio tasks, JoinSet, bounded admission, and a visible shutdown signal",
+  "Example 2: Rayon CPU pool plus Crossbeam bounded queue",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Parallel execution requires matching the library to the workload: async IO, CPU-bound data parallelism, scoped threads, or coordination primitives. This chapter compares those choices through ownership and scheduling.",
+  "Chapter 22 covered OS threads and ownership across them. Chapter 23 covered synchronization and visibility. Chapter 24 explained futures and async state machines. Chapter 25 explained Tokio itself. This chapter puts those models side by side with Rayon, Crossbeam, and the futures",
+  "A service has a socket-heavy front door, CPU-heavy enrichment, bounded control-plane queues, and retry handling under overload. The business requirement is to match each execution lane to its workload: Tokio for waiting, Rayon for CPU-parallel batches, Crossbeam for thread coordi",
+  "The same decision drawn as a flow: one question about the nature of the work splits almost every case, and a second question about whether you want a runtime-owned task or a locally driven future splits the rest.",
+  "A useful distinction is this: use JoinSet when runtime-spawned tasks are the unit you own. Use FuturesUnordered when you already have futures and only need to drive them together.",
+  "The two differ in where the work actually runs. A JoinSet hands each future to the runtime as an independent task, so the runtime’s worker threads make progress on them even while you are not awaiting the set. A FuturesUnordered keeps the futures inside your own task and only adv",
+  "The local path keeps every future inside one task instead, so nothing crosses a task boundary:",
+  "The usual production bug is not using the wrong syntax. It is running CPU-heavy work on the async worker pool or using an async runtime where a straight CPU pool would have been clearer and faster.",
+  "A production service rarely has just one pool. The shape that keeps latency predictable is to route each kind of work to the pool built for it: async tasks on the Tokio worker pool, blocking bridges on the Tokio blocking pool, dense compute on a Rayon pool. The diagram below show",
+  "Engineers arriving from other languages tend to carry one habit that misfires here: a single concurrency tool that quietly covered both waiting and computing. Rust splits that into separate executors on purpose, so the useful mental adjustment is less about syntax and more about ",
+  "The most common mistake is solving all concurrency with the library you learned first. Tokio, Rayon, Crossbeam, and futures combinators are complementary, not interchangeable.",
+  "The queue is bounded, tasks are explicit runtime units, and retry accounting stays in one orchestration shell instead of being hidden inside many handlers.",
+  "What to look at: every job flows through one bounded channel before it ever becomes a task, the tasks live in a JoinSet that drains results as they finish, and the retry and shutdown bookkeeping stays in the orchestration shell rather than scattered across handlers. Trace that pa",
+  "`tokio::spawn` creates owned runtime tasks. `JoinSet` drains them as they finish.",
+  "The `mpsc` capacity is visible at the boundary, so producer speed already has a budget.",
+  "The worker drains its queue, then observes an explicit shutdown flag at exit. Wiring the signal in once here makes adding real mid-flight cancellation, with select! and abort, a small step rather than a redesign.",
+  "One pool owns the CPU-parallel loop. One bounded queue controls intake. This is a clearer model than forcing a waiting-oriented runtime to do dense CPU scheduling.",
+  "What to look at: the bounded Crossbeam channel is the only intake, each batch that comes off it is handed to Rayon’s parallel iterator so the work fans across the pool and rejoins into one sum, and the two stages stay separate (admission is sequential, compute is parallel). The d",
+  "`par_iter` and a small CPU pool make batch arithmetic parallel without manual thread choreography.",
+  "The bounded channel makes admission policy visible and keeps the thread-based pipeline simple.",
+  "This is CPU work, so a work-stealing data-parallel pool is the right boundary.",
+  "The repository also includes standalone Rust source under examples/ch26_task_libraries_and_parallel_execution/ including an extra FuturesUnordered fan-in example for the futures crate path.",
+  "The companion exercise page asks you to choose Tokio, Rayon, Crossbeam, or futures combinators from real workload shape, implement a bounded worker queue, and add retry and cancellation behavior to task orchestration."
+ ],
+ "codeSamples": {
+  "task_libraries_tokio_orchestration": "use tokio::sync::{mpsc, watch};\nuse tokio::task::JoinSet;\n\n#[derive(Debug, Clone, Copy)]\nstruct Job {\n    id: u32,\n    needs_retry: bool,\n}\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Job>(2);\n    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);\n\n    let producer = tokio::spawn(async move {\n        tx.send(Job { id: 1, needs_retry: false }).await.unwrap();\n        tx.send(Job { id: 2, needs_retry: true }).await.unwrap();\n        tx.send(Job { id: 3, needs_retry: false }).await.unwrap();\n    });\n\n    let worker = tokio::spawn(async move {\n        let mut set = JoinSet::new();\n        let mut completed = 0_u32;\n        let mut retries = 0_u32;\n\n        while let Some(job) = rx.recv().await {\n            set.spawn(async move {\n                if job.needs_retry {\n                    Err(job.id)\n                } else {\n                    Ok(job.id)\n                }\n            });\n        }\n\n        while let Some(result) = set.join_next().await {\n            match result.unwrap() {\n                Ok(_id) => completed += 1,\n                Err(id) => {\n                    retries += 1;\n                    set.spawn(async move { Ok::<u32, u32>(id) });\n                }\n            }\n        }\n\n        shutdown_rx.changed().await.unwrap();\n        (completed, retries, *shutdown_rx.borrow())\n    });\n\n    producer.await.unwrap();\n    shutdown_tx.send(true).unwrap();\n    let (completed, retries, cancelled) = worker.await.unwrap();\n\n    println!(\"buffer = 2\");\n    println!(\"completed = {}\", completed);\n    println!(\"retries = {}\", retries);\n    println!(\"cancelled = {}\", cancelled);\n}",
+  "task_libraries_rayon_crossbeam": "use rayon::prelude::*;\n\nfn main() {\n    let pool = rayon::ThreadPoolBuilder::new()\n        .num_threads(2)\n        .build()\n        .unwrap();\n\n    let (tx, rx) = crossbeam::channel::bounded::<Vec<u64>>(2);\n\n    let (batches, total) = std::thread::scope(|scope| {\n        scope.spawn(move || {\n            tx.send(vec![1_u64, 2, 3, 4]).unwrap();\n            tx.send(vec![5_u64, 6, 7, 8]).unwrap();\n            tx.send(vec![9_u64, 10]).unwrap();\n        });\n\n        pool.install(|| {\n            let mut batches = 0_u64;\n            let mut total = 0_u64;\n\n            while let Ok(batch) = rx.recv() {\n                let subtotal: u64 = batch\n                    .par_iter()\n                    .copied()\n                    .map(|value| value * 2)\n                    .sum();\n\n                total += subtotal;\n                batches += 1;\n            }\n\n            (batches, total)\n        })\n    });\n\n    println!(\"batches = {}\", batches);\n    println!(\"scaled total = {}\", total);\n    println!(\"pool threads = {}\", 2);\n}"
+ },
+ "labReferenceSolution": null
+}

@@ -1,0 +1,205 @@
+{
+ "chapterKey": "ch04",
+ "num": 4,
+ "title": "Ownership, Borrowing, and Lifetimes",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Tell the ownership story before touching syntax",
+   "objective": "Practice describing an ownership and borrowing flow in operational terms.",
+   "starterPrompt": "A request parser receives `&[u8]`, validates headers, builds a routing key, and then sends an owned job to a worker queue. Describe who owns data at each step and which phases only borrow.",
+   "prompts": [
+    "Which stage owns the original request buffer?",
+    "Which stage may borrow only temporarily?",
+    "At what point should the worker queue receive owned data rather than references into the request buffer?"
+   ],
+   "acceptanceCriteria": [
+    "You name an owner for the original request bytes.",
+    "You separate local borrowed inspection from cross-boundary owned data.",
+    "You explain why the queue boundary is normally an ownership transfer point."
+   ],
+   "hints": [
+    "Try to answer in terms of owners and temporary access, not in terms of syntax first.",
+    "If a later stage can outlive the current scope, it usually should not borrow from that scope."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Find the unnecessary clone",
+   "objective": "Identify where cloning papers over an ownership design that could be simpler.",
+   "starterPrompt": "Review a helper that clones a request path into `path_copy`, prints it, then still uses the original path immediately after. Decide whether the clone is required and explain the cleaner alternative.",
+   "prompts": [
+    "Can a shared borrow do the same work?",
+    "Would returning ownership from a helper be more appropriate than cloning?",
+    "If the clone stays, what makes it economically justified rather than a reflex?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish semantic duplication from borrow-checker work-around.",
+    "You propose borrowing as the first repair when the data only needs read access.",
+    "You justify any remaining clone in terms of API shape or operational cost."
+   ],
+   "hints": [
+    "If no independent copy is needed, start by asking whether `&str` or `&T` is enough.",
+    "A good answer mentions when cloning is correct, not only when it is avoidable."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Accept borrowed input and return owned output",
+   "objective": "Design an API that borrows from the caller but returns a result with independent lifetime.",
+   "starterPrompt": "Implement `fn build_cache_key(service: &str, route: &str) -> String` so the result format is `service:route`.",
+   "prompts": [
+    "Keep the parameters borrowed as `&str`.",
+    "Return `String`, not `&str`.",
+    "Do not allocate intermediate clones unless they are part of the final owned result construction."
+   ],
+   "acceptanceCriteria": [
+    "The function signature is exactly `fn build_cache_key(service: &str, route: &str) -> String`.",
+    "The output matches `billing:/v1/invoices` and `search:/ready` for the provided sample inputs.",
+    "The function returns owned data rather than borrowing from a temporary."
+   ],
+   "hints": [
+    "A returned `String` makes the caller independent from the input buffer lifetime.",
+    "Either `format!` or a small `String` builder is fine here."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Annotate lifetimes only where required",
+   "objective": "Separate cases that need explicit lifetime relationships from cases handled by elision.",
+   "starterPrompt": "Decide which signatures need explicit lifetimes and write the corrected form: `fn first_word(s: &str) -> &str` and `fn pick_longer(left: &str, right: &str) -> &str`.",
+   "prompts": [
+    "Which function has only one input borrow?",
+    "Which function returns one of several input borrows?",
+    "Why does adding a lifetime to the first function not improve the model?"
+   ],
+   "acceptanceCriteria": [
+    "You keep `fn first_word(s: &str) -> &str` elided.",
+    "You annotate `pick_longer` with one explicit lifetime parameter and tie both inputs plus the output to it.",
+    "You explain that the explicit annotation documents a relationship rather than extending storage lifetime."
+   ],
+   "hints": [
+    "One input borrowed reference usually makes elision sufficient.",
+    "Multiple candidate input borrows usually force you to name the output relationship."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Fix a borrow-checker failure without cloning",
+   "objective": "Repair a borrow conflict by changing scope or order instead of duplicating data by default.",
+   "starterPrompt": "A function borrows `let first = first_word(&buffer);`, then tries `buffer.clear();`, and finally prints `first`. Refactor the flow so it compiles without cloning unless you can justify the clone economically.",
+   "prompts": [
+    "Can the use of `first` happen earlier?",
+    "Can the borrowed value be converted into an owned value only if the later code truly needs it after mutation?",
+    "Would a shorter helper function or inner scope make the borrow duration obvious?"
+   ],
+   "acceptanceCriteria": [
+    "Your repair ends the borrow before the mutable operation, or deliberately converts to owned data for a justified reason.",
+    "You do not default to cloning without explaining why independent ownership is needed.",
+    "You explain the conflict as overlapping borrow duration, not as ownership or borrowing rule involved."
+   ],
+   "hints": [
+    "Ask when the immutable borrow is last used.",
+    "If later mutation is required, the cleanest repair is often to shorten the earlier borrow's lifetime in code structure."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose ownership for a long-lived service API",
+   "objective": "Design a Rust-native boundary for a production service that mixes parsing, normalization, storage, and background work.",
+   "starterPrompt": "You are designing an audit service with the flow `socket bytes -> parse route -> normalize key -> store record -> publish async notification`.",
+   "prompts": [
+    "Which functions should accept borrowed input?",
+    "Which values must become owned before storage or async notification?",
+    "Where would a borrowed-field struct be justified, and where would it create unnecessary lifetime coupling?",
+    "What tradeoff are you accepting around allocation versus API simplicity?"
+   ],
+   "acceptanceCriteria": [
+    "You keep borrowed input local to parsing and normalization where appropriate.",
+    "You convert data to owned form before storage and async boundaries.",
+    "You justify at least one tradeoff involving allocation cost, simplicity, or long-term maintainability.",
+    "You avoid presenting borrowed fields in long-lived structs as the default answer."
+   ],
+   "hints": [
+    "Stored records and async notifications usually want independent ownership.",
+    "The best answer names concrete owners at each subsystem edge."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is ownership usually the first question and lifetimes the second?",
+  "What is the operational difference between `&T` and `&mut T`?",
+  "What does a lifetime annotation describe, and what does it never do?",
+  "When is returning `String` cleaner than returning `&str`?",
+  "Why do queue, cache, and async boundaries often push you toward owned data?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Borrowed input, owned result",
+  "filename": "build_cache_key_lab.rs",
+  "runKey": "ch04_ex_build_cache_key",
+  "expectedOutput": "billing:/v1/invoices\nsearch:/ready",
+  "initialCode": "fn build_cache_key(service: &str, route: &str) -> String {\n    route.to_string()\n}\n\nfn main() {\n    println!(\"{}\", build_cache_key(\"billing\", \"/v1/invoices\"));\n    println!(\"{}\", build_cache_key(\"search\", \"/ready\"));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 02 and 03",
+  "Opening scenario",
+  "A reliable order for asking the questions",
+  "Mental model",
+  "Core concepts",
+  "Ownership as Rust’s central abstraction",
+  "Borrowing rules",
+  "Lifetimes in function signatures",
+  "Lifetime elision",
+  "Common lifetime traps for C++ and Go developers",
+  "Designing APIs around ownership",
+  "Coming from another language",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: shared borrow first, mutable borrow second",
+  "Example 2: explicit lifetime where needed, owned output where cleaner",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Ownership, borrowing, and lifetimes define who may read, mutate, retain, or transfer data at every API boundary. This chapter applies those rules to production interfaces and resource management.",
+  "Chapter 02 established values, moves, drops, and lifetimes as reference constraints. Chapter 03 showed that repository boundaries are also ownership boundaries. This chapter connects those models into the day-to-day rules you will feel in function signatures, method design, worke",
+  "An ingress service parses HTTP data, derives routing keys, emits audit labels, and queues work for downstream processors. The business requirement is explicit data ownership at each layer: request bytes stay borrowed only while local, and derived outputs become owned when they cr",
+  "The three ideas stack in one direction. Ownership is the foundation; a borrow is a temporary permission granted by an owner; a lifetime is just the compiler’s name for the span during which that borrow stays valid. Read the diagram top to bottom and notice that nothing below the ",
+  "Ownership is the reason moves, drops, borrows, thread handoff, and many API decisions line up into one model. The owner is the place where cleanup responsibility lives. Once that is clear, borrowing becomes a temporary permission story instead of a second memory-management model.",
+  "This is why Rust often feels strict at subsystem edges. Queues, async tasks, caches, and stored structs are all ownership decisions. They force you to state whether the next stage only observes data or must outlive the current owner.",
+  "The whole borrow checker reduces to one exclusivity rule, and it is easier to hold as a small state machine than as a paragraph. At any moment a value is in exactly one of three states: nobody is borrowing it, several readers are, or one writer is. The forbidden combination is th",
+  "Use &T when the callee only needs to inspect data. Many readers are allowed at once because no one is mutating through those aliases.",
+  "Use &mut T when the callee needs to change the value. Rust requires exclusivity here because mutation plus aliasing is one of the places memory and concurrency bugs are born.",
+  "A lifetime parameter answers one question for a function that returns a reference: which input does the output borrow from? When there is only one candidate input, the answer is obvious and Rust writes it for you; when there are several, you have to point at the right one. The di",
+  "A lifetime annotation matters when the compiler must understand how output references relate to input references. A classic example is choosing one of two input references and returning it. The function is not extending lifetime; it is documenting which borrowing relationship mus",
+  "When a function borrows from one input and returns a slice of that same input, the relationship is often simple enough that Rust can infer it. This is where lifetime elision helps keep common signatures small without changing the underlying model.",
+  "Elision is convenience, not a second ruleset. Rust still reasons about lifetimes; it simply fills in common cases for you. The useful operational reading is below.",
+  "The practical takeaway is simple: if there is one input borrow, elision often works. If there are several candidate input borrows and one output borrow, the relationship usually needs to be written explicitly.",
+  "A strong default for service code is this: accept borrowed input for local inspection, parsing, and validation; return owned output when the result should be stored, queued, retried, or otherwise decoupled from the caller’s input buffer.",
+  "The mechanics of borrowing are not the hard part. The hard part is that ownership and aliasing rules you used to enforce by habit, by convention, or by trusting a runtime are now checked by the compiler. Each of these cards names the single mental-model shift that trips people up",
+  "The wrong repair for a lifetime problem is often “add more lifetimes.” The right repair is usually one of three moves: shorten the borrow, change the owner, or return owned data.",
+  "Read through a shared reference, then take an exclusive mutable borrow only for the short mutation step.",
+  "What to look at: the shared borrow for request_size is created, used, and finished before append_trace ever asks for its mutable borrow. The two borrows do not overlap in time, which is exactly why the code compiles.",
+  "The immutable borrow used for request_size ends before the mutable borrow begins. That sequencing is the real design tool.",
+  "Inspect first, mutate second, and keep the exclusive borrow narrow. This pattern resolves a surprising number of logging, parsing, and request-enrichment borrow errors.",
+  "One helper uses lifetime elision, one requires an explicit relationship, and one deliberately returns an owned string.",
+  "What to look at: compare where each function’s result gets its validity. Two of them return a slice that borrows from an input, so their output lives only as long as that input; the third builds a brand-new String it owns outright. The diagram groups the three by that distinction",
+  "The third function takes the opposite path: instead of borrowing from an input, it builds and returns a value it owns.",
+  "first_segment borrows from one input, so elision keeps the signature compact.",
+  "pick_longer chooses between two inputs, so the returned reference relationship must be written.",
+  "make_audit_label returns String because the label should outlive the borrowed inputs cleanly.",
+  "The exercise page asks you to repair borrow-checker failures without cloning by reflex, decide when explicit lifetime annotations are required, and design APIs that take borrowed input while returning owned output."
+ ],
+ "codeSamples": {
+  "ownership_borrowing_shared_mutable": "fn request_size(line: &str) -> usize {\n    line.len()\n}\n\nfn append_trace(line: &mut String, trace_id: &str) {\n    line.push_str(\" trace=\");\n    line.push_str(trace_id);\n}\n\nfn main() {\n    let mut request = String::from(\"GET /ready\");\n    let len_before = request_size(&request);\n    append_trace(&mut request, \"abc-123\");\n\n    println!(\"len before = {}\", len_before);\n    println!(\"request = {}\", request);\n}",
+  "ownership_borrowing_lifetimes": "fn first_segment(path: &str) -> &str {\n    path.split('/').find(|segment| !segment.is_empty()).unwrap_or(\"root\")\n}\n\nfn pick_longer<'a>(left: &'a str, right: &'a str) -> &'a str {\n    if left.len() >= right.len() { left } else { right }\n}\n\nfn make_audit_label(service: &str, key: &str) -> String {\n    format!(\"{}::{}\", service, key)\n}\n\nfn main() {\n    let route = String::from(\"/api/health\");\n    let segment = first_segment(&route);\n    let longer = pick_longer(\"job\", \"request-id\");\n    let label = make_audit_label(\"gateway\", segment);\n\n    println!(\"segment = {}\", segment);\n    println!(\"longer = {}\", longer);\n    println!(\"label = {}\", label);\n}"
+ },
+ "labReferenceSolution": null
+}

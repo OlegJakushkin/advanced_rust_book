@@ -1,26 +1,27 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { Activity, ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, Timer, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Profile the question, not the syntax",
-    body: "A performance profile should answer one operational question: where is wall time or CPU time actually going, and is the cost compute, waiting, locking, copying, or boundary overhead?",
+    title: "Start from a question, not a tool",
+    body: "Before you reach for a profiler, decide what you are trying to learn. A profile is only useful when it answers one operational question at a time: where is wall time or CPU time actually going, and is the cost compute, waiting, locking, copying, or crossing a boundary? Picking the tool before the question is how teams end up with a flame graph that does not explain the regression they were chasing.",
   },
   {
-    title: "Sampling and instrumentation answer different questions",
-    body: "Sampling is strong for broad CPU hot-path discovery with modest overhead. Instrumentation is strong when you need precise timing around chosen boundaries such as queue wait, lock acquisition, serialization, or FFI calls.",
+    title: "Sampling and instrumentation see different things",
+    body: "Sampling interrupts the program at a fixed rate and records the call stack each time, so it is cheap and shows you broadly where CPU time concentrates. Instrumentation adds explicit timers around code you choose, so it can measure a single boundary precisely: queue wait, lock acquisition, serialization, or an FFI call. Neither is better; they answer different questions, and reaching for the wrong one wastes a debugging cycle.",
   },
   {
-    title: "Wall time is usually composed, not singular",
-    body: "A 'slow request' can be mostly CPU, mostly IO wait, mostly lock wait, or mostly queueing before work even starts. A good profile separates those layers before anyone rewrites code.",
+    title: "Wall time is a sum of layers, not one number",
+    body: "A request that takes 40ms is almost never 40ms of one thing. It can be mostly CPU, mostly IO wait, mostly lock contention, or mostly time spent queued before the handler even began. The single most valuable move in profiling is to split that wall time into its layers first. Only then does it make sense to argue about which code to change.",
   },
 ]
 
@@ -127,15 +128,19 @@ const ffiProfilingNotes = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Rust profiling still cares about cache misses, branch prediction, and heap traffic, but ownership boundaries make clone and handoff costs easier to review before they reach the profiler.",
+    body: "The hardware-level intuition transfers directly: cache misses, branch misprediction, and heap traffic still dominate hot loops, and perf and flame graphs work the same way. The shift is that Rust pins down clone and handoff costs in the source, so a code reviewer can spot an accidental deep copy before it ever reaches the profiler. Spend less time reverse-engineering where a copy happened and more time on the algorithm.",
   },
   {
     title: "C# background",
-    body: "You no longer get a GC to blur allocation lifetime. Rust performance work is often calmer because the code already names where values become owned and how long they survive.",
+    body: "There is no GC to blame and no GC pause to hunt for in a trace. Allocation cost in Rust is paid at a deterministic point you can see in the code, so a profile points at the call site, not at a background collector. The trap is expecting an allocation profiler to be the main tool; in Rust, the allocation is usually visible at the line that owns the value.",
   },
   {
     title: "Go background",
-    body: "Async and queue-heavy services can hide backlog cost the same way goroutine-heavy systems can. Rust asks you to make the queue and ownership story explicit enough that profiling has somewhere honest to point.",
+    body: "The lightweight-task instinct carries over to Tokio, but the pprof-style 'just look at the goroutine profile' reflex does not map cleanly. A slow async service is usually slow because of queue wait, semaphore limits, or work parked on blocking threads, not because a single function is hot. Profile where the task waits before you profile where it computes.",
+  },
+  {
+    title: "Python background",
+    body: "You are leaving the world where cProfile and line-level timers are the default because the interpreter dominates everything. In Rust the interpreter overhead is gone, so the remaining cost is real work: serialization, syscalls, contention, and boundary crossings. The lesson from Python data and ML code still applies, though — when Rust is the fast kernel behind a slower host, the cost often lives at the boundary, so measure the call frequency across it first.",
   },
 ]
 
@@ -242,9 +247,25 @@ export function PageCh35PerformanceProfiling() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A service release increased p99 latency while CPU samples, queue depth, and serialization timings now disagree
-            about the bottleneck. The business requirement is to decompose wall time into CPU, queue wait, lock wait, IO,
-            serialization, and boundary overhead so the next code change targets the owning subsystem.
+            A release went out last night and p99 latency climbed. The on-call dashboards are not helping, because every
+            team is reading a different signal: one engineer points at a CPU flame graph, another at growing queue depth,
+            a third at serialization timings that look slightly worse than last week. They are all looking at fragments of
+            the same wall-clock budget, and none of those fragments alone tells you which subsystem to change.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            The job for this chapter is the discipline that resolves that argument. Before anyone rewrites a function, the
+            wall time of a slow request has to be split into the layers it actually spends time in: CPU compute, time spent
+            waiting in a queue, time blocked on a lock, IO, serialization, and the overhead of crossing a boundary such as
+            FFI or WASM. Once the budget is decomposed, the owning subsystem is usually obvious, and the next code change
+            is aimed instead of guessed.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Req[Slow request] --> Q[Queue wait]\n  Q --> CPU[CPU compute]\n  CPU --> Lock[Lock wait]\n  Lock --> Ser[Serialization]\n  Ser --> IO[IO and boundary]\n  IO --> Resp[Response]`}
+            caption="Wall time is a chain of layers. A profile that names one number hides which link is long."
+          />
+          <p className="mt-1 text-sm text-muted-foreground leading-6">
+            Each question below maps to a different tool. The skill is matching the question to the instrument that answers
+            it with the least distortion.
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {questionCards.map((card) => (
@@ -258,7 +279,10 @@ export function PageCh35PerformanceProfiling() {
 
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-lg font-semibold text-foreground mb-3">At a glance</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold text-foreground">At a glance</h3>
+            </div>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               <li>Choose the profiling tool from the question: benchmark, sampler, instrumentation, trace, or live telemetry.</li>
               <li>Read flame graphs as stack-width evidence, not as a chronological movie.</li>
@@ -268,7 +292,10 @@ export function PageCh35PerformanceProfiling() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-lg font-semibold text-foreground mb-3">Review lens</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Timer className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold text-foreground">Questions to ask before you optimize</h3>
+            </div>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
               <li>What is the unit of work the profile is actually describing?</li>
               <li>Which layer owns the wall-clock budget: compute, waiting, locking, copying, or crossing a boundary?</li>
@@ -283,6 +310,11 @@ export function PageCh35PerformanceProfiling() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Profiling is less about the tools than about how you frame the work. Three ideas sit underneath everything in
+            this chapter, and they are the difference between a profile that ends an argument and one that starts a new
+            one.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
@@ -300,8 +332,37 @@ export function PageCh35PerformanceProfiling() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-3">Choosing the tool from the question</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              The whole toolkit fans out from a single decision: what kind of answer do you need? The diagram below is the
+              one to keep in your head. Walk it from the question, not from the tool you happen to have open. A benchmark
+              compares two implementations under a fixed workload; a sampler finds the hot CPU path; instrumentation and
+              tracing explain where a request spends its timeline; live telemetry confirms the fix mattered in production.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Ask{What do you need?}\n  Ask -->|Compare two versions| Bench[Criterion benchmark]\n  Ask -->|Find hot CPU path| Sample[Sampling profiler + flame graph]\n  Ask -->|Explain a timeline| Instr[Tracing / instrumentation]\n  Ask -->|Prove it in prod| Tele[Live telemetry: p95/p99]`}
+              caption="First half: the question picks the instrument. Match the answer you need to the tool before you open anything."
+            />
+            <p className="mt-3 text-sm text-muted-foreground leading-6">
+              All four instruments feed the same loop: make a targeted change, then confirm it with live telemetry.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Bench[Criterion benchmark] --> Fix[Targeted change]\n  Sample[Sampling profiler] --> Fix\n  Instr[Tracing / instrumentation] --> Fix\n  Fix --> Tele[Live telemetry: p95/p99]`}
+              caption="Second half: every tool leads to one targeted change, which is then verified in production."
+            />
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">CPU profiling</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6">
+              A sampling CPU profiler is your first move when the symptom is &quot;something is burning cores.&quot; It
+              interrupts the running binary many times per second, records the call stack, and aggregates those samples
+              into a picture of where compute time concentrates. The output is statistical, not exhaustive, which is
+              exactly why it stays cheap enough to run on something close to a real workload. The most important habit is
+              to separate inclusive time (a function plus everything it calls) from exclusive time (the function&apos;s
+              own body): a caller can look enormously wide only because one child beneath it is doing all the work.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                   {cpuProfilingNotes.map((note) => (
@@ -326,24 +387,43 @@ perf report`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Flame graphs</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <h4 className="font-semibold text-foreground mb-3">Reading a flame graph</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              A flame graph is the standard way to display sampled CPU data, and it is misread constantly. It is not a
+              timeline. The x-axis is not chronological; boxes are grouped by the shape of the call stack, and width is
+              the total sampled time attributed to that stack. The stack grows upward, so a parent sits below the callees
+              it invoked. The diagram below shows the one reading move worth memorizing: find the widest plateau, then
+              follow it upward until the work is specific enough to change.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Root[main 100%] --> H[handle_request 95%]\n  H --> P[parse 20%]\n  H --> S[serialize 60%]\n  S --> Enc[encode_fields 55%]\n  Enc --> Alloc[alloc + copy 50%]`}
+              caption="Width is sampled time, height is call depth. The wide leaf at the top of a wide stack is the change target."
+            />
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {flameGraphRules.map((rule) => (
                 <li key={rule}>{rule}</li>
               ))}
             </ul>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                A useful reading habit is simple. Start at the widest plateau. Then look upward until the work becomes
-                specific enough to change. Do not optimize the first named function you recognize if the real width lives
-                deeper underneath it.
+                The trap is optimizing the first named function you recognize. In the graph above, <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">serialize</code> looks
+                like the culprit, but the real width is the allocation and copy beneath it. Tuning the serializer&apos;s
+                control flow would barely move the number; cutting the copy would.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Sampling vs instrumentation</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <h4 className="font-semibold text-foreground mb-3">Sampling versus instrumentation</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              These are the two ways to measure a running program, and the choice is a tradeoff between overhead and
+              precision. Sampling watches from the outside at a fixed rate, so it perturbs the program very little but
+              only sees code that runs often enough to be caught between samples. Instrumentation places explicit timers
+              inside the code, so it can account for a single rare event exactly, at the cost of adding work to every
+              measured region. Reach for sampling when you do not yet know where the time goes; reach for instrumentation
+              when you already suspect a specific boundary and want its number to the microsecond.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {samplingVsInstrumentationCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{card.title}</div>
@@ -355,7 +435,17 @@ perf report`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Benchmarking with Criterion</h4>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <p className="text-sm text-muted-foreground leading-6">
+              When the question is &quot;is version B actually faster than version A?&quot; a profiler is the wrong tool;
+              you want a benchmark. Criterion is the ecosystem default. It runs the measured closure many times, discards
+              warmup, and reports a distribution with confidence intervals rather than a single brittle number, which is
+              what makes its comparisons trustworthy. The catch is that a benchmark is only as honest as its setup: it
+              must run in release mode, on representative input, and it must defeat the optimizer&apos;s habit of deleting
+              work whose result is never used. That last point is what <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">black_box</code> is for &mdash; it
+              hides a value from dead-code elimination so the compiler cannot &quot;optimize away&quot; the very thing you
+              are timing.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
                   {criterionChecklist.map((item) => (
@@ -368,8 +458,8 @@ perf report`}</code>
                   <code className="font-mono text-foreground">{criterionSnippet}</code>
                 </pre>
                 <p className="mt-3 text-sm text-muted-foreground leading-6">
-                  Criterion is a strong ecosystem default for controlled benchmarks. Use it to compare alternatives. Then
-                  use profiles and traces to explain why one alternative won or lost.
+                  Criterion tells you which alternative won and by how much. It does not tell you why. Once you have the
+                  comparison, profile the slower variant so the result comes with an explanation instead of just a number.
                 </p>
               </div>
             </div>
@@ -377,22 +467,43 @@ perf report`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling async Rust</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <p className="text-sm text-muted-foreground leading-6">
+              Async services break the assumption that a CPU profiler tells the whole story. A task can take 200ms of wall
+              time while using almost no CPU, because most of that time was spent enqueued, waiting on a semaphore permit,
+              or parked on the blocking thread pool. The diagram below traces a single request through a Tokio runtime so
+              you can see where the clock runs without the cores running. When async &quot;feels slow,&quot; profile each
+              of those wait points before you profile the handler body.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  In[Request] --> RQ[Runtime queue: queue wait]\n  RQ --> Worker[Worker thread]\n  Worker --> Sem[Await semaphore permit]\n  Sem --> Run[Handler CPU work]\n  Run -->|blocking call| Pool[spawn_blocking pool]\n  Pool --> Done[Complete]\n  Run --> Done`}
+              caption="Most async latency hides in the waits: queue, permit, and blocking-pool pressure, not the handler body."
+            />
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {asyncProfilingNotes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
             </ul>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                An async regression often lives in admission policy, queue wait, or CPU work left on runtime workers. The
-                first fix is usually not “rewrite the executor.” It is “measure where the task actually waits or blocks.”
+                An async regression usually lives in admission policy, queue wait, or CPU work left on runtime workers. The
+                first fix is almost never &quot;rewrite the executor.&quot; It is &quot;measure where the task actually
+                waits or blocks,&quot; which is exactly what tracing spans around each transition in the diagram will tell
+                you.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling lock contention</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <p className="text-sm text-muted-foreground leading-6">
+              Lock cost has two halves that must be measured separately. One is the time a thread spends holding the
+              guard and doing work; the other is the time other threads spend blocked, waiting to acquire it. They fail in
+              opposite ways: a lock held briefly but acquired constantly is a contention problem, while a lock held for a
+              long time by one path starves everyone regardless of frequency. Counting contended acquisitions tells you
+              which failure you have, and that determines whether the fix is to shrink the critical section, shard the
+              state, or move to a one-owner message-passing design.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {lockProfilingNotes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
@@ -400,14 +511,24 @@ perf report`}</code>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 A hot lock is not only a synchronization problem. It is often an ownership problem hiding underneath:
-                too-broad shared state, too-long critical sections, or one subsystem missing its own owner.
+                too-broad shared state, too-long critical sections, or one subsystem missing its own owner. Reach for
+                lower-level lock-free structures last, after the cheaper redesigns have been ruled out.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling serialization</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <p className="text-sm text-muted-foreground leading-6">
+              Serialization shows up on flame graphs as a wide, busy stack, and it is easy to blame the encoder when the
+              real cost is the data itself. Measure encode and decode time alongside two numbers that explain them:
+              allocations per message and bytes per message. A format that looks slow is often just moving too many bytes,
+              or allocating a fresh buffer per field. It is also worth separating the serializer from the compression,
+              hashing, or encryption frequently layered on top of it, since those can dominate while masquerading as
+              &quot;serialization cost.&quot; And when a queue or task boundary keeps large owned payloads alive, the
+              retained bytes can matter as much as the encode time.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {serializationProfilingNotes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
@@ -416,36 +537,72 @@ perf report`}</code>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Profiling IO pipelines</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <p className="text-sm text-muted-foreground leading-6">
+              IO is where flame graphs lie most convincingly. A sampler shows the CPU busy inside a parser, so the parser
+              gets blamed, while a trace reveals the request actually spent most of its life queued before the parser ever
+              ran. The honest measurements for an IO path are not CPU samples at all: syscalls per request, bytes per
+              write, flush frequency, queue depth, and blocked time. Many tiny writes, partial writes, or an unbounded
+              admission queue downstream cause more real latency than any single read loop, and none of them show up
+              clearly in a CPU profile.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc list-inside">
               {ioProfilingNotes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
             </ul>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-5">
-              <h4 className="font-semibold text-foreground mb-3">Profiling WASM</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                {wasmProfilingNotes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-3">Profiling boundary crossings: WASM and FFI</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              WASM and FFI share one performance failure mode: the cost is rarely in the Rust kernel and almost always in
+              the crossing. A native or WASM function can be blazing fast per call and still dominate a workload because
+              it is called a million times, or because each call marshals a string, copies a typed array, or transfers
+              ownership. The diagram makes the layers visible. Count boundary crossings first, then measure marshalling
+              and copy cost, and only then look at the compute inside.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Host[Host: JS or C/C++] -->|call N times| Marshal[Marshal args + copy buffers]\n  Marshal --> Kernel[Rust kernel compute]\n  Kernel --> Back[Marshal result back]\n  Back --> Host`}
+              caption="The kernel is fast. The per-call marshalling and copies, multiplied by call count, are usually the bottleneck."
+            />
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">WASM</div>
+                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+                  {wasmProfilingNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">FFI</div>
+                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+                  {ffiProfilingNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-
-            <div className="rounded-xl border border-border bg-card p-5">
-              <h4 className="font-semibold text-foreground mb-3">Profiling FFI overhead</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                {ffiProfilingNotes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
+            <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                The single highest-leverage experiment for both is to compare a noop call (tiny or empty payload) against
+                the real call. The difference is your fixed per-crossing overhead, and if it is large, a batched API that
+                crosses once will beat any amount of tuning on the callee.
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers className="h-5 w-5 text-primary" />
+              <h4 className="font-semibold text-foreground">How to think about this coming from another language</h4>
+            </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The tools overlap with what you already know, but the mental model shifts. The useful question is not
+              &quot;which Rust crate replaces my old profiler,&quot; it is &quot;what does Rust make visible that my old
+              runtime hid, and where does that change where I point the instrument first.&quot;
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -461,6 +618,11 @@ perf report`}</code>
             <Wrench className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            These are the habits that keep a profiling effort honest over time, especially across a team where the person
+            who captured a regression is rarely the person who later has to reproduce it. The common thread is discipline
+            about scope: one question, one build, one recorded workload.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
@@ -475,6 +637,11 @@ perf report`}</code>
             <Bug className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Each of these is a mistake made by people who know how to use the tools. They come not from ignorance of the
+            profiler but from trusting a single view too far, or from optimizing the thing that was easy to see rather
+            than the thing that was actually slow.
+          </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
@@ -498,14 +665,21 @@ perf report`}</code>
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            Both examples model the core move of this chapter in a few lines you can run: take per-stage timings, find the
+            one that owns the most time, and report it. A real flame graph or trace is richer, but the logic of
+            &quot;decompose, then point at the widest layer&quot; is identical, and seeing it as plain data makes the
+            graphical tools easier to read.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="font-semibold text-foreground">Example 1: summarize the hottest stage before drawing the flame graph</h4>
+                <h4 className="font-semibold text-foreground">Example 1: find the hottest stage before drawing the flame graph</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  A flame graph is a richer view than this summary, but the first question is the same: which stage owns the
-                  most inclusive sampled time?
+                  What to watch: the code records a duration for each stage, then scans for the maximum. That single
+                  reduction &mdash; from a list of timings to one named winner &mdash; is exactly the question a flame graph answers
+                  visually. The diagram below shows that flow before you read the code.
                 </p>
               </div>
               {codes.performance_profiling_hot_stage_summary !== DEFAULT_CODES.performance_profiling_hot_stage_summary && (
@@ -519,6 +693,10 @@ perf report`}</code>
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Stages[parse / decode / serialize timings] --> Max{Pick max stage}\n  Max --> Hot[hottest = serialize]\n  Stages --> Sum[Sum to total us]\n  Hot --> Report[Report hottest + total]\n  Sum --> Report`}
+              caption="Decompose into per-stage timings, reduce to the widest one, report it. That is the whole profiling loop in miniature."
+            />
             <RustCodeEditor
               code={codes.performance_profiling_hot_stage_summary}
               onChange={(newCode) => updateCode("performance_profiling_hot_stage_summary", newCode)}
@@ -558,8 +736,10 @@ perf report`}</code>
               <div>
                 <h4 className="font-semibold text-foreground">Example 2: separate CPU, IO, lock, and serialization before tuning</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  One total latency number is not enough. The profile should tell you which component dominates wall time and
-                  how much data crossed the expensive boundary.
+                  What to watch: the code attributes wall time to named layers, picks the dominant one, and reports the
+                  bytes that crossed the serialization boundary. The output (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">dominant = cpu</code>)
+                  is the classification that decides which fix is even worth trying. The diagram shows how the layers feed
+                  that decision.
                 </p>
               </div>
               {codes.performance_profiling_pipeline_bottleneck !== DEFAULT_CODES.performance_profiling_pipeline_bottleneck && (
@@ -573,6 +753,10 @@ perf report`}</code>
                 </Button>
               )}
             </div>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Wall[Wall time budget] --> CPU[CPU]\n  Wall --> IO[IO]\n  Wall --> Lock[Lock wait]\n  Wall --> Ser[Serialization + bytes]\n  CPU --> Pick{Largest layer?}\n  IO --> Pick\n  Lock --> Pick\n  Ser --> Pick\n  Pick --> Dom[dominant = cpu]`}
+              caption="Attribute wall time to layers, then let the largest layer choose the fix. A queue tweak cannot help a CPU-bound path."
+            />
             <RustCodeEditor
               code={codes.performance_profiling_pipeline_bottleneck}
               onChange={(newCode) => updateCode("performance_profiling_pipeline_bottleneck", newCode)}
@@ -642,648 +826,3 @@ perf report`}</code>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch35-performance-profiling-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Interpret a flame graph narrative before touching code",
-    objective: "Practice reading a flame graph as an explanation of sampled stack width rather than as a chronological movie.",
-    starterPrompt:
-      "A flame graph shows `request_handler` across most of the width, but the widest child under it is `serialize_payload`, and the widest child under that is `escape_json_string`.",
-    prompts: [
-      "Which function is the first concrete optimization suspect, and why?",
-      "Why is `request_handler` not automatically the right optimization target even though it is wide?",
-      "What further measurement would you take before rewriting the serializer?",
-    ],
-    acceptanceCriteria: [
-      "You identify the widest concrete child as the first likely target.",
-      "You explain inclusive versus child cost clearly.",
-      "You mention at least one follow-up measurement such as bytes per message, allocations per encode, or a Criterion comparison.",
-    ],
-    hints: [
-      "Read downward for ownership of inclusive time, then upward for concrete causes.",
-      "A wide parent can simply be wide because one child is wide.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Choose sampling, instrumentation, or tracing from the question",
-    objective: "Map one regression story to the right mix of tools instead of treating profiling as one activity.",
-    starterPrompt:
-      "An async service regressed. CPU usage rose slightly, queue wait rose sharply, and one handler now formats larger JSON payloads.",
-    prompts: [
-      "Which question wants a sampling profiler?",
-      "Which question wants instrumentation around queue wait or serialization?",
-      "Which question wants tracing across admission, handler, and downstream publish time?",
-      "Which question wants a live production metric rather than only a local profile?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least one sampling, one instrumentation, and one tracing use correctly.",
-      "You distinguish hotspot discovery from timeline explanation clearly.",
-      "You mention one production metric such as queue depth, p99 latency, or bytes per message.",
-    ],
-    hints: [
-      "The tool follows the question, not the other way around.",
-      "Queue wait is rarely visible in a CPU sampler by itself.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Create a Criterion benchmark for a hot path",
-    objective: "Design a benchmark harness that compares one hot function fairly and in release conditions.",
-    starterPrompt:
-      "Write a Criterion benchmark for two versions of a route-enrichment helper: one clone-heavy and one borrow-first with preallocation.",
-    prompts: [
-      "Fix one representative input shape and size distribution.",
-      "Use `black_box` or an equivalent technique when dead-code elimination could hide real work.",
-      "Run the benchmark in release mode and record at least wall time plus one ownership-related signal such as allocation count or output length.",
-      "Keep the logical work identical between the two benchmarked functions.",
-    ],
-    acceptanceCriteria: [
-      "Your harness benchmarks the same workload under both implementations.",
-      "You mention release mode explicitly.",
-      "You mention one fairness guard such as `black_box`, fixed inputs, or identical output validation.",
-      "You avoid claiming that the benchmark alone explains the production regression.",
-    ],
-    hints: [
-      "Criterion compares alternatives. It does not replace profiling.",
-      "A good benchmark plan is boring enough that another engineer can rerun it exactly.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Profile async Rust and lock contention without blaming the runtime first",
-    objective: "Separate queue wait, handler work, blocking-pool work, and lock wait in one async service review.",
-    starterPrompt:
-      "A Tokio service now shows higher latency. One task set fans out aggressively, one shared map sits behind a mutex, and one CPU-heavy normalization step still runs inline on runtime workers.",
-    prompts: [
-      "Which signals would tell you the runtime is overloaded versus the lock being hot?",
-      "Which stage wants `spawn_blocking` or a separate CPU pool?",
-      "Which stage wants narrower lock scope or message passing instead of one broad mutex?",
-      "What would you trace before and after the refactor?",
-    ],
-    acceptanceCriteria: [
-      "You identify at least one queue, one lock, and one CPU boundary explicitly.",
-      "You propose one measurement for runtime backlog and one for lock contention.",
-      "You justify one ownership or scheduling repair instead of only saying 'Tokio is slow.'",
-    ],
-    hints: [
-      "Queue wait, lock wait, and CPU work are different wall-time buckets.",
-      "The runtime is often exposing the design rather than causing the design.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "debugging or refactoring",
-    title: "Separate CPU, IO, lock, and serialization bottlenecks in one report",
-    objective: "Read one mixed latency report and decide which subsystem actually deserves the next change.",
-    starterPrompt:
-      "A profiling report shows `cpu_us = 230`, `io_wait_us = 840`, `lock_wait_us = 40`, `serialize_us = 190`, and `serialized_bytes = 8192` for one request path.",
-    prompts: [
-      "Which category dominates wall time?",
-      "Which code rewrite is probably premature because the profile says the wrong thing is hot?",
-      "Which next measurement would you take to refine the diagnosis inside the dominant category?",
-      "What would you record after the fix to prove the improvement is real?",
-    ],
-    acceptanceCriteria: [
-      "You identify the dominant category correctly.",
-      "You reject at least one likely but wrong optimization target.",
-      "You propose one deeper measurement inside the dominant category.",
-      "You name one before-and-after validation metric.",
-    ],
-    hints: [
-      "Wall time should drive the next question first.",
-      "Do not optimize the smaller bar just because it is more pleasant code to edit.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Build a profiling plan for WASM and FFI boundaries",
-    objective: "Choose measurements that expose boundary overhead instead of only the native kernel time.",
-    starterPrompt:
-      "You are shipping a browser path that calls into Rust/WASM and a native plugin path that calls through a C ABI shim into Rust.",
-    prompts: [
-      "Which browser tools would you use to measure JS↔WASM call count, copy cost, and memory growth?",
-      "How would you measure a chatty FFI API against a batched FFI API fairly?",
-      "Which fields or counters belong in the boundary logs or spans for production incident work?",
-      "What would make you redesign the public boundary instead of only optimizing the callee?",
-    ],
-    acceptanceCriteria: [
-      "You mention at least one browser profiling tool and one native or FFI boundary measurement technique.",
-      "You separate wrapper or marshalling cost from native compute cost.",
-      "You propose at least one boundary redesign trigger such as call-count explosion or repeated large copies.",
-      "You mention one observability signal for each boundary shape.",
-    ],
-    hints: [
-      "A fast kernel can still lose if the boundary is too chatty.",
-      "Measure the wrapper, not only the function inside the wrapper.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What does a flame graph show that a benchmark does not show?",
-  "Why is queue wait often invisible in a CPU-only profile?",
-  "When is instrumentation a better tool than sampling?",
-  "Why should a Criterion result usually be followed by a profile or a trace before a larger redesign?",
-  "What is the practical difference between profiling serialization cost and profiling message size alone?",
-]
-
-const workingLoop = [
-  "Write the performance question in one sentence before choosing a tool.",
-  "Separate wall time into compute, wait, lock, serialization, and boundary overhead before rewriting code.",
-  "Benchmark alternatives in release mode, then profile the slower path to explain the result.",
-  "Validate the live system with queue depth, latency, and saturation signals after the fix lands.",
-]
-
-export function PageCh35PerformanceProfilingExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 69
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 35 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice profiling the way it survives review: interpret the narrative, choose the right tool, and separate
-          CPU, waiting, lock, and boundary cost before you change the code.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a performance review. The strongest answer names the workload, the metric, the tool,
-                and the suspected boundary before it recommends a fix.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(68)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 35
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Profiling drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Separate CPU, IO, lock, and serialization cost"
-          description={
-            <>
-              Repair the starter so the report picks the real dominant category and computes full wall time. The checker
-              expects the exact output below from the provided stats sample.
-            </>
-          }
-          filename="bottleneck_report_lab.rs"
-          runKey="ch35_ex_bottleneck_report"
-          expectedOutput={"dominant = serialize\nwall us = 1010\nbytes = 24576"}
-          helperText={
-            <>
-              Tip: build one tuple array of
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">{`("name", value)`}</code>
-              pairs, use <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">max_by_key</code> for the
-              dominant category, and sum all four time components in
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">wall_time</code>.
-            </>
-          }
-          initialCode={`#[derive(Debug)]
-struct ProfileSummary {
-    cpu_us: u64,
-    io_wait_us: u64,
-    lock_wait_us: u64,
-    serialize_us: u64,
-    serialized_bytes: usize,
-}
-
-fn dominant(_stats: &ProfileSummary) -> &'static str {
-    "cpu"
-}
-
-fn wall_time(_stats: &ProfileSummary) -> u64 {
-    0
-}
-
-fn main() {
-    let stats = ProfileSummary {
-        cpu_us: 210,
-        io_wait_us: 140,
-        lock_wait_us: 80,
-        serialize_us: 580,
-        serialized_bytes: 24_576,
-    };
-
-    println!("dominant = {}", dominant(&stats));
-    println!("wall us = {}", wall_time(&stats));
-    println!("bytes = {}", stats.serialized_bytes);
-}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to read a flame graph narrative without folklore, design a
-            Criterion benchmark for one hot path, separate CPU and waiting bottlenecks in an async service, and build a
-            profiling plan for WASM and FFI boundaries that another senior engineer can execute and verify.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch35_performance_profiling/hot_stage_summary.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct StageSample {
-    name: &'static str,
-    micros: u64,
-}
-
-fn hottest_stage(samples: &[StageSample]) -> (&'static str, u64, u64) {
-    let total: u64 = samples.iter().map(|sample| sample.micros).sum();
-    let hottest = samples
-        .iter()
-        .max_by_key(|sample| sample.micros)
-        .copied()
-        .unwrap();
-
-    (hottest.name, hottest.micros, total)
-}
-
-fn main() {
-    let samples = [
-        StageSample {
-            name: "parse",
-            micros: 180,
-        },
-        StageSample {
-            name: "serialize",
-            micros: 620,
-        },
-        StageSample {
-            name: "lock_wait",
-            micros: 40,
-        },
-    ];
-
-    let (stage, hottest, total) = hottest_stage(&samples);
-
-    println!("hottest = {}", stage);
-    println!("stage us = {}", hottest);
-    println!("total us = {}", total);
-}
-````
-
-### File: `examples/ch35_performance_profiling/pipeline_bottleneck.rs`
-````
-#[derive(Debug)]
-struct PipelineStats {
-    cpu_us: u64,
-    io_wait_us: u64,
-    lock_wait_us: u64,
-    serialize_us: u64,
-    serialized_bytes: usize,
-}
-
-fn dominant(stats: &PipelineStats) -> &'static str {
-    [
-        ("cpu", stats.cpu_us),
-        ("io", stats.io_wait_us),
-        ("lock", stats.lock_wait_us),
-        ("serialize", stats.serialize_us),
-    ]
-    .into_iter()
-    .max_by_key(|(_, value)| *value)
-    .map(|(name, _)| name)
-    .unwrap()
-}
-
-fn wall_time(stats: &PipelineStats) -> u64 {
-    stats.cpu_us + stats.io_wait_us + stats.lock_wait_us + stats.serialize_us
-}
-
-fn main() {
-    let stats = PipelineStats {
-        cpu_us: 410,
-        io_wait_us: 120,
-        lock_wait_us: 90,
-        serialize_us: 180,
-        serialized_bytes: 16_384,
-    };
-
-    println!("dominant = {}", dominant(&stats));
-    println!("serialized bytes = {}", stats.serialized_bytes);
-    println!("wall us = {}", wall_time(&stats));
-}
-````
-
-### File: `examples/ch35_performance_profiling/async_queue_story.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct AsyncStage {
-    queue_wait_us: u64,
-    poll_us: u64,
-    lock_wait_us: u64,
-}
-
-fn dominant(stage: &AsyncStage) -> &'static str {
-    [
-        ("queue_wait", stage.queue_wait_us),
-        ("poll", stage.poll_us),
-        ("lock_wait", stage.lock_wait_us),
-    ]
-    .into_iter()
-    .max_by_key(|(_, value)| *value)
-    .map(|(name, _)| name)
-    .unwrap()
-}
-
-fn wall_time(stage: &AsyncStage) -> u64 {
-    stage.queue_wait_us + stage.poll_us + stage.lock_wait_us
-}
-
-fn main() {
-    let stage = AsyncStage {
-        queue_wait_us: 900,
-        poll_us: 180,
-        lock_wait_us: 40,
-    };
-
-    println!("dominant = {}", dominant(&stage));
-    println!("wall us = {}", wall_time(&stage));
-}
-````
-
-### File: `examples/ch35_performance_profiling/ffi_batch_vs_chatty.rs`
-````
-#[derive(Debug, Clone, Copy)]
-struct BoundaryProfile {
-    calls: u64,
-    fixed_us_per_call: u64,
-    payload_bytes: u64,
-}
-
-fn estimated_overhead(profile: BoundaryProfile) -> u64 {
-    profile.calls * profile.fixed_us_per_call + profile.payload_bytes / 1024
-}
-
-fn main() {
-    let chatty = BoundaryProfile {
-        calls: 128,
-        fixed_us_per_call: 6,
-        payload_bytes: 4_096,
-    };
-    let batched = BoundaryProfile {
-        calls: 4,
-        fixed_us_per_call: 6,
-        payload_bytes: 4_096,
-    };
-
-    let chatty_us = estimated_overhead(chatty);
-    let batched_us = estimated_overhead(batched);
-
-    println!("chatty us = {}", chatty_us);
-    println!("batched us = {}", batched_us);
-    println!("saved us = {}", chatty_us - batched_us);
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -65,4 +65,6 @@ export { PageCh32MpiAndHighPerformanceComputing } from "./page-ch32-mpi-and-high
- export { PageCh32MpiAndHighPerformanceComputingExercises } from "./page-ch32-mpi-and-high-performance-computing-exercises"
- export { PageCh33PerformanceOrientedRust } from "./page-ch33-performance-oriented-rust"
- export { PageCh33PerformanceOrientedRustExercises } from "./page-ch33-performance-oriented-rust-exercises"
- export { PageCh34MemoryProfiling } from "./page-ch34-memory-profiling"
- export { PageCh34MemoryProfilingExercises } from "./page-ch34-memory-profiling-exercises"
-+export { PageCh35PerformanceProfiling } from "./page-ch35-performance-profiling"
-+export { PageCh35PerformanceProfilingExercises } from "./page-ch35-performance-profiling-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -75,7 +75,9 @@ import {
-   PageCh32MpiAndHighPerformanceComputing,
-   PageCh32MpiAndHighPerformanceComputingExercises,
-   PageCh33PerformanceOrientedRust,
-   PageCh33PerformanceOrientedRustExercises,
-   PageCh34MemoryProfiling,
-   PageCh34MemoryProfilingExercises,
-+  PageCh35PerformanceProfiling,
-+  PageCh35PerformanceProfilingExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -148,7 +150,9 @@ const PAGE_COMPONENTS = [
-   PageCh32MpiAndHighPerformanceComputing,
-   PageCh32MpiAndHighPerformanceComputingExercises,
-   PageCh33PerformanceOrientedRust,
-   PageCh33PerformanceOrientedRustExercises,
-   PageCh34MemoryProfiling,
-   PageCh34MemoryProfilingExercises,
-+  PageCh35PerformanceProfiling,
-+  PageCh35PerformanceProfilingExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh35Output } from "./rust-simulator-ch35"
- import { simulateCh34Output } from "./rust-simulator-ch34"
- import { simulateCh33Output } from "./rust-simulator-ch33"
- import { simulateCh32Output } from "./rust-simulator-ch32"
-@@ -1011,6 +1012,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch35Output = simulateCh35Output(code, key)
-+  if (ch35Output !== null) return ch35Output
- 
-   const ch34Output = simulateCh34Output(code, key)
-   if (ch34Output !== null) return ch34Output
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -23,4 +23,5 @@ import { DEFAULT_CODES_CH30 } from "./default-codes-ch30"
- import { DEFAULT_CODES_CH31 } from "./default-codes-ch31"
- import { DEFAULT_CODES_CH32 } from "./default-codes-ch32"
- import { DEFAULT_CODES_CH33 } from "./default-codes-ch33"
- import { DEFAULT_CODES_CH34 } from "./default-codes-ch34"
-+import { DEFAULT_CODES_CH35 } from "./default-codes-ch35"
-@@ -852,10 +853,33 @@ export const CHAPTERS: ChapterConfig[] = [
-         id: "ch34-memory-profiling-exercises",
-         title: "Chapter 34 Exercises",
-         shortTitle: "Exercises",
-         description:
-           "Find clone pressure, diagnose Rc and Arc leaks, choose profiling tools, and build a memory profiling checklist",
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch35-performance-profiling",
-+    title: "Chapter 35 · Performance Profiling",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch35-performance-profiling",
-+        title: "Performance Profiling",
-+        shortTitle: "Performance Profiling",
-+        description:
-+          "CPU profiling, flame graphs, sampling vs instrumentation, Criterion benchmarks, async and lock profiling, serialization and IO analysis, and WASM and FFI profiling boundaries",
-+        icon: "book",
-+        codeKeys: ["performance_profiling_hot_stage_summary", "performance_profiling_pipeline_bottleneck"],
-+      },
-+      {
-+        id: "ch35-performance-profiling-exercises",
-+        title: "Chapter 35 Exercises",
-+        shortTitle: "Exercises",
-+        description:
-+          "Interpret flame graphs, design Criterion benchmarks, separate CPU and waiting bottlenecks, and profile async, WASM, and FFI boundaries deliberately",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
-@@ -1310,5 +1334,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH31,
-   ...DEFAULT_CODES_CH32,
-   ...DEFAULT_CODES_CH33,
-   ...DEFAULT_CODES_CH34,
-+  ...DEFAULT_CODES_CH35,
- }
-````

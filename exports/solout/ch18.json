@@ -1,0 +1,118 @@
+{
+  "chapterKey": "ch18",
+  "intro": "The exercises in this chapter all turn on one idea: a Rust generic is a contract checked at its definition, not a stencil expanded at the call site. Each task makes you state where and when that contract is enforced, then put it to work — lifting duplicated helpers into one bounded generic, choosing between a free type parameter and an associated type, and pushing a length into the type with a const generic. The goal is to generalize on purpose and late, the way the chapter's decision order demands, rather than reaching for `<T>` as a reflex.\n\nThroughout, keep the chapter's cost model in view. Monomorphization buys you runtime performance equal to hand-written code, with no boxing and no vtable, but it is not free at build time: every instantiation is a separate copy the compiler must produce. The bounds you declare, the slices you borrow rather than own, and the decision to generify a core crate at all are the levers that keep that cost in check.",
+  "exerciseSolutions": [
+    {
+      "number": 1,
+      "title": "State the two checks at two times",
+      "kind": "warm-up comprehension",
+      "solution": "A Rust generic is type-checked twice, at two different times, and the two checks have different jobs. The first check happens at the definition of first_key, before any caller exists. The compiler reads the signature, sees the declared bound where T: Keyed, and checks the body against that bound alone. Because Keyed promises fn key(&self) -> u64, the call item.key() inside the body is legal — the compiler does not need to know which concrete type T will be, only that whatever it is must satisfy Keyed. If the body tried to call a method the bound does not promise, that error would surface here, in the generic's own source, with no caller in sight.\n\nThe second check happens later, at the call site, when a concrete type such as Job is substituted for T. This check is trivial: the compiler only confirms that the concrete type satisfies the already-declared bound — that Job implements Keyed. It does not re-typecheck the body of first_key, because the body was already proven correct against the contract at definition time.\n\nA C++ template defers all of this to instantiation. There is no contract to check up front, so the template body is only checked when a caller supplies a concrete type. If that type is missing an operation the body uses, the error surfaces deep inside the template body, triggered by the caller — a long, indirect message about the template's internals rather than the caller's mistake.\n\nThe check that reports a missing trait bound is the second one, at the call site, and it points at the caller's code: passing a non-Keyed type fails with an error that names the missing Keyed bound right where the call is made, not buried inside first_key.",
+      "code": null,
+      "codeNote": null,
+      "criteria": [
+        "States the body of first_key is checked once at definition against the declared bound T: Keyed.",
+        "States the call-site check only confirms the concrete type satisfies the already-declared bound.",
+        "Says a C++ template defers all checking to instantiation, so a missing operation surfaces deep inside the body at the caller.",
+        "Identifies that passing a non-Keyed type fails with an error naming the missing bound at the call site."
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Trace which bound gates which method",
+      "kind": "code reading",
+      "solution": "Read the Batch<T> listing and notice that the bound is attached to exactly one place, and that placement is deliberate. The type Batch<T> and its impl<T> block declare no bound at all. new and len live in that unbounded impl, and they compile for every type T because they only touch storage: new takes a Vec<T> and wraps it, and len delegates to self.items.len(). Neither calls a method on an item. Storing a value and counting how many values you have never requires the value to do anything, so no trait is needed.\n\nfirst_key is the only item that adds where T: Keyed, and it needs that clause because its body calls item.key(). key is a trait method declared on Keyed, so the compiler will only accept the call if it knows T provides it. The bound is the promise that supplies that knowledge. Without it, the body would not compile, because a bare T says nothing about what its values can do.\n\nIf you call first_key on a Batch whose item type does not implement Keyed, you get a compile error — not a runtime failure — and it names the missing Keyed bound at the call site, pointing at your code rather than inside first_key. The body of first_key was already checked against the bound at its definition; the call-site check simply finds that your concrete type does not satisfy it.\n\nMoving the bound onto impl<T: Keyed> Batch<T> would change which methods are usable, and for the worse. It would gate every method in that impl block — including len — on T: Keyed. Then you could not even count the items of a Batch whose element type happens not to implement Keyed, even though counting never needs key(). The chapter's rule is to keep bounds as narrow as possible: put the requirement on the one function that actually needs it, so unrelated methods stay usable for all types.",
+      "code": "// Bound lives only on first_key, not on the type or the impl block.\nimpl<T> Batch<T> {\n    fn new(items: Vec<T>) -> Self { Self { items } } // no bound: only stores\n    fn len(&self) -> usize { self.items.len() }       // no bound: only counts\n}\n\nfn first_key<T>(batch: &Batch<T>) -> Option<u64>\nwhere\n    T: Keyed, // needed because the body calls item.key()\n{\n    batch.items.first().map(|item| item.key())\n}",
+      "codeNote": "The Keyed bound is placed on the single function that calls a trait method, leaving new and len usable for any T.",
+      "criteria": [
+        "Identifies new and len as unbounded because they only touch storage, not item behavior.",
+        "Explains first_key requires Keyed because its body calls item.key(), a trait method.",
+        "States a non-Keyed item type produces a compile error naming the missing Keyed bound at the call site.",
+        "Notes that putting the bound on the impl would gate all methods, including len, on T: Keyed unnecessarily."
+      ]
+    },
+    {
+      "number": 3,
+      "title": "Turn a copied helper into one bounded generic",
+      "kind": "implementation",
+      "solution": "The two functions max_key_job(&[Job]) and max_key_task(&[Task]) are the same algorithm spelled twice: iterate the slice, read each item's key, and return the largest. The chapter's rule is to generalize only after a second real case proves the abstraction — and here it has, so this is exactly when to lift the pattern into one bounded generic.\n\nFirst, give both item types a common contract. A Keyed trait with fn key(&self) -> u64 captures the one operation both functions rely on. Implement it for Job and for Task, each returning its own id-like field. Now a single generic fn max_key<T: Keyed>(items: &[T]) -> Option<u64> can call key() through the bound and serve both types. The body is one expression: items.iter().map(|i| i.key()).max(). max() over an iterator returns Option, so it naturally yields None for an empty slice and Some(largest) otherwise — no special-casing required.\n\nTake the parameter as a borrowed slice &[T], not an owned Vec<T>. Reading keys never needs ownership; a shared borrow is enough to iterate and call key(). Borrowing keeps callers in control of their storage — they can pass a slice of a Vec, an array, or any contiguous sequence, and still own and reuse it afterward. Requiring Vec<T> would force callers to hand over ownership for a read-only operation, which is both wasteful and restrictive.\n\nWith this in place, both copied per-type functions are deleted; the single generic compiles once and the compiler monomorphizes a specialized copy for Job and another for Task, each as fast as the original hand-written version.",
+      "code": "trait Keyed {\n    fn key(&self) -> u64;\n}\n\nstruct Job { id: u64 }\nstruct Task { task_id: u64 }\n\nimpl Keyed for Job {\n    fn key(&self) -> u64 { self.id }\n}\nimpl Keyed for Task {\n    fn key(&self) -> u64 { self.task_id }\n}\n\nfn max_key<T: Keyed>(items: &[T]) -> Option<u64> {\n    items.iter().map(|i| i.key()).max()\n}\n\nfn main() {\n    let jobs = [Job { id: 10 }, Job { id: 22 }, Job { id: 8 }];\n    let tasks = [Task { task_id: 3 }, Task { task_id: 99 }];\n    println!(\"{:?}\", max_key(&jobs));  // Some(22)\n    println!(\"{:?}\", max_key(&tasks)); // Some(99)\n    println!(\"{:?}\", max_key::<Job>(&[])); // None\n}",
+      "codeNote": "One bounded generic over &[T] replaces both per-type helpers; max() returns None on an empty slice for free.",
+      "criteria": [
+        "Signature is fn max_key<T: Keyed>(items: &[T]) -> Option<u64>.",
+        "Body calls item.key() through the bound and returns None for an empty slice via max().",
+        "Both Job and Task are served by the single generic with no copied per-type function remaining.",
+        "Takes &[T] and does not require ownership of a Vec<T>."
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Replace a type parameter with an associated type",
+      "kind": "implementation",
+      "solution": "The starting trait Encoder<O> makes the output type a free generic parameter. That parameterization is wrong for this design because it allows a single type to implement Encoder<O> for many different O values — the trait says nothing about there being one canonical output. But every real encoder has exactly one natural result type: HexPair always produces [u8; 2], never anything else. When a related type is determined by the implementor rather than chosen by the caller, it belongs in the trait as an associated type, not as a parameter.\n\nRewrite the trait to declare type Output and return Self::Output from encode. Now the trait expresses the constraint directly: each implementor names its Output exactly once. Implement Encoder for HexPair with type Output = [u8; 2], and write the two-nibble body — split the byte into its high and low nibbles and map each to a hex digit.\n\nThe payoff shows at the call site. The caller writes encoder.encode(&[byte]) and binds the result; the output type [u8; 2] is fixed by the impl and inferred, so the caller never spells it out. With the free-parameter version the caller (or the compiler, ambiguously) would have to pin down which O was meant, because nothing in the trait fixes it.\n\nSo the rule is: a free type parameter is the right tool when one type legitimately implements the trait several times with different related types (for example Add<i32> and Add<f64> on the same type). An associated type is the right tool when each implementor has exactly one natural result type, because it fixes that type per implementor and keeps it out of the caller's vocabulary.",
+      "code": "fn hex_digit(nibble: u8) -> u8 {\n    match nibble {\n        0..=9 => b'0' + nibble,\n        10..=15 => b'A' + (nibble - 10),\n        _ => b'?',\n    }\n}\n\ntrait Encoder {\n    type Output;\n    fn encode(&self, input: &[u8]) -> Self::Output;\n}\n\nstruct HexPair;\n\nimpl Encoder for HexPair {\n    type Output = [u8; 2];\n    fn encode(&self, input: &[u8]) -> Self::Output {\n        let byte = input[0];\n        [hex_digit(byte >> 4), hex_digit(byte & 0x0F)]\n    }\n}\n\nfn main() {\n    let encoder = HexPair;\n    // The caller never names [u8; 2]; it is fixed by the impl and inferred.\n    let encoded = encoder.encode(&[31_u8]);\n    println!(\"hex = {}\", std::str::from_utf8(&encoded).unwrap());\n}",
+      "codeNote": "type Output pins one result type per implementor; the call site uses encode without writing [u8; 2].",
+      "criteria": [
+        "The trait declares type Output and encode returns Self::Output.",
+        "HexPair pins type Output = [u8; 2] and encodes one byte into two hex digits.",
+        "The call site invokes encode without naming [u8; 2] anywhere.",
+        "Explains a free parameter would let one type implement Encoder many times, while an associated type fixes one output per implementor."
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Fix the const-generic length error",
+      "kind": "debugging or refactoring",
+      "solution": "There are two distinct defects, and both are caught by the compiler before main runs.\n\nThe first is the index in last(). An array [T; N] has valid indices 0 through N - 1, so the last element is at index N - 1, not N. items[N] is one past the end. For a const generic the compiler knows N at compile time, so it can prove the index is out of range and reject items[N]; the fix is to read items[N - 1].\n\nThe second is the constructor. It builds the window from a 4-element array literal while the type is annotated as N = 3. This is not a runtime panic and not a length that gets truncated — it is a type mismatch. With const N: usize, the length is part of the type: [T; 3] and [T; 4] are different types, just as Job and Task are. Passing a [T; 4] where the type says N = 3 is the same kind of error as passing the wrong struct, and the compiler reports it as a type mismatch at the construction site. The fix is to make N agree with the real element count — either annotate N = 4 (and let the array stay four elements) or pass a three-element array to match N = 3. The cleanest approach is to let N be inferred from the array literal so the two can never drift apart.\n\nWhat this design removes, compared with a Vec-based window, is the runtime length check. Because the length travels with the type, an out-of-range length — or a window built with the wrong number of elements — becomes a compile error rather than a condition you discover at runtime. The array also stays on the stack with no heap allocation. A Vec would accept any length at runtime and only fail later, if at all, when some code reads past the data.",
+      "code": "#[derive(Debug)]\nstruct FixedWindow<T, const N: usize> {\n    items: [T; N],\n}\n\nimpl<T: Copy, const N: usize> FixedWindow<T, N> {\n    fn last(&self) -> T {\n        self.items[N - 1] // was items[N]: out of range, last index is N - 1\n    }\n}\n\nfn main() {\n    // Let N be inferred from the array so length and type cannot drift.\n    // Four elements => N = 4; the earlier `N = 3` annotation was the mismatch.\n    let window = FixedWindow { items: [3_u32, 5, 8, 13] };\n    println!(\"last = {}\", window.last()); // 13\n}",
+      "codeNote": "Index corrected to N - 1, and the length is inferred from the literal so N always matches the real element count.",
+      "criteria": [
+        "Changes the index from items[N] to items[N - 1] for the last element.",
+        "Explains the length mismatch is a compile error because N is part of the type, not a runtime bounds check.",
+        "Corrected code constructs the window so N matches the array's element count.",
+        "States making the length part of the type turns an out-of-range length into a compile error rather than a runtime check."
+      ]
+    },
+    {
+      "number": 6,
+      "title": "Decide whether to generify the core crate",
+      "kind": "design or production scenario",
+      "solution": "Recommendation: introduce the generic, because the second real case now justifies it, but scope its instantiations deliberately rather than letting twelve downstream crates each stamp out copies of code they do not need.\n\nStart with the decision order. The chapter's rule is to generalize only when a second real case proves the abstraction, not as a reflex. JobBatch has lived as a concrete type while there was one item type, which was correct. Now a second item type genuinely needs the same batching logic, so the abstraction has earned its place — this is exactly the moment to lift it into a generic Batch<T> rather than copy JobBatch a second time.\n\nThe runtime payoff is real and free. Monomorphization produces a separately specialized copy of Batch<T> for each concrete item type, so each instantiation is as fast as the hand-written JobBatch was — no boxing, no vtable, no indirection. Generifying does not cost a cycle at runtime.\n\nThe price is paid at build time, and in a core crate it can be substantial. A generic that is widely instantiated forces the compiler to produce a distinct specialized copy per concrete type across every crate that uses it, which can dominate compile time and inflate binary size. With twelve downstream crates, a Batch<T> that everyone instantiates with several item types multiplies into many monomorphized copies. A generic in a core crate is therefore a contract you maintain plus a set of instantiations you pay to compile.\n\nConcrete recommendation: add the generic Batch<T> in the core crate to serve the two types that genuinely share the logic, but keep the surface small. Keep bounds narrow so unrelated methods stay usable. Where a downstream crate's reuse is marginal — it only ever batches one item type and gains nothing from the parameter — leave it on a concrete type alias (type JobBatch = Batch<Job>) so the public API stays stable and that crate does not pull in extra instantiations. If a particular instantiation is heavy and used in only one place, consider confining it to the crate that needs it rather than re-exporting the generic for everyone. Generalize because the second case proved it, then limit who pays the build cost.",
+      "code": null,
+      "codeNote": null,
+      "criteria": [
+        "Invokes the rule to generalize on the second real case, not as a reflex.",
+        "States monomorphization makes each instantiation as fast as hand-written code with no boxing or vtable.",
+        "Identifies that a heavily instantiated generic in a core crate can inflate compile time and binary size.",
+        "Gives a concrete decision: add the generic but confine instantiations and keep concrete aliases where reuse is marginal."
+      ]
+    }
+  ],
+  "labSolution": {
+    "solutionCode": "trait Keyed {\n    fn key(&self) -> u64;\n}\n\n#[derive(Debug)]\nstruct Job {\n    id: u64,\n}\n\nimpl Keyed for Job {\n    fn key(&self) -> u64 {\n        self.id\n    }\n}\n\nstruct FixedBatch<T, const N: usize> {\n    items: [T; N],\n}\n\nimpl<T: Keyed, const N: usize> FixedBatch<T, N> {\n    fn len(&self) -> usize {\n        N\n    }\n\n    fn key_sum(&self) -> u64 {\n        // Iterate the fixed-size array by shared reference and sum each\n        // item's key. The Keyed bound on the impl makes item.key() legal,\n        // and N being part of the type means the array stays on the stack.\n        self.items.iter().map(|item| item.key()).sum()\n    }\n}\n\nfn main() {\n    let batch = FixedBatch {\n        items: [Job { id: 10 }, Job { id: 22 }, Job { id: 8 }],\n    };\n    println!(\"len = {}\", batch.len());\n    println!(\"key sum = {}\", batch.key_sum());\n}\n",
+    "expectedOutput": "len = 3\nkey sum = 40",
+    "explanation": "FixedBatch<T, const N: usize> carries its length in the type: items is a [T; N] array, so N = 3 here is fixed at compile time and len() simply returns N without inspecting any data. The impl block is bounded by T: Keyed, which is what lets the body call key() — without the bound, item.key() would not compile, because a bare T promises no operations.\n\nkey_sum borrows the array with self.items.iter(), giving an iterator of &T. map(|item| item.key()) calls the trait method through the bound to produce each item's u64 key, and sum() reduces the iterator to a single u64. Because the items are read by shared reference, the batch keeps ownership of its storage and nothing is moved or cloned.\n\nThe program prints len = 3 (the const N) and key sum = 40, which is 10 + 22 + 8. The length comes from the type and the sum from the bounded reduction, so both lines follow directly from the inputs.",
+    "stdOnly": true
+  },
+  "reviewAnswers": [
+    {
+      "question": "At which two points is a Rust generic type-checked, and what does each check verify?",
+      "answer": "A Rust generic is checked at its definition and again at each call site. At definition, the compiler checks the body against the declared bounds alone — it verifies that every operation the body performs is promised by a trait bound on the type parameter, so the body is proven correct before any caller exists. At the call site, the second check is trivial: it only confirms that the concrete type substituted for the parameter actually satisfies those already-declared bounds. The body is never re-typechecked per caller, which is what makes generic errors point at the right place."
+    },
+    {
+      "question": "Why does Batch<T> declare no trait bound while first_key requires where T: Keyed?",
+      "answer": "Batch<T> only stores and counts items; new wraps a Vec<T> and len returns its length, and neither calls a method on an item, so no trait is required and the type works for every T. first_key, by contrast, calls item.key(), which is a method declared on the Keyed trait, so it must require where T: Keyed to make that call legal. The chapter's rule is to keep bounds as narrow as possible: attach the requirement to the one function that needs it, so storage and counting stay available for all types."
+    },
+    {
+      "question": "What is monomorphization, and why does it make generic code as fast as hand-written code at runtime?",
+      "answer": "Monomorphization is the compiler stamping out a separate, fully specialized copy of a generic for each concrete type that uses it. The copy for a given type — say u32 — knows it is operating on that exact type and can inline and optimize accordingly, with no boxing and no vtable dispatch. Because the specialized copy is indistinguishable from code you would have written by hand for that type, there is no runtime indirection cost; the only cost is paid at build time, in compile time and binary size for each instantiation."
+    },
+    {
+      "question": "When should you prefer an associated type over an extra generic type parameter on a trait?",
+      "answer": "Prefer an associated type when each implementor has exactly one natural related type, so it should be fixed per implementor rather than chosen by the caller. An associated type pins that type once in the impl (type Output = ...) and keeps it out of the caller's vocabulary, so callers never spell it out. A free type parameter is the right choice only when a single type legitimately implements the trait several times with different related types, since a parameter allows multiple implementations while an associated type fixes one."
+    },
+    {
+      "question": "What does a const generic such as const N: usize put into the type, and what runtime check does it eliminate?",
+      "answer": "A const generic puts a compile-time value — here a length — into the type itself, so [T; N] of different N are distinct types and the length travels with the type rather than being stored or checked at runtime. This lets the data stay on the stack as a fixed-size array, and it turns a length mismatch into a compile error: constructing with the wrong number of elements, or annotating the wrong N, is a type mismatch the compiler rejects before main runs. It eliminates the runtime bounds or length check that a Vec-based design would defer until the data is accessed."
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+ "chapterKey": "ch15",
+ "num": 15,
+ "title": "OOP Models in Rust",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose composition, open polymorphism, or closed polymorphism honestly",
+   "objective": "Practice deciding whether a problem wants plain composition, traits, trait objects, or enums.",
+   "starterPrompt": "Classify four cases: a payment service with swappable fraud checks, a fixed set of workflow commands, a reusable retry helper shared by three services, and a deployment-time plugin registry for exporters.",
+   "prompts": [
+    "Which case wants composition with helper structs and no polymorphism at all?",
+    "Which case wants an enum because the variant set is closed?",
+    "Which case wants a trait because several implementations are semantically real?",
+    "Which case truly wants runtime trait objects because one collection or registry must hold heterogeneous implementations?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish open and closed polymorphism clearly.",
+    "You choose composition where no polymorphism is actually needed.",
+    "You justify at least one choice with deployment or runtime behavior, not only with abstract vocabulary."
+   ],
+   "hints": [
+    "Ask whether the set of variants is closed inside one crate or open across time and deployment.",
+    "The calmest design is often the one that uses the fewest abstraction mechanisms honestly."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Collapse an inheritance tree into Rust pieces",
+   "objective": "Read a familiar base-class design and restate it as Rust-native components instead of a direct port.",
+   "starterPrompt": "You inherit `BaseNotifier` with shared metrics fields plus subclasses `EmailNotifier`, `SlackNotifier`, and `WebhookNotifier`. Rewrite the design in words using Rust terms.",
+   "prompts": [
+    "Which data belongs in a composed metrics or configuration component?",
+    "Which behavior belongs in a trait?",
+    "Should notifier selection be generic, dynamic, or enum-based at the call site?",
+    "Where should encapsulation live once there is no base class with protected fields?"
+   ],
+   "acceptanceCriteria": [
+    "You separate shared state from shared behavior precisely.",
+    "You use traits, composition, modules, and visibility as distinct tools.",
+    "You choose static or dynamic dispatch from the boundary rather than by habit."
+   ],
+   "hints": [
+    "A base class often hid two unrelated concerns: reusable fields and replaceable behavior.",
+    "Rust usually wants those concerns split apart."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Model closed polymorphism with an enum",
+   "objective": "Implement a small closed variant set without trait objects.",
+   "starterPrompt": "Define an enum such as `Command` or `Transport` with two or three variants and write one function that handles every variant with `match`.",
+   "prompts": [
+    "Keep the variant set closed and explicit.",
+    "Return a small owned or borrowed result rather than logging from everywhere.",
+    "Let the compiler's exhaustiveness checking do real work for you."
+   ],
+   "acceptanceCriteria": [
+    "The design uses an enum, not boxed trait objects, for a closed set.",
+    "The handler uses `match` exhaustively.",
+    "Adding a new variant would force a compiler-visible repair in the operation."
+   ],
+   "hints": [
+    "If you already know every variant at compile time, the enum is usually the point.",
+    "The gain is not just speed. It is exhaustiveness and simpler review."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair encapsulation after a direct OOP port",
+   "objective": "Refactor a port that exposed too much structure publicly because it was modeled like a class hierarchy.",
+   "starterPrompt": "A ported design made every field `pub` so downstream code could mutate state the way subclass code once did. Repair the boundary.",
+   "prompts": [
+    "Which fields should become private immediately?",
+    "Which methods or constructors should replace direct field mutation?",
+    "Should the module re-export a narrower public API rather than exposing internal submodules directly?"
+   ],
+   "acceptanceCriteria": [
+    "You move representation details behind private fields or narrower visibility.",
+    "You preserve the externally useful operations through methods or constructors.",
+    "You explain the refactor as encapsulation repair, not just style cleanup."
+   ],
+   "hints": [
+    "Rust gives you modules and visibility for a reason. Use them before you widen the public surface forever.",
+    "A public field is an API promise, not a temporary shortcut."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Refactor a state machine into Rust-native transitions",
+   "objective": "Replace flag-based or inheritance-heavy state transitions with an enum or typestate model.",
+   "starterPrompt": "You inherit `status: String` plus booleans like `approved` and `published`. Redesign the model so invalid combinations stop existing.",
+   "prompts": [
+    "Would an enum represent the runtime state clearly enough?",
+    "Would typestate be justified if the transitions are compile-time linear and API-facing?",
+    "How will the redesign prevent `published = true` while `status = \"draft\"`?"
+   ],
+   "acceptanceCriteria": [
+    "You eliminate impossible flag combinations from the model.",
+    "You choose enum or typestate with a reason tied to runtime or API shape.",
+    "You describe at least one transition explicitly rather than leaving it as ad hoc mutation."
+   ],
+   "hints": [
+    "This is one of Rust's strongest improvements over classical OOP state models.",
+    "If the same runtime value can be in several states, start with an enum. If callers should only hold valid phase-specific types, typestate may be stronger."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose enums, traits, trait objects, and typestate across one service platform",
+   "objective": "Make the OOP-modeling choices explicit for a realistic production system.",
+   "starterPrompt": "You are designing `ingest -> validate -> enrich -> route -> persist -> export`, with a fixed set of input commands, pluggable exporters, and a review/publish workflow for operator-authored rules.",
+   "prompts": [
+    "Which parts are closed variant sets and therefore enum-shaped?",
+    "Which parts are open plugin seams and therefore trait-object-shaped or trait-bound generic boundaries?",
+    "Where is plain composition enough with no polymorphism at all?",
+    "Would the operator rule workflow benefit from enum state or typestate, and why?"
+   ],
+   "acceptanceCriteria": [
+    "You assign at least one concern to enums, one to traits or trait objects, and one to plain composition.",
+    "You justify one runtime-dispatch boundary in operational terms.",
+    "You justify one closed-polymorphism boundary in domain terms.",
+    "You mention at least one observability or testing hook, such as exhaustive state tests, plugin contract tests, or event-log rendering."
+   ],
+   "hints": [
+    "One service can legitimately use several modeling styles at once.",
+    "The best answer says which tool fits each boundary, not which tool is globally best."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What is the difference between open polymorphism and closed polymorphism in Rust design?",
+  "Why does composition usually replace inheritance for shared state and shared helpers?",
+  "When is `dyn Trait` the honest runtime model instead of an enum?",
+  "Why are enums and typestate often better than classical state-pattern objects in Rust?",
+  "Where does encapsulation usually live in Rust if not in a base class hierarchy?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Typestate workflow",
+  "filename": "typestate_workflow_lab.rs",
+  "runKey": "ch15_ex_typestate_post",
+  "expectedOutput": "published = true\nslug = rust-oop",
+  "initialCode": "struct DraftPost {\n    title: String,\n}\n\nstruct ReviewPost {\n    title: String,\n}\n\nstruct PublishedPost {\n    title: String,\n    slug: String,\n}\n\nimpl DraftPost {\n    fn new(title: &str) -> Self {\n        Self {\n            title: title.to_string(),\n        }\n    }\n\n    fn request_review(self) -> ReviewPost {\n        ReviewPost { title: self.title }\n    }\n}\n\nimpl ReviewPost {\n    fn publish(self) -> PublishedPost {\n        PublishedPost {\n            title: self.title,\n            slug: String::new(),\n        }\n    }\n}\n\nimpl PublishedPost {\n    fn slug(&self) -> &str {\n        &self.slug\n    }\n}\n\nfn main() {\n    let draft = DraftPost::new(\"Rust OOP\");\n    let review = draft.request_review();\n    let published = review.publish();\n\n    println!(\"published = {}\", !published.slug().is_empty());\n    println!(\"slug = {}\", published.slug());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 05, 13, and 14",
+  "A worked scenario: the document-workflow platform",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "Rust without classical inheritance",
+  "Composition over inheritance",
+  "Encapsulation through modules and visibility",
+  "Polymorphism with traits",
+  "Trait objects as runtime polymorphism",
+  "Enums as closed polymorphism",
+  "State pattern in Rust",
+  "Visitor pattern and alternatives",
+  "Translating instincts from other languages",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "When Rust improves on traditional OOP",
+  "When Rust makes OOP harder",
+  "Examples",
+  "Example 1: composition, visibility, and trait-based behavior",
+  "Example 2: enum-based state pattern",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Rust object modeling uses composition, traits, enums, and explicit state transitions to represent domain behavior. This chapter maps those choices to maintainable service and library APIs.",
+  "Chapter 05 explained how structs carry ownership and layout. Chapter 13 showed that storage and identity are separate design choices. Chapter 14 covered traits, dispatch, and object safety. This chapter puts those pieces together into Rust’s practical answer to OOP modeling.",
+  "Throughout the chapter we will keep one concrete system in view. A document-workflow platform moves documents through a fixed approval lifecycle, lets services share retry and notification logic, hides invoice representation behind a clean API, and accepts third-party transport p",
+  "The deciding question for each need is the same: is the set of cases closed and known at compile time, or open and extended later? That single question routes the design to an enum, a struct, a module boundary, or a trait object, and reading the diagrams below in that order is mo",
+  "The same modeling need also routes the other two questions, sharing and hiding, to their own tools:",
+  "Rust has no class inheritance with shared fields. A type does not extend another type to inherit state. That is a sharp correction for C++ and C# engineers: traits describe behavior, but data reuse comes from ordinary fields, helper types, and composition.",
+  "This sounds like a loss until you notice what disappears with it: fragile base classes, partially initialized parent state, hidden inherited invariants, and broad object graphs whose aliasing story is unclear. Rust makes each of those choices explicit instead.",
+  "The shape to notice is that inheritance grows data downward through a chain of parents, while composition grows it sideways as named fields you can name, swap, and test one at a time. The two pictures hold the same information, but only the composed one keeps each dependency visi",
+  "Side by side, composition holds the same parts but lays them out as fields the struct owns directly:",
+  "The default Rust reuse pattern is simple: a struct owns the components it needs. Shared logic lives in those components or in traits implemented by them. The design reads directly from the fields instead of from a base-class tree, so there is no hidden parent state to reason abou",
+  "This is especially useful in services and pipelines. A BillingService can compose a retry policy, a notifier, a cache, and a metrics recorder without pretending those pieces are one inheritance family. Each dependency remains visible, testable, and replaceable, and a test can sup",
+  "In Rust, encapsulation usually lives in modules, private fields, narrow constructors, and focused methods. You do not need inheritance to hide representation. You need a good module boundary and the discipline to expose only what callers actually need.",
+  "The translation is this: the public surface is the contract. The internal layout is still allowed to change. Rust’s module system often gives tighter encapsulation than a deep protected-member hierarchy because the exported API is narrower and more deliberate.",
+  "Traits are Rust’s main behavior abstraction. They let generic code ask for capabilities without naming one concrete type too early. This is Rust’s primary answer to interface-like OOP design.",
+  "The important distinction from inheritance is that the trait does not bring data fields with it. The implementor chooses its own storage and ownership shape. That is why the same trait can fit a stack value, a boxed object, or an arena-backed node equally well.",
+  "When the system truly needs runtime heterogeneity, Rust uses trait objects such as Box<dyn Processor>. This is the closest thing Rust has to virtual-dispatch OOP, but it is opt-in and object-safety rules still apply.",
+  "Use this for plugins, strategy registries, sinks, handlers selected from configuration, or any boundary where one collection must hold several concrete implementations at once. Do not use it just because an old base class existed. Chapter 14 covered the dispatch and object-safety",
+  "The contrast worth holding in your head is how the three options dispatch. A generic trait bound is resolved at compile time into one specialized copy per type; a trait object defers the choice to a vtable at run time; an enum keeps every case in one type and lets the compiler fo",
+  "The third option keeps every case in one type rather than dispatching across types:",
+  "Enums are Rust’s strongest answer when the variant set is closed. Instead of a base class plus derived types, you declare the full set of variants and let pattern matching drive behavior. The data for each case lives inline, so there is no boxing and no pointer chase to reach it.",
+  "This is often better than a traditional OOP hierarchy for commands, events, workflow state, AST nodes, transport types, and many domain models. The compiler checks exhaustiveness, which means adding a new variant turns into a compile-time repair across every match rather than a q",
+  "A lifecycle is the clearest case of a closed set: there is a finite list of states and a finite list of legal transitions between them. The classical state pattern models each state as its own object behind an interface; in Rust the same shape is usually an enum whose match arms ",
+  "The practical default is usually enum state or typestate, not boxed state objects. A state object model can still be correct, but Rust makes the alternatives so strong that many classical implementations become needlessly dynamic.",
+  "Rust often improves on classical visitor-heavy designs because enums and exhaustiveness make closed trees easier to traverse. But when operations or node families stay open across crates, visitor-like trait seams can still be the right model.",
+  "The hardest part of OOP in Rust is rarely a missing feature; it is an instinct that no longer pays off. Each card below names the one mental-model shift that trips up engineers from that language, not a table of which crate replaces which library.",
+  "The most common translation mistake is trying to preserve the old class shape instead of preserving the actual domain rules. Rust rewards re-modeling. It often punishes mechanical porting.",
+  "The service composes a notifier instead of inheriting a base class, and the invoice keeps its fields private behind methods.",
+  "What to look at: trace where the behavior comes from. The service holds the notifier as a field (notifier: N), reaches the invoice only through public methods because its fields are private to the billing module, and delegates notification to whatever Notifier it was built with. ",
+  "Quick check: change the invoice ID, cents, or notifier prefix and rerun. The point is not the string formatting. It is that reuse comes from fields plus trait bounds, not from a parent service class.",
+  "BillingService owns a notifier component directly."
+ ],
+ "codeSamples": {
+  "oop_models_composition_traits": "mod billing {\n    pub struct Invoice {\n        id: u64,\n        cents: u64,\n    }\n\n    impl Invoice {\n        pub fn new(id: u64, cents: u64) -> Self {\n            Self { id, cents }\n        }\n\n        pub fn id(&self) -> u64 {\n            self.id\n        }\n\n        pub fn cents(&self) -> u64 {\n            self.cents\n        }\n    }\n}\n\ntrait Notifier {\n    fn send(&self, invoice: &billing::Invoice) -> String;\n}\n\nstruct EmailNotifier {\n    prefix: &'static str,\n}\n\nimpl Notifier for EmailNotifier {\n    fn send(&self, invoice: &billing::Invoice) -> String {\n        format!(\"{}{}\", self.prefix, invoice.id())\n    }\n}\n\nstruct BillingService<N> {\n    notifier: N,\n    sent: usize,\n}\n\nimpl<N: Notifier> BillingService<N> {\n    fn process(&mut self, invoice: billing::Invoice) -> String {\n        self.sent += 1;\n        format!(\"invoice = {} cents = {}\", invoice.id(), invoice.cents())\n    }\n\n    fn notify(&self, invoice: &billing::Invoice) -> String {\n        self.notifier.send(invoice)\n    }\n}\n\nfn main() {\n    let mut service = BillingService {\n        notifier: EmailNotifier {\n            prefix: \"queued email for \",\n        },\n        sent: 0,\n    };\n\n    let invoice = billing::Invoice::new(41, 1250);\n    let notification = service.notify(&invoice);\n\n    println!(\"{}\", service.process(invoice));\n    println!(\"notification = {}\", notification);\n    println!(\"sent = {}\", service.sent);\n}",
+  "oop_models_enum_state_machine": "#[derive(Debug)]\nenum Document {\n    Draft { title: String },\n    Review { title: String, reviewer: String },\n    Published { title: String, slug: String },\n}\n\nimpl Document {\n    fn request_review(self, reviewer: &str) -> Self {\n        match self {\n            Document::Draft { title } => Document::Review {\n                title,\n                reviewer: reviewer.to_string(),\n            },\n            state => state,\n        }\n    }\n\n    fn publish(self) -> Self {\n        match self {\n            Document::Review { title, .. } => {\n                let slug = title.to_lowercase().replace(' ', \"-\");\n                Document::Published { title, slug }\n            }\n            state => state,\n        }\n    }\n\n    fn state(&self) -> &'static str {\n        match self {\n            Document::Draft { .. } => \"draft\",\n            Document::Review { .. } => \"review\",\n            Document::Published { .. } => \"published\",\n        }\n    }\n\n    fn slug(&self) -> &str {\n        match self {\n            Document::Published { slug, .. } => slug,\n            _ => \"none\",\n        }\n    }\n}\n\nfn main() {\n    let doc = Document::Draft {\n        title: String::from(\"Rust OOP\"),\n    }\n    .request_review(\"mina\")\n    .publish();\n\n    println!(\"state = {}\", doc.state());\n    println!(\"slug = {}\", doc.slug());\n}"
+ },
+ "labReferenceSolution": null
+}

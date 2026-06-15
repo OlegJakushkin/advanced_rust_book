@@ -1,0 +1,195 @@
+{
+ "chapterKey": "ch17",
+ "num": 17,
+ "title": "Refactoring Toward Idiomatic Rust",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Refactor one module in three passes",
+   "objective": "Practice reviewing a non-idiomatic Rust module with an explicit refactoring order instead of random local edits.",
+   "starterPrompt": "You inherit a module that mixes panic-based config parsing, public mutable fields, borrowed return values, and a late-added `Arc<Mutex<...>>` cache. Plan the first three refactoring passes.",
+   "prompts": [
+    "Which problems belong in the ownership-and-error pass?",
+    "Which problems belong in the data-model and API pass?",
+    "Which problems should wait until the async or concurrency boundary is clearer?"
+   ],
+   "acceptanceCriteria": [
+    "You put panic removal and ownership correction before style-only cleanup.",
+    "You distinguish model-shape refactors from async or concurrency-boundary refactors.",
+    "You explain at least one thing you would deliberately postpone until the earlier passes succeed."
+   ],
+   "hints": [
+    "A good refactor order reduces complexity at the boundary before it optimizes the interior.",
+    "If you do not know who owns the data yet, it is too early to polish the API surface."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Name the smell by source language instinct",
+   "objective": "Read a mixed-style module and classify which parts are C++-style, Go-style, or C#-style carryovers.",
+   "starterPrompt": "A single file contains `panic!` on bad input, `BaseHandler`-shaped traits with data spread across several structs, clone-heavy read paths, and long explicit lifetimes on every helper.",
+   "prompts": [
+    "Which parts look like Go-style error handling that Rust should express as `Result`?",
+    "Which parts look like C#-style hierarchy pressure that Rust should split into traits, enums, and composition?",
+    "Which parts look like C++-style identity or pointer pressure that Rust could replace with value returns or clearer ownership?"
+   ],
+   "acceptanceCriteria": [
+    "You classify at least one smell under each relevant background where appropriate.",
+    "You explain the Rust-native repair in operational terms rather than only naming the smell.",
+    "You avoid pretending every issue has the same refactor shape."
+   ],
+   "hints": [
+    "The goal is not blame. The goal is to recognize which old instinct produced which shape.",
+    "A precise answer usually talks about ownership, fallibility, or closed-versus-open state."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Replace panic-based parsing with `Result` and an owned boundary",
+   "objective": "Refactor a small parsing helper so normal failure becomes explicit and the success path returns a usable owned value.",
+   "starterPrompt": "Replace a helper that unwraps a port string and panics on bad input with a `Result`-based function that callers can compose with `?`.",
+   "prompts": [
+    "Keep the missing-input path explicit.",
+    "Map parse failures to a real error value instead of logging and continuing.",
+    "Return the parsed port as a plain owned number."
+   ],
+   "acceptanceCriteria": [
+    "The parser returns a `Result` rather than panicking for ordinary invalid input.",
+    "Missing input and malformed input are distinguishable in the result.",
+    "The runnable lab prints the expected missing, invalid, and success cases."
+   ],
+   "hints": [
+    "This exercise is intentionally small. The design lesson is bigger than the function.",
+    "Use `ok_or` or `match` for the missing branch, then `map_err` or `match` for parse failure."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Reduce lifetime annotations by changing ownership",
+   "objective": "Remove unnecessary lifetime complexity by returning owned data or owning fields where the boundary demands independence.",
+   "starterPrompt": "You inherit `fn build_label<'a>(service: &'a str, route: &'a str) -> &'a str` even though the function constructs new text, plus a long-lived struct that borrows request fields into a cache.",
+   "prompts": [
+    "Which function should return `String` instead of a borrowed `&str`?",
+    "Which long-lived struct should stop borrowing and start owning?",
+    "What lifetime annotations disappear once the ownership model is corrected?"
+   ],
+   "acceptanceCriteria": [
+    "You change at least one borrowed return into an owned return for a justified reason.",
+    "You identify at least one long-lived struct that should stop borrowing request-local data.",
+    "You explain the refactor as an ownership repair, not as lifetime syntax cleanup."
+   ],
+   "hints": [
+    "If the function constructs new bytes, it should usually return an owned value.",
+    "If the struct crosses cache, queue, or async boundaries, borrowing from request-local data is usually the wrong model."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Remove unnecessary clones and narrow unsafe code",
+   "objective": "Practice two common production cleanups in one review: borrow on read paths and wrap unsafe code behind a checked safe API.",
+   "starterPrompt": "A helper clones routes only to log them, and another helper exposes a safe raw-pointer write API without documenting the real preconditions. Repair both.",
+   "prompts": [
+    "Which signature should borrow instead of taking ownership?",
+    "Where should the unsafe precondition checks move relative to the raw operation?",
+    "How would you document the remaining `unsafe` block so another reviewer can re-derive the invariant quickly?"
+   ],
+   "acceptanceCriteria": [
+    "You remove at least one unnecessary clone by changing a signature to borrow.",
+    "You shrink the unsafe region and move explicit checks before it.",
+    "You name the invariant of the remaining unsafe block concretely."
+   ],
+   "hints": [
+    "A clone-heavy read path and a vague unsafe boundary are both signs that the real contract is hidden.",
+    "Make the contract smaller and more explicit before you optimize anything else."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Refactor a synchronous service into an async shell with test seams",
+   "objective": "Decide what actually becomes async, what remains synchronous, and how to keep the resulting code easy to test.",
+   "starterPrompt": "You are refactoring `parse -> validate -> load from store -> enrich -> persist -> notify` into an async service that may later be spawned onto a multithreaded runtime.",
+   "prompts": [
+    "Which steps should remain synchronous because they are pure or CPU-local?",
+    "Which boundaries should become async because they perform IO or scheduling?",
+    "Which values should become owned before an `await` or a spawned task boundary?",
+    "Which seams should be traits or generics so tests can provide clocks, repositories, or notifiers?"
+   ],
+   "acceptanceCriteria": [
+    "You keep pure parsing or validation synchronous where possible.",
+    "You return or pass owned values across async or task boundaries.",
+    "You justify any `Send` requirement in terms of a real cross-thread future or spawned task boundary.",
+    "You name at least one test strategy and one observability hook for the refactored service."
+   ],
+   "hints": [
+    "Not every function in an async service should become `async fn`.",
+    "A thin async shell around a sync domain core is often easier to test and benchmark."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is a three-pass refactor often safer than many small style-only edits?",
+  "What is the Rust-native repair for routine invalid input: `panic!`, sentinel values, or `Result`?",
+  "When does returning owned data simplify lifetime-heavy APIs?",
+  "How do enums and traits divide closed and open polymorphism during a refactor?",
+  "Why should async refactors usually return owned values across `await` boundaries?",
+  "What makes a refactor more testable instead of only more abstract?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Replace panic-based parsing with `Result`",
+  "filename": "parse_port_refactor_lab.rs",
+  "runKey": "ch17_ex_result_refactor",
+  "expectedOutput": "missing = Err(\"missing port\")\nbad = Err(\"invalid port\")\nok = Ok(8080)",
+  "initialCode": "fn parse_port(raw: Option<&str>) -> Result<u16, &'static str> {\n    let text = raw.unwrap();\n    Ok(text.parse::<u16>().unwrap())\n}\n\nfn main() {\n    println!(\"missing = {:?}\", parse_port(None));\n    println!(\"bad = {:?}\", parse_port(Some(\"oops\")));\n    println!(\"ok = {:?}\", parse_port(Some(\"8080\")));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 04, 07, 08, 14, 15, and 16",
+  "Opening scenario",
+  "Mental model",
+  "What changes by background",
+  "Core concepts",
+  "Clone audit checklist",
+  "Async refactor checklist",
+  "Testability patterns",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: replace panic-based loading with an owned Result boundary",
+  "Example 2: replace hierarchy pressure with enum state and a narrow test seam",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Idiomatic Rust refactoring reduces operational risk by clarifying ownership, error flow, data shape, and execution boundaries. This chapter turns review findings into small, verifiable code changes.",
+  "Ownership from Chapter 04, clone economics from Chapter 07, safe abstraction boundaries from Chapter 08, traits from Chapter 14, enum-versus-trait modeling from Chapter 15, and aggregate boundaries from Chapter 16 all feed directly into good Rust refactoring work.",
+  "A mature service has accumulated pointer-heavy objects, panic-based parsing, sentinel failures, public mutable records, and broad runtime dispatch. None of this is wrong in isolation; it is the residue of porting an existing C++, C#, or Go design and then bolting on features unde",
+  "The ordering matters more than any single change. When you correct ownership and error flow first, a surprising amount of the lifetime noise and clone pressure simply evaporates, because those problems were symptoms of the wrong boundary rather than independent defects. The three",
+  "Read the pipeline left to right. Each pass takes the output of the previous one and is only worth attempting once the earlier boundary is clean.",
+  "Most of the friction in an idiomatic refactor is not about Rust syntax. It is about the instinct you brought from your previous language and where that instinct now points you wrong. The cards below name the specific mental-model shift for each background, not a library mapping. ",
+  "Each concept below is a recurring move you make during the three passes. They are grouped roughly by the language habit they correct, but they share one theme: every one of them turns an implicit decision the old code made by convention into an explicit decision the type system c",
+  "What to look at:",
+  "An idiomatic Rust refactor is not a contest to remove every `clone`, every trait object, or every async call. It is a contest to make the remaining ones obviously correct, operationally justified, and easy to review.",
+  "The refactor keeps borrowed input local, moves normalized output into an owned struct, and turns routine failure into a small error enum.",
+  "What to look at: follow the data left to right. Borrowed config text comes in, parsing either fails with a named error or produces an owned endpoint, and that owned value is what leaves the function so the caller never depends on the input buffer.",
+  "Missing or invalid ports become ordinary Result errors, not panics or sentinel values.",
+  "The returned endpoint owns its normalized bind address, so the caller is not coupled to input buffer lifetime.",
+  "The signature now says exactly what the caller gets and exactly how failure is represented.",
+  "A closed mode becomes an enum, a notifier becomes a small trait seam, and the processor becomes easy to test with a fake implementation.",
+  "What to look at: the old hierarchy splits into three parts. The closed delivery mode is an enum the processor matches on, the notifier is a small trait the processor is generic over, and a fake notifier can stand in for the real one in tests without touching anything else.",
+  "The closed delivery mode is an enum, not a polymorphic class family with runtime type checks.",
+  "The notifier boundary is small enough to swap with a fake in tests without dragging in broad framework state.",
+  "The generic processor keeps dispatch static until a real runtime plugin boundary actually appears.",
+  "The repository also includes standalone Rust source under examples/ch17_refactoring_toward_idiomatic_rust/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to refactor a non-idiomatic module in three passes, replace panic-based routines with Result-based APIs, reduce lifetime noise by changing ownership, and design async and test seams deliberately."
+ ],
+ "codeSamples": {
+  "refactoring_result_owned_api": "#[derive(Debug)]\nenum ConfigError {\n    MissingPort,\n    InvalidPort,\n}\n\n#[derive(Debug)]\nstruct Endpoint {\n    service: String,\n    bind: String,\n}\n\nimpl Endpoint {\n    fn requires_tls(&self) -> bool {\n        self.bind.ends_with(\":443\")\n    }\n}\n\nfn parse_port(raw: Option<&str>) -> Result<u16, ConfigError> {\n    let text = raw.ok_or(ConfigError::MissingPort)?;\n    text.parse::<u16>().map_err(|_| ConfigError::InvalidPort)\n}\n\nfn load_endpoint(service: &str, host: &str, port_raw: Option<&str>) -> Result<Endpoint, ConfigError> {\n    let port = parse_port(port_raw)?;\n\n    Ok(Endpoint {\n        service: service.to_string(),\n        bind: format!(\"{}:{}\", host, port),\n    })\n}\n\nfn main() {\n    let endpoint = load_endpoint(\"billing\", \"127.0.0.1\", Some(\"443\")).unwrap();\n\n    println!(\"endpoint = {}@{}\", endpoint.service, endpoint.bind);\n    println!(\"requires tls = {}\", endpoint.requires_tls());\n}",
+  "refactoring_traits_enums_testable": "#[derive(Debug, Clone, Copy)]\nenum DeliveryMode {\n    Immediate,\n    Retry,\n}\n\ntrait Notifier {\n    fn notify(&self, order_id: u64) -> String;\n}\n\nstruct EmailNotifier;\n\nimpl Notifier for EmailNotifier {\n    fn notify(&self, order_id: u64) -> String {\n        format!(\"email:order-{}\", order_id)\n    }\n}\n\nstruct OrderProcessor<N> {\n    notifier: N,\n    processed: usize,\n}\n\nimpl<N: Notifier> OrderProcessor<N> {\n    fn new(notifier: N) -> Self {\n        Self {\n            notifier,\n            processed: 0,\n        }\n    }\n\n    fn process(&mut self, order_id: u64, mode: DeliveryMode) -> String {\n        self.processed += 1;\n\n        match mode {\n            DeliveryMode::Immediate => format!(\"charged = order-{}\", order_id),\n            DeliveryMode::Retry => format!(\"queued = order-{}\", order_id),\n        }\n    }\n\n    fn notify(&self, order_id: u64) -> String {\n        self.notifier.notify(order_id)\n    }\n}\n\nfn main() {\n    let mut processor = OrderProcessor::new(EmailNotifier);\n    let order_id = 7_u64;\n\n    println!(\"{}\", processor.process(order_id, DeliveryMode::Immediate));\n    println!(\"notified = {}\", processor.notify(order_id));\n    println!(\"processed = {}\", processor.processed);\n}"
+ },
+ "labReferenceSolution": null
+}

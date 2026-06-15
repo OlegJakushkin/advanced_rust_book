@@ -1,0 +1,198 @@
+{
+ "chapterKey": "ch44",
+ "num": 44,
+ "title": "Packaging and Deployment",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Create a packaging matrix for native, container, wasm, and library outputs",
+   "objective": "Practice stating which artifact shape each consumer actually needs instead of collapsing every release into one vague 'build'.",
+   "starterPrompt": "Your team ships one service as a Linux binary, one container image, one browser-facing wasm bundle, and one native library for another product. Write a small packaging matrix for all four.",
+   "prompts": [
+    "Which target triple or crate type belongs to each artifact?",
+    "Which runtime assumption belongs to each artifact: libc, container base, browser glue, or foreign ABI?",
+    "Which artifact should carry feature gates differently from the others?",
+    "Which artifact deserves its own smoke test lane?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least three artifact rows with distinct target or crate-type information.",
+    "You name at least one runtime assumption per row.",
+    "You mention at least one artifact-specific smoke test or validation step."
+   ],
+   "hints": [
+    "A packaging matrix is most useful when every row answers who will run the artifact and how.",
+    "If two artifacts have different consumers, they probably need different validation too."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Review a Docker multi-stage build and its minimal runtime image",
+   "objective": "Explain what the builder stage and runtime stage each guarantee, and identify what a too-minimal runtime image may still be missing.",
+   "starterPrompt": "Review a two-stage Docker build that compiles a Rust binary in one stage and copies it into `scratch` in the second stage.",
+   "prompts": [
+    "What does the builder stage own that should not leak into the runtime stage?",
+    "What does the runtime stage still need besides the executable, such as CA certificates or runtime user setup?",
+    "When would distroless or Alpine be calmer than `scratch`?",
+    "What final smoke test should run against the image rather than only against the binary on the build host?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish builder and runtime responsibilities clearly.",
+    "You name at least one missing runtime dependency that a scratch image may still need.",
+    "You justify one alternative runtime image choice with a workload reason."
+   ],
+   "hints": [
+    "Smaller is not always calmer if the process still expects files or runtime metadata that the image does not contain.",
+    "The final image deserves its own boot or health-check test."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a packaging matrix for native, container, and wasm builds",
+   "objective": "Build a tiny release helper that turns one app name and version into three explicit artifact names.",
+   "starterPrompt": "Implement `artifact_name(app, version, target)` for a native musl binary, a container tag, and a wasm bundle.",
+   "prompts": [
+    "Keep the target set explicit with an enum.",
+    "Name the native output with a target triple suffix.",
+    "Name the container output like a registry tag.",
+    "Name the wasm output like a wasm artifact rather than a native binary."
+   ],
+   "acceptanceCriteria": [
+    "The enum clearly distinguishes native, container, and wasm targets.",
+    "The function returns three different artifact naming shapes.",
+    "The runnable lab prints the expected native, container, and wasm names."
+   ],
+   "hints": [
+    "This exercise is about release contracts, not clever formatting.",
+    "The point is that each artifact class has a different naming convention and consumer."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Design a feature-gated release workflow",
+   "objective": "Replace one catch-all default build with an explicit feature policy that matches real deployment shapes.",
+   "starterPrompt": "You inherit a crate where the default feature set includes metrics, admin endpoints, optional native bindings, and browser support, even though most service deployments only need the core server.",
+   "prompts": [
+    "Which features should stay opt-in instead of default?",
+    "Which CI lanes should build `default`, `minimal`, and at least one expanded feature set?",
+    "Which runtime settings should remain runtime configuration instead of compile-time features?",
+    "What artifact-size or attack-surface signal would you compare before and after the change?"
+   ],
+   "acceptanceCriteria": [
+    "You move at least one non-core feature out of the default set.",
+    "You define at least two explicit CI feature combinations.",
+    "You distinguish runtime config from compile-time packaging choices clearly."
+   ],
+   "hints": [
+    "A good feature matrix makes the smallest honest artifact easy to build and test.",
+    "Not every optional behavior belongs behind a compile-time flag."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Add supply-chain checks to CI before release day forces the issue",
+   "objective": "Design a release lane that validates dependency policy and final artifact trust data deliberately.",
+   "starterPrompt": "Your current pipeline runs tests and publishes artifacts, but it has no checksum step, no SBOM generation, and no dependency-policy or advisory gate.",
+   "prompts": [
+    "Which checks belong before artifact publication and which belong after the artifact is built?",
+    "What should be generated for operators: checksums, signatures, SBOMs, provenance, or all four?",
+    "Which ecosystem checks would you treat as release gates versus advisory signals?",
+    "How will the pipeline surface failure clearly enough that the team knows why publication stopped?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least three concrete supply-chain checks or outputs.",
+    "You place at least one gate before publication and one artifact metadata step after build.",
+    "You explain how CI reports failure without leaving the release state ambiguous."
+   ],
+   "hints": [
+    "The best release lane tells operators what to trust and tells engineers why a release was blocked.",
+    "Generated metadata is only useful if it follows the final artifact that users actually download."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Write a release-engineering plan for a Rust service with several artifact shapes",
+   "objective": "Turn packaging into an operable rollout process with smoke tests, health checks, rollback, and artifact inventory.",
+   "starterPrompt": "You are shipping `gateway`, `gateway-wasm-admin`, and `gateway-risk-lib` from one repository. Operators require canary rollout, rollback instructions, and clear artifact validation on every release.",
+   "prompts": [
+    "Which artifacts should release together and which can version independently?",
+    "Which smoke tests should run on the final binary, the final image, the wasm package, and the native library harness?",
+    "What health or observability checks gate promotion from canary to broad rollout?",
+    "What rollback data must be published with the release so another team can act without rebuilding under pressure?"
+   ],
+   "acceptanceCriteria": [
+    "You define at least two artifact classes with distinct release validation.",
+    "You include at least one promotion gate and one rollback requirement.",
+    "You mention at least two observability or health signals that matter during rollout."
+   ],
+   "hints": [
+    "A release plan is not complete until rollback is easier to execute than improvisation.",
+    "The final artifact, not only the source commit, is what operators actually roll back to."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "What makes a static binary attractive, and what runtime assumptions can still remain outside the binary itself?",
+  "Why should browser wasm and WASI packaging be treated as different release families?",
+  "When would you choose `cdylib` instead of `staticlib`, and why is the ABI contract part of release engineering?",
+  "Why should feature combinations be tested in CI rather than described only in docs?",
+  "What should be smoke tested: the crate graph, the built binary, the image, or all of the above?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Packaging matrix",
+  "filename": "packaging_matrix_lab.rs",
+  "runKey": "ch44_ex_packaging_matrix",
+  "expectedOutput": "native = pricing-x86_64-unknown-linux-musl\ncontainer = ghcr.io/acme/pricing:1.2.0\nwasm = pricing-wasm32-unknown-unknown.wasm",
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nenum Target {\n    Native,\n    Container,\n    Wasm,\n}\n\nfn artifact_name(app: &str, version: &str, target: Target) -> String {\n    let _ = version;\n    let _ = target;\n    app.to_string()\n}\n\nfn main() {\n    let app = \"pricing\";\n    let version = \"1.2.0\";\n\n    println!(\"native = {}\", artifact_name(app, version, Target::Native));\n    println!(\"container = {}\", artifact_name(app, version, Target::Container));\n    println!(\"wasm = {}\", artifact_name(app, version, Target::Wasm));\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 03, 19, 25, 28, 29, 41, and 43",
+  "Opening scenario",
+  "A practical decision order",
+  "At a glance",
+  "Release-engineering questions",
+  "Mental model",
+  "Core concepts",
+  "How to think about deployment coming from C++, C#, Go, or Python",
+  "The release pipeline as a gate sequence",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: target-aware artifact naming",
+  "Example 2: release bundle planning",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Deployment readiness requires reproducible builds, minimal runtime assumptions, artifact provenance, and rollback policy. This chapter covers Rust packaging as an operations contract.",
+  "Chapter 03 established Cargo, features, and workspace structure. Chapter 19 covered wire contracts. Chapter 25 covered service runtime shape. Chapters 28 and 29 covered native and wasm boundaries. Chapter 41 covered translated error contracts, and Chapter 43 covered health, telem",
+  "One Rust codebase has to ship four different ways: as a static Linux binary for the fleet, as a container image for the orchestrator, as a browser Wasm module for the dashboard, and as a native library for a C++ host that embeds the risk engine. They share source, but they do not",
+  "The same crate graph also feeds two more delivery shapes:",
+  "The useful comparison here is not 'which crate replaces which library.' It is where each background expects the runtime to come from, and how that expectation changes when the artifact has to stand on its own. Find your starting language and notice the shift it asks for.",
+  "It helps to picture the pipeline as a chain of gates rather than a script. Each stage only runs if the one before it passed, and the artifact only earns a signature and publication after the smoke test confirms it actually runs on a target-like environment. The key transition to ",
+  "The most expensive deployment bug is often not a compiler failure. It is a “successful” release whose final artifact was never tested in the real runtime shape that production actually executes.",
+  "The point is not string formatting. The point is that each target class becomes an explicit artifact contract instead of an implicit convention hidden in release scripts.",
+  "What to look at: the match in artifact_name is the whole idea. One BuildTarget value routes to exactly one naming rule, and is_static records intent as data rather than as a comment in a release script. Follow how a single target flows through both functions to a fully described ",
+  "From the musl name, the same target value then decides static intent:",
+  "Artifact naming should make the target obvious to humans and automation.",
+  "Whether a build is intended to be static is a first-class release property, not tribal knowledge.",
+  "One codebase can legitimately emit binaries, wasm modules, and native libraries without pretending they are the same delivery artifact.",
+  "A release is more than one executable. Feature selection, artifact list, and supply-chain outputs should all be visible in one reviewable bundle plan.",
+  "What to look at: watch how build_bundle starts from a core artifact-and-feature set and then conditionally accumulates more based on the metrics and admin flags. Each flag is a real packaging decision: admin does not just add a feature, it adds a whole new artifact (the native li",
+  "Feature selection changes the release artifact and should therefore be explicit in the release plan.",
+  "Operators should know which shapes were built and published for a given version.",
+  "Checksums, signatures, and SBOM outputs belong to the bundle story, not only to the CI implementation.",
+  "The repository also includes standalone Rust source under examples/ch44_packaging_and_deployment/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to build a native, container, and wasm packaging matrix, design a feature-gated release workflow, add supply-chain checks to CI, and write a release checklist another senior engineer could operate during a real rollout."
+ ],
+ "codeSamples": {
+  "packaging_target_matrix": "#[derive(Debug, Clone, Copy)]\nenum BuildTarget {\n    LinuxGnu,\n    LinuxMusl,\n    Wasm,\n    NativeLib,\n}\n\nfn artifact_name(service: &str, target: BuildTarget) -> String {\n    match target {\n        BuildTarget::LinuxGnu => format!(\"{}-x86_64-unknown-linux-gnu\", service),\n        BuildTarget::LinuxMusl => format!(\"{}-x86_64-unknown-linux-musl\", service),\n        BuildTarget::Wasm => format!(\"{}-wasm32-unknown-unknown.wasm\", service),\n        BuildTarget::NativeLib => format!(\"lib{}.so\", service),\n    }\n}\n\nfn is_static(target: BuildTarget) -> bool {\n    matches!(target, BuildTarget::LinuxMusl)\n}\n\nfn main() {\n    let service = \"payments\";\n\n    println!(\"musl = {}\", artifact_name(service, BuildTarget::LinuxMusl));\n    println!(\"wasm = {}\", artifact_name(service, BuildTarget::Wasm));\n    println!(\"static = {}\", is_static(BuildTarget::LinuxMusl));\n}",
+  "packaging_release_bundle": "#[derive(Debug)]\nstruct ReleaseBundle {\n    profile: &'static str,\n    artifacts: Vec<&'static str>,\n    features: Vec<&'static str>,\n    sbom: bool,\n    signature: bool,\n}\n\nfn build_bundle(profile: &'static str, metrics: bool, admin: bool) -> ReleaseBundle {\n    let mut artifacts = vec![\"linux-musl\", \"container\"];\n    let mut features = vec![\"core\"];\n\n    if metrics {\n        features.push(\"metrics\");\n    }\n\n    if admin {\n        artifacts.push(\"native-lib\");\n        features.push(\"admin\");\n    }\n\n    ReleaseBundle {\n        profile,\n        artifacts,\n        features,\n        sbom: true,\n        signature: true,\n    }\n}\n\nfn main() {\n    let bundle = build_bundle(\"release\", true, false);\n\n    println!(\"profile = {}\", bundle.profile);\n    println!(\"artifacts = {}\", bundle.artifacts.join(\",\"));\n    println!(\"features = {}\", bundle.features.join(\",\"));\n    println!(\"signed = {}\", bundle.sbom && bundle.signature);\n}"
+ },
+ "labReferenceSolution": null
+}

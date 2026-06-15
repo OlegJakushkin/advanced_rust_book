@@ -1,0 +1,214 @@
+{
+ "chapterKey": "ch12",
+ "num": 12,
+ "title": "Matrices and Multidimensional Data",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose row-major, column-major, jagged, or sparse from the workload",
+   "objective": "Practice choosing a matrix representation from access pattern and boundary contract rather than habit.",
+   "starterPrompt": "Classify four workloads: image scanlines processed left-to-right, a foreign column-major solver boundary, a truly ragged set of variable-length feature rows, and a mostly-empty recommendation matrix.",
+   "prompts": [
+    "Which workload wants row-major dense storage?",
+    "Which workload should preserve or adapt to column-major semantics at the boundary?",
+    "Which workload is genuinely jagged and therefore not a dense matrix at all?",
+    "Which workload should move toward a sparse format instead of forcing dense storage?"
+   ],
+   "acceptanceCriteria": [
+    "You distinguish dense row-major, dense column-major, jagged, and sparse representations clearly.",
+    "You justify each choice with access pattern or interop contract, not only preference.",
+    "You explicitly reject `Vec<Vec<T>>` as the default answer for dense numeric data."
+   ],
+   "hints": [
+    "Start with physical layout, not only with indexing syntax.",
+    "A strong answer says why the boundary wants the chosen representation."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Replace `Vec<Vec<T>>` with flat storage conceptually before coding",
+   "objective": "Read a nested-vector design and explain exactly which costs disappear when the storage becomes flat.",
+   "starterPrompt": "You inherit `Vec<Vec<f32>>` for a dense scoring matrix and the hot path walks every row in full. Explain what changes if the storage becomes `Vec<f32>` plus `rows` and `cols`.",
+   "prompts": [
+    "Which allocations disappear?",
+    "What happens to row placement and cache behavior?",
+    "What becomes easier at FFI or accelerator boundaries?",
+    "Which convenience from nested vectors do you lose?"
+   ],
+   "acceptanceCriteria": [
+    "You call out multiple allocations and per-row indirection as real costs of `Vec<Vec<T>>`.",
+    "You explain why one flat buffer improves predictable traversal and interop.",
+    "You mention at least one tradeoff, such as losing easy ragged-row support."
+   ],
+   "hints": [
+    "This is not a morality exercise. Name the costs and the lost conveniences precisely.",
+    "Contiguous storage and jagged flexibility are solving different problems."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a row-major `Matrix<T>` wrapper over `Vec<T>`",
+   "objective": "Build a dense owner that makes layout explicit and exposes row-major indexing.",
+   "starterPrompt": "Implement `Matrix<T>` with `from_elem`, `offset`, `get`, `set`, and `row` over one flat `Vec<T>`.",
+   "prompts": [
+    "Use row-major indexing exactly.",
+    "Keep `get` returning `Option<&T>`.",
+    "Keep `row` returning `Option<&[T]>` without copying.",
+    "Make the storage length equal to `rows * cols`."
+   ],
+   "acceptanceCriteria": [
+    "The matrix stores one flat `Vec<T>` and shape metadata.",
+    "The offset formula is row-major.",
+    "The row slice borrows directly from the owned buffer.",
+    "The runnable lab prints the expected cell value, row sum, and total cell count."
+   ],
+   "hints": [
+    "The row-major offset formula is `row * cols + col`.",
+    "A row view is just a slice range into the flat buffer."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Design a matrix view without copying data",
+   "objective": "Replace a clone-heavy submatrix helper with a borrowed view that carries enough metadata to interpret the same storage.",
+   "starterPrompt": "A helper currently builds a fresh `Vec<T>` for every 2D window extracted from a larger flat buffer. Redesign it as a borrowed view.",
+   "prompts": [
+    "Which metadata does the view need: rows, cols, stride, offset?",
+    "What does the view borrow from?",
+    "How does the accessor compute the element position safely?",
+    "When is copying still the right answer instead of a borrowed view?"
+   ],
+   "acceptanceCriteria": [
+    "Your redesign borrows the existing buffer rather than allocating by default.",
+    "You include the metadata needed to interpret the view correctly.",
+    "You explain one case where copying remains legitimate, such as ownership transfer across a long-lived boundary."
+   ],
+   "hints": [
+    "The view should explain layout, not own it.",
+    "Stride matters once the view is smaller than the full parent matrix width."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "debugging or refactoring",
+   "title": "Choose between const generics and runtime dimensions honestly",
+   "objective": "Separate fixed-invariant shapes from merely common shapes.",
+   "starterPrompt": "Review three cases: a 3x3 image kernel, a 4x4 transform matrix in a graphics or simulation path, and a batch-sized score matrix whose dimensions come from request input.",
+   "prompts": [
+    "Which cases want const generics because the shape is part of the invariant?",
+    "Which case wants runtime dimensions because shape varies per request or batch?",
+    "What tradeoff do you accept by making shape part of the type?"
+   ],
+   "acceptanceCriteria": [
+    "You choose const generics only where fixed shape is semantically real.",
+    "You choose runtime dimensions for the request-sized or batch-sized case.",
+    "You explain at least one tradeoff involving API specificity, monomorphization, or call-site simplicity."
+   ],
+   "hints": [
+    "“Often 4x4” and “must be 4x4” are not the same statement.",
+    "Fixed shape in the type is strongest when the invariant is truly global to the API."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose dense, sparse, and interop boundaries for a production pipeline",
+   "objective": "Make layout choices across parsing, dense computation, sparse assembly, and foreign-library calls.",
+   "starterPrompt": "You are designing `ingest dense features -> normalize rows -> extract windows -> call a foreign solver -> build a sparse recommendation graph -> ship results to a GPU stage`.",
+   "prompts": [
+    "Which stages want dense flat storage and which want sparse formats?",
+    "Where are borrowed views enough and where must data become owned?",
+    "Which boundary must be explicit about row-major versus column-major layout?",
+    "What would you test and profile first to avoid blaming math for boundary costs?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one dense and one sparse representation deliberately.",
+    "You identify the foreign-library or GPU boundary as an ownership and layout boundary.",
+    "You describe at least one test strategy and one profiling hook, such as scalar reference checks, transposition timing, or copy-count measurement.",
+    "You justify one tradeoff involving locality, conversion cost, or API complexity."
+   ],
+   "hints": [
+    "The slowest part may be packing or copying, not the kernel.",
+    "A strong answer names the owner and layout contract at each subsystem edge."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is a flat `Vec<T>` usually a stronger dense-matrix default than `Vec<Vec<T>>`?",
+  "What is the real difference between row-major and column-major in production code?",
+  "When is a matrix view the right abstraction, and when should you copy instead?",
+  "What makes const generics appropriate for some matrix shapes but not for request-sized batches?",
+  "Which safety invariant must be true before you hand a matrix buffer to a foreign solver or GPU runtime?",
+  "Why should sparse format choice follow traversal and interop needs instead of default taste?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Row-major `Matrix<T>` wrapper",
+  "filename": "row_major_matrix_lab.rs",
+  "runKey": "ch12_ex_row_major_matrix",
+  "expectedOutput": "a01 = 7\nrow1 sum = 11\ncells = 4",
+  "initialCode": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 2, 0_i32);\n    m.set(0, 0, 5);\n    m.set(0, 1, 7);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 08, 10, and 11",
+  "Opening scenario",
+  "A reliable design order",
+  "Mental model",
+  "Core concepts",
+  "Row-major and column-major representations",
+  "Nested vectors and their costs",
+  "Matrix views and slices",
+  "SIMD-friendly layouts",
+  "Sparse matrices",
+  "Interoperating with BLAS, LAPACK, CUDA, and HPC libraries",
+  "Interop boundary checklist",
+  "How this lands by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: row-major Matrix<T> over Vec<T>",
+  "Example 2: borrowed matrix view plus const-generic fixed kernel",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Matrix and multidimensional workloads need explicit layout, shape, ownership, and traversal rules. This chapter covers dense and sparse representations used for numeric pipelines and accelerator handoff.",
+  "Chapter 08 explained unsafe Rust and FFI proof obligations. Chapter 10 covered contiguous storage and slice-first APIs. Chapter 11 covered workload-aware data-structure choice. This chapter applies those same instincts to multidimensional numeric and domain data, where layout bec",
+  "Picture a data-processing service that handles three shapes of numeric data at once: dense image grids it convolves with a kernel, a recommendation score matrix it slices into per-user windows, and a large mostly-zero feature matrix it hands to an accelerator. None of these is we",
+  "What to look at: both layouts store the same six logical cells in the same six bytes of memory; the only difference is the order. Row-major lays the first row down first, so walking a row is unit-stride and walking a column jumps by the row width. Column-major flips that. The dia",
+  "The important operational consequence is not the formula itself. It is which loop order is unit-stride, which access pattern is cache-friendly, and which foreign library can consume the buffer without conversion.",
+  "The difference between a flat Vec and a Vec of Vecs is not syntax, it is the heap shape. A flat buffer is one allocation the CPU can stream through. A nested buffer is an outer array of pointers, each one leading to a separately allocated row that can sit anywhere in memory, so e",
+  "That does not make nested vectors wrong. They are a good fit when row lengths truly differ or when the domain is naturally ragged. They are just not the calm default for dense matrices.",
+  "What to look at: a view does not allocate. It points back into the owner’s buffer and carries the metadata needed to skip past the rows it does not care about. The lifetime parameter is the part that earns its keep: the borrow checker refuses to let the view be used after the buf",
+  "A view usually borrows a slice and carries metadata: rows, cols, stride, and maybe an offset. That lets you describe submatrices, tiles, and windows without copying data into a second owner.",
+  "The view does not own the buffer. It interprets borrowed storage under an explicit layout contract.",
+  "Whether you use compiler auto-vectorization, explicit intrinsics, or an ecosystem SIMD abstraction, the layout question arrives first. Syntax cannot fix a bad stride pattern.",
+  "When most cells are zero, you stop storing the grid and start storing only the nonzeros plus the structure needed to find them. COO is the easy ingestion format, a bag of (row, col, value) triples; CSR and CSC are the compressed formats that traverse fast in one direction. The us",
+  "A useful rule is to separate build format from execution format. The easiest format to ingest is not always the cheapest format to multiply or traverse.",
+  "What to look at: the cost at a numeric boundary is rarely the math. It is the handoff. Your Rust buffer may be the wrong layout, the wrong leading dimension, or in host memory when the kernel wants device memory, and every mismatch turns into a repack or a transfer before any ari",
+  "Be careful with claims of zero-copy interop. A foreign kernel may still require a different layout, leading dimension, alignment rule, memory domain, or device residency than your Rust-side buffer currently has.",
+  "This checklist is deliberately boring. Boring is good here. Most expensive matrix interop bugs come from unstated layout or ownership assumptions, not from exotic arithmetic.",
+  "Almost nobody meets Rust matrices as a blank slate. You arrive with a mental model from another ecosystem, and the useful question is which part of that model carries over and which part will quietly mislead you. With matrices the shift is rarely about API names; it is about who ",
+  "Dense numeric code often looks like “just math,” but the hard bugs and hard performance losses are usually layout bugs. Treat layout as a first-class API decision.",
+  "One contiguous owner, explicit offset calculation, and row views derived from the flat buffer.",
+  "What to look at: there is one buffer and one place where a (row, col) becomes a linear index, the offset method computing row * cols + col. Every accessor (get, set, row) routes through it, and row hands back a borrowed slice rather than a copy. Trace one cell through the diagram",
+  "Quick check: change the inserted values or the matrix dimensions and keep the offset logic row-major. The exercise is not the printing. It is making the storage contract obvious in code.",
+  "One allocation keeps the matrix contiguous. Row slicing is just range arithmetic over one buffer.",
+  "Dense grids, image kernels, tensor-like feature blocks, and FFI handoff all benefit from one explicit owner plus a documented layout policy.",
+  "A view borrows without copying, while a fixed-size compile-time kernel keeps shape in the type.",
+  "What to look at: two different ways shape is carried. The MatrixView borrows a 12-element backing buffer and uses runtime stride and offset to address a 2x2 window without copying, so get(1, 1) resolves to index 5 + 1*4 + 1 = 10, the value 11. The trace function instead takes the",
+  "Quick check: change the backing data or the fixed matrix values, then rerun. The useful distinction is that the view borrows storage while the fixed kernel carries shape information at compile time.",
+  "The submatrix window is metadata plus a borrowed slice, not a copied dense owner.",
+  "The trace helper knows the square size at compile time and works for any fixed `N`.",
+  "View metadata such as stride and offset is exactly the kind of information foreign numeric APIs often need.",
+  "The repository also includes standalone Rust source under examples/ch12_matrices_and_multidimensional_data/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor."
+ ],
+ "codeSamples": {
+  "matrices_row_major_dense": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        row * self.cols + col\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.cols;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 3, 0_i32);\n    m.set(0, 0, 10);\n    m.set(0, 1, 20);\n    m.set(0, 2, 30);\n    m.set(1, 0, 4);\n    m.set(1, 1, 5);\n    m.set(1, 2, 6);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"last in row0 = {}\", m.get(0, 2).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n}",
+  "matrices_views_const_generics": "struct MatrixView<'a, T> {\n    data: &'a [T],\n    rows: usize,\n    cols: usize,\n    stride: usize,\n    offset: usize,\n}\n\nimpl<'a, T> MatrixView<'a, T> {\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            let index = self.offset + row * self.stride + col;\n            self.data.get(index)\n        } else {\n            None\n        }\n    }\n}\n\nfn trace<const N: usize>(matrix: [[i32; N]; N]) -> i32 {\n    let mut sum = 0;\n    let mut i = 0;\n\n    while i < N {\n        sum += matrix[i][i];\n        i += 1;\n    }\n\n    sum\n}\n\nfn main() {\n    let backing = vec![\n        1_i32, 2, 3, 4,\n        5, 6, 7, 8,\n        9, 10, 11, 12,\n    ];\n\n    let view = MatrixView {\n        data: &backing,\n        rows: 2,\n        cols: 2,\n        stride: 4,\n        offset: 5,\n    };\n\n    let fixed = [[3_i32, 1], [2, 4]];\n\n    println!(\"view corner = {}\", view.get(1, 1).copied().unwrap());\n    println!(\"fixed trace = {}\", trace(fixed));\n}"
+ },
+ "labReferenceSolution": null
+}

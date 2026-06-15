@@ -1,0 +1,217 @@
+{
+ "chapterKey": "ch48",
+ "num": 48,
+ "title": "WebSockets and Long-Lived Connections",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Choose WebSockets, SSE, polling, gRPC streaming, or a broker-backed edge fan-out",
+   "objective": "Practice selecting the long-lived transport from directionality, latency, browser support, and durability needs instead of defaulting to WebSockets by habit.",
+   "starterPrompt": "Classify four products: a browser dashboard that only receives updates, a collaborative editor where both sides send commands, an internal polyglot stream between services, and a durable event feed where clients may reconnect after long offline gaps.",
+   "prompts": [
+    "Which case wants SSE because the client only listens?",
+    "Which case really wants full bidirectional state over one connection?",
+    "Which case wants gRPC streaming because service-to-service protobuf contracts matter more than browser support?",
+    "Which case probably wants a broker-backed replay surface rather than direct socket fan-out as the primary durability boundary?"
+   ],
+   "acceptanceCriteria": [
+    "You choose at least one transport other than WebSockets on purpose.",
+    "You justify the choice with pacing or durability rather than with framework familiarity.",
+    "You explain one tradeoff involving browser support, replay, or schema tooling."
+   ],
+   "hints": [
+    "Two-way interactivity is only one dimension of the choice.",
+    "If long offline replay matters, a broker or durable log may be the real core boundary."
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Review explicit read/write ownership in one connection loop",
+   "objective": "Read two async designs and explain why one writer-task boundary is calmer than several unrelated tasks writing directly through one shared sink.",
+   "starterPrompt": "Compare a design with one reader task, one application loop, and one writer task against a design that stores the write half behind `Arc<Mutex<...>>` and lets many tasks write whenever they want.",
+   "prompts": [
+    "Which design keeps frame ordering and close behavior easier to reason about?",
+    "Which design makes cancellation and shutdown easier to stage?",
+    "Which design makes slow-consumer backpressure easier to measure?",
+    "When might a shared sink still be acceptable even if it is not the calm default?"
+   ],
+   "acceptanceCriteria": [
+    "You explain one real win of the split read/write ownership model.",
+    "You identify at least one real tradeoff or inconvenience of the shared sink design.",
+    "You connect the answer to ordering, shutdown, or observability rather than only to syntax preference."
+   ],
+   "hints": [
+    "The main question is not mutex overhead. It is transport ownership and protocol sequencing.",
+    "A close frame is easier to reason about when one writer owns the send path."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Implement a small message loop with explicit read/write ownership",
+   "objective": "Build a small async loop where inbound frames cross one channel into app logic and outbound frames cross another channel into the writer side.",
+   "starterPrompt": "Implement one reader task, one application task, and one writer task, then react to text, ping, and close frames without sharing the write half directly.",
+   "prompts": [
+    "Keep inbound and outbound message enums separate.",
+    "Use one bounded channel for inbound messages and one for outbound messages.",
+    "Close by signaling shutdown after the close frame is observed.",
+    "Do not pass borrowed request-local data into later spawned work that can outlive the local scope."
+   ],
+   "acceptanceCriteria": [
+    "The design has explicit read and write ownership boundaries.",
+    "Application logic sits between IO and does not write directly to the transport from many places.",
+    "The message loop reacts to ping and close distinctly.",
+    "The code is plausible Rust and the lifecycle is reviewable from the types and channels alone."
+   ],
+   "hints": [
+    "A reader-app-writer pipeline is the whole point of the exercise.",
+    "The best answer is easy to explain on a whiteboard without a specific WebSocket crate."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Replace unbounded broadcast with a bounded slow-consumer policy",
+   "objective": "Refactor one fan-out hub so backlog becomes visible and one slow client cannot quietly grow memory forever.",
+   "starterPrompt": "You inherit a room broadcaster that stores every outbound event in an unbounded per-client queue and only notices trouble after RSS climbs.",
+   "prompts": [
+    "Would you disconnect the slow client, drop old events, coalesce to one latest snapshot, or choose several policies by message class?",
+    "Where should the queue bound live: per connection, per room, or both?",
+    "Which metrics should spike first when one client or room falls behind?",
+    "What regression test would prove the new policy is actually enforced?"
+   ],
+   "acceptanceCriteria": [
+    "You define one explicit boundedness rule.",
+    "You choose one slow-consumer policy and justify it with product semantics.",
+    "You mention at least one metric and one test for the repair.",
+    "You avoid leaving the queue effectively unbounded under a different name."
+   ],
+   "hints": [
+    "There is no neutral slow-consumer policy. Every choice changes product semantics.",
+    "Per-connection bounds are usually the first honest minimum."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design a production WebSocket protocol with versioning, auth, and shutdown semantics",
+   "objective": "Make the envelope and lifecycle contract explicit before mixed clients, reconnects, and deploy shutdowns force emergency protocol decisions.",
+   "starterPrompt": "Design a protocol for `subscribe -> receive events -> ack or resume -> close`, with browser clients, per-tenant auth, and deploy-time drain requirements.",
+   "prompts": [
+    "Which envelope fields are mandatory: protocol version, trace ID, session ID, sequence, or all of them?",
+    "Which messages belong to the transport layer and which belong to the domain layer?",
+    "How will reconnect resume or snapshot catch-up work?",
+    "What should the server send during graceful shutdown before closing the socket?"
+   ],
+   "acceptanceCriteria": [
+    "You define one versioned envelope or equivalent contract boundary.",
+    "You separate auth or transport messages from domain events explicitly.",
+    "You describe one reconnect or resume rule and one shutdown rule.",
+    "You include at least one authorization or origin-check decision."
+   ],
+   "hints": [
+    "A protocol is easier to evolve when the lifecycle messages are explicit from day one.",
+    "If the server will ever drain, the close reason or terminal event belongs in the design now."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Test disconnect storms, reconnects, and long-lived shutdown behavior",
+   "objective": "Design the test matrix and observability surface for the failure paths that make or break long-lived connection systems.",
+   "starterPrompt": "You are testing a multi-tenant live-update service that can reconnect thousands of clients after a load-balancer change and must shut down gracefully during deploys.",
+   "prompts": [
+    "Which parts deserve deterministic unit or integration tests: protocol state, resume rules, bounded queues, graceful close, or all of them?",
+    "Which metrics should prove a disconnect storm is under control: reconnect rate, handshake error rate, queue age, or per-tenant active connections?",
+    "How would you simulate a slow consumer and a drained shutdown in CI without waiting on real wall-clock sleeps?",
+    "Which trace or log fields must exist so one failed reconnect path is attributable later?"
+   ],
+   "acceptanceCriteria": [
+    "You include at least one deterministic test for queue or shutdown behavior.",
+    "You mention at least three observability hooks for storm or reconnect diagnosis.",
+    "You include at least one stable ID field for logs or traces.",
+    "You explain how the test plan avoids timing-lottery sleeps where possible."
+   ],
+   "hints": [
+    "Storm handling is partly a test problem and partly a metrics problem.",
+    "If the only test is 'the browser reconnected once on my laptop,' the failure matrix is still missing."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why is one writer task usually calmer than many tasks sharing the write half directly?",
+  "What makes queue age or pending depth more actionable than active connection count alone?",
+  "Why are reconnect and resume protocol decisions separate from ping or pong liveness?",
+  "When is SSE a better answer than WebSockets even if the product still wants live updates?",
+  "Why should graceful shutdown for long-lived sockets stop admission before closing active connections?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Refactor unbounded fan-out into a bounded slow-consumer-aware design",
+  "filename": "bounded_fanout_lab.rs",
+  "runKey": "ch48_ex_bounded_fanout",
+  "expectedOutput": "active = 1\nevicted = beta,gamma\ndelivered = 3",
+  "initialCode": "use std::collections::{HashMap, VecDeque};\n\n#[derive(Debug, Default)]\nstruct Client {\n    pending: VecDeque<String>,\n}\n\n#[derive(Debug)]\nstruct Hub {\n    clients: HashMap<&'static str, Client>,\n    max_pending: usize,\n    delivered: usize,\n    evicted: Vec<&'static str>,\n}\n\nimpl Hub {\n    fn new(max_pending: usize) -> Self {\n        Self {\n            clients: HashMap::new(),\n            max_pending,\n            delivered: 0,\n            evicted: Vec::new(),\n        }\n    }\n\n    fn add_client(&mut self, id: &'static str, pending: usize) {\n        let mut queue = VecDeque::new();\n        for _ in 0..pending {\n            queue.push_back(String::from(\"old\"));\n        }\n\n        self.clients.insert(id, Client { pending: queue });\n    }\n\n    fn broadcast(&mut self, payload: &str) {\n        let ids: Vec<_> = self.clients.keys().copied().collect();\n\n        for id in ids {\n            if let Some(client) = self.clients.get_mut(id) {\n                client.pending.push_back(payload.to_string());\n                self.delivered += 1;\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut hub = Hub::new(2);\n    hub.add_client(\"alpha\", 0);\n    hub.add_client(\"beta\", 2);\n    hub.add_client(\"gamma\", 1);\n\n    hub.broadcast(\"first\");\n    hub.broadcast(\"second\");\n\n    println!(\"active = {}\", hub.clients.len());\n    println!(\"evicted = {}\", if hub.evicted.is_empty() { \"none\".to_string() } else { hub.evicted.join(\",\") });\n    println!(\"delivered = {}\", hub.delivered);\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 23, 24, 25, 30, 42, 43, and 47",
+  "Opening scenario",
+  "A useful design order",
+  "Mental model",
+  "Core concepts",
+  "The connection lifecycle: upgrade, split, heartbeat, close, reconnect",
+  "Who owns the read side, the write side, and the protocol state",
+  "How this lands if you come from another language",
+  "Keeping a slow client from sinking the server",
+  "Designing a message protocol that survives being changed",
+  "Authentication, authorization, origin checks, and rate limiting",
+  "Shutting down without dropping sockets on the floor",
+  "Testing WebSocket protocols and failure modes",
+  "When to reach for something other than a WebSocket",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: separate reader, writer, and application logic with channels",
+  "Example 2: bounded fan-out with slow-consumer eviction",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "A request handler lives for milliseconds; a WebSocket lives for hours. That single change of timescale is what this chapter is really about. Once a connection sticks around, it acquires a lifecycle, its own memory and tasks, a pace it can be pushed faster than, and a way it has t",
+  "Chapter 23 covered channels and synchronization choices. Chapter 24 explained futures, Pin, and cancellation. Chapter 25 covered Tokio runtime behavior. Chapter 30 covered broker-based fan-out and retry pressure. Chapter 42 covered deterministic failure-mode testing. Chapter 43 c",
+  "An operations team runs an admin console that shows live task progress and pushes operator notifications. The naive version is an afternoon of work: open a socket, loop over events, write them out. It demos beautifully. Then real usage arrives. Operators leave the console open in",
+  "None of those are exotic failures. They are the ordinary weather of long-lived connections, and the afternoon prototype has no answer for any of them. What the team actually needs is a connection model that survives many tabs, reconnect storms, slow consumers, bounded fan-out, pr",
+  "Before the details, fix the picture. A WebSocket connection is not a function that returns; it is a small running machine with three internal jobs. One job reads inbound frames off the wire. One job writes outbound frames to the wire. A third job in the middle holds the applicati",
+  "The work divides into five recurring concerns: the lifecycle the connection moves through, who owns which part of it, how the server protects itself when a client falls behind, how the message protocol survives being changed under live traffic, and how to authenticate and shut do",
+  "A connection moves through a small set of phases, and each phase has different rules about what is allowed. The thing to watch in the diagram below is where ordinary HTTP discipline ends and long-lived state begins: everything to the left of the split, authentication, origin chec",
+  "One practical correction is worth keeping in mind: ping or pong is transport liveness. Resume cursors, application acknowledgments, or last-seen sequence numbers are product liveness. Keep both, and do not let one pretend to be the other.",
+  "In most async Rust WebSocket stacks the first thing you do after the upgrade is split the connection into a read half and a write half. That split is not an implementation detail; it is the ownership boundary the rest of the design hangs on. The read half goes to exactly one task",
+  "The calm default is usually reader -> app -> writer. A broad shared writer lock often looks simpler at first and becomes harder to cancel, order, and test later.",
+  "The one-reader, one-writer, one-application-owner shape is the same in any language. What differs is the habit you arrive with, and which of those habits Rust quietly refuses to let you keep. Each card below is the mental-model shift, not an API mapping.",
+  "Backpressure is the question of what happens when you produce messages faster than a client can read them. The honest framing is that you are always answering it, even when you never wrote the answer down: an unbounded queue is a policy that says grow memory until the process die",
+  "When the queue is full, the policy you chose ahead of time decides which of four things to sacrifice:",
+  "An unbounded broadcast path is not “more reliable.” It simply delays the moment you discover which client or tenant is too slow for the current policy.",
+  "A WebSocket protocol drifts exactly the way an HTTP API or a broker envelope drifts, and for the same reason: old clients and new servers run side by side for as long as someone keeps a tab open. The defense is to make the contract explicit in the envelope rather than implicit in",
+  "In the sketch below, look at the two derives. The #[serde(tag = \"type\")] on the client message turns the enum into a tagged union on the wire, so adding a new variant is additive and old clients simply never send it. The generic Envelope<T> wraps any payload with the version and ",
+  "The dangerous assumption with a long-lived connection is that proving who you are once, at the upgrade, also settles what you are allowed to do for the next several hours. It does not. Authentication happens at the handshake, where you still have ordinary HTTP cookies, headers, a",
+  "Graceful shutdown is an ordering problem, and the order is the same one TCP services and brokers use: stop admitting new work, drain what is already in flight, then cancel the rest with a deadline. The sequence below shows why the order is not negotiable. If you cancel the connec",
+  "The important sequencing rule is the same as in TCP services and brokers: stop admission first, drain or close second, then cancel the rest with a timeout. If you drop the runtime underneath active sockets, your close policy never actually ran.",
+  "Everything above is the cost of running a WebSocket well, which is the best argument for checking whether you need one. The deciding question is almost always direction. If the client only ever listens, a server-sent-events stream gives you push over plain HTTP with none of the b",
+  "The most expensive WebSocket bug is often not a parser failure. It is one connection model that never stated who owns writes, how slow consumers are handled, or what happens when thousands of clients reconnect at once.",
+  "This example models the whole connection with Tokio channels and a watch shutdown signal: one reader task, one app task, one writer task. A real WebSocket crate hands you the transport halves instead of channels, but the ownership shape is identical, and the shape is the lesson. ",
+  "Only the reader task consumes inbound frames from the transport boundary.",
+  "Only the writer task drains outbound messages, which keeps close and pong ordering explicit.",
+  "The app task owns protocol reactions without needing broad shared socket access.",
+  "This is the slow-consumer policy from the diagram above, made concrete and runnable. It keeps the queue logic crate-light with a VecDeque per client, but the decision is the same one a bounded channel makes in a real async service. The line to focus on is the capacity check befor",
+  "One max pending value makes the slow-consumer rule mechanically testable.",
+  "The server notices the client at the limit before the next push grows memory again.",
+  "In a real room or tenant hub, this policy combines with metrics, reconnect advice, and optional snapshot coalescing.",
+  "The repository also includes standalone Rust source under examples/ch48_websockets_long_lived_connections/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor, including a small versioned envelope sketch alongside the two runnable examples."
+ ],
+ "codeSamples": {
+  "websocket_connection_io_split": "use tokio::sync::{mpsc, watch};\n\n#[derive(Debug)]\nenum InboundFrame {\n    Text(String),\n    Ping(u64),\n    Close,\n}\n\n#[derive(Debug)]\nenum OutboundFrame {\n    Text(String),\n    Pong(u64),\n    Close,\n}\n\n#[tokio::main]\nasync fn main() {\n    let (inbound_tx, mut inbound_rx) = mpsc::channel::<InboundFrame>(4);\n    let (outbound_tx, mut outbound_rx) = mpsc::channel::<OutboundFrame>(4);\n    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);\n\n    let reader = tokio::spawn(async move {\n        inbound_tx\n            .send(InboundFrame::Text(String::from(\"ready\")))\n            .await\n            .unwrap();\n        inbound_tx.send(InboundFrame::Ping(7)).await.unwrap();\n        inbound_tx.send(InboundFrame::Close).await.unwrap();\n    });\n\n    let app = tokio::spawn(async move {\n        let mut inbound = 0_u32;\n\n        while let Some(frame) = inbound_rx.recv().await {\n            inbound += 1;\n\n            match frame {\n                InboundFrame::Text(text) => {\n                    outbound_tx\n                        .send(OutboundFrame::Text(format!(\"echo:{}\", text)))\n                        .await\n                        .unwrap();\n                }\n                InboundFrame::Ping(nonce) => {\n                    outbound_tx.send(OutboundFrame::Pong(nonce)).await.unwrap();\n                }\n                InboundFrame::Close => {\n                    let _ = outbound_tx.send(OutboundFrame::Close).await;\n                    shutdown_tx.send(true).unwrap();\n                    break;\n                }\n            }\n        }\n\n        inbound\n    });\n\n    let writer = tokio::spawn(async move {\n        let mut outbound = 0_u32;\n\n        loop {\n            tokio::select! {\n                biased;\n                Some(frame) = outbound_rx.recv() => {\n                    match frame {\n                        OutboundFrame::Text(_) | OutboundFrame::Pong(_) | OutboundFrame::Close => {\n                            outbound += 1;\n                        }\n                    }\n                }\n                _ = shutdown_rx.changed() => {\n                    if *shutdown_rx.borrow() {\n                        while let Ok(frame) = outbound_rx.try_recv() {\n                            match frame {\n                                OutboundFrame::Text(_) | OutboundFrame::Pong(_) | OutboundFrame::Close => {\n                                    outbound += 1;\n                                }\n                            }\n                        }\n                        break outbound;\n                    }\n                }\n            }\n        }\n    });\n\n    reader.await.unwrap();\n    let inbound = app.await.unwrap();\n    let outbound = writer.await.unwrap();\n\n    println!(\"inbound = {}\", inbound);\n    println!(\"outbound = {}\", outbound);\n    println!(\"closed = {}\", true);\n}",
+  "websocket_bounded_fanout_slow_consumers": "use std::collections::{HashMap, VecDeque};\n\n#[derive(Debug, Default)]\nstruct Client {\n    pending: VecDeque<String>,\n}\n\n#[derive(Debug)]\nstruct Hub {\n    clients: HashMap<&'static str, Client>,\n    max_pending: usize,\n    delivered: usize,\n    evicted: Vec<&'static str>,\n}\n\nimpl Hub {\n    fn new(max_pending: usize) -> Self {\n        Self {\n            clients: HashMap::new(),\n            max_pending,\n            delivered: 0,\n            evicted: Vec::new(),\n        }\n    }\n\n    fn add_client(&mut self, id: &'static str, pending: usize) {\n        let mut queue = VecDeque::new();\n        for _ in 0..pending {\n            queue.push_back(String::from(\"old\"));\n        }\n\n        self.clients.insert(id, Client { pending: queue });\n    }\n\n    fn broadcast(&mut self, payload: &str) {\n        let ids: Vec<_> = self.clients.keys().copied().collect();\n\n        for id in ids {\n            let at_limit = self\n                .clients\n                .get(id)\n                .map(|client| client.pending.len() >= self.max_pending)\n                .unwrap_or(false);\n\n            if at_limit {\n                self.clients.remove(id);\n                self.evicted.push(id);\n                continue;\n            }\n\n            if let Some(client) = self.clients.get_mut(id) {\n                client.pending.push_back(payload.to_string());\n                self.delivered += 1;\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut hub = Hub::new(2);\n    hub.add_client(\"alpha\", 0);\n    hub.add_client(\"beta\", 2);\n    hub.add_client(\"gamma\", 1);\n\n    hub.broadcast(\"update\");\n\n    println!(\"active = {}\", hub.clients.len());\n    println!(\"evicted = {}\", hub.evicted.join(\",\"));\n    println!(\"delivered = {}\", hub.delivered);\n}"
+ },
+ "labReferenceSolution": null
+}

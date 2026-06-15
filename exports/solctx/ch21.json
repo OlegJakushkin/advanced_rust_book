@@ -1,0 +1,210 @@
+{
+ "chapterKey": "ch21",
+ "num": 21,
+ "title": "Reflection and Type Introspection",
+ "exercises": [
+  {
+   "number": 1,
+   "kind": "warm-up comprehension",
+   "title": "Match the need to the Rust tool",
+   "objective": "Practice choosing between `Any`, trait methods, macros, schemas, and plain explicit metadata.",
+   "starterPrompt": "Classify five needs: request extensions, plugin capabilities, admin docs, human-readable log labels, and public cross-service schema.",
+   "prompts": [
+    "Which need wants `TypeId` plus `Any`?",
+    "Which need wants explicit trait metadata rather than downcasting everywhere?",
+    "Which need wants compile-time generation rather than runtime inspection?",
+    "Which need wants a stable public contract instead of `type_name::<T>()` or `TypeId`?"
+   ],
+   "acceptanceCriteria": [
+    "You choose `Any` and `TypeId` only for a narrow erased-storage case.",
+    "You choose explicit metadata for at least one plugin or admin-facing concern.",
+    "You keep public schema and protocol keys explicit rather than runtime-derived."
+   ],
+   "hints": [
+    "Ask whether the need is type identity, schema, diagnostics, or plugin metadata.",
+    "The right answer is often smaller than 'runtime reflection.'"
+   ]
+  },
+  {
+   "number": 2,
+   "kind": "code reading",
+   "title": "Explain why `Any` is not general reflection",
+   "objective": "Read a failed design and explain the exact limit Rust is enforcing.",
+   "starterPrompt": "A teammate tries to store `View<'a> { route: &'a str }` inside a long-lived `Box<dyn Any>` registry and later expects to inspect its fields dynamically.",
+   "prompts": [
+    "Why is the borrowed lifetime part of the problem for long-lived erased storage?",
+    "Why does `Any` still not provide field enumeration even if the type were `'static`?",
+    "What redesign would be calmer: own the data, keep the view local, or attach explicit metadata?"
+   ],
+   "acceptanceCriteria": [
+    "You explain that `Any` is usually for `'static` concrete types, not arbitrary borrowed views with wider lifetime claims.",
+    "You explain that `Any` supports type recovery, not field walking or method discovery.",
+    "You propose one ownership repair and one metadata repair."
+   ],
+   "hints": [
+    "The issue is not only one trait bound. It is the ownership model behind the trait bound.",
+    "A good answer distinguishes type identity from structural reflection."
+   ]
+  },
+  {
+   "number": 3,
+   "kind": "implementation",
+   "title": "Build a tiny `TypeId` registry",
+   "objective": "Implement a small typemap that stores heterogeneous values behind one erased boundary and recovers them safely.",
+   "starterPrompt": "Implement `TypeMap` with `insert<T: 'static>` and `get<T: 'static>` using `HashMap<TypeId, Box<dyn Any>>`.",
+   "prompts": [
+    "Use `TypeId::of::<T>()` as the key.",
+    "Store values as `Box<dyn Any>`.",
+    "Recover with `downcast_ref::<T>()`.",
+    "Do not use string keys for type identity."
+   ],
+   "acceptanceCriteria": [
+    "The typemap stores heterogeneous values behind one erased owner.",
+    "Lookup is keyed by `TypeId`, not by type name string.",
+    "Recovery uses `downcast_ref::<T>()` safely.",
+    "The runnable lab prints the expected port, label, and missing-type check."
+   ],
+   "hints": [
+    "The key is concrete type identity, not a manually managed string.",
+    "The getter returns `Option<&T>` because recovery may legitimately fail."
+   ]
+  },
+  {
+   "number": 4,
+   "kind": "debugging or refactoring",
+   "title": "Repair a plugin downcast boundary",
+   "objective": "Use trait metadata for the common path and add `as_any()` only for the specialized path that truly needs it.",
+   "starterPrompt": "You inherit `Vec<Box<dyn Plugin>>`, but one path needs to inspect whether a concrete `JsonPlugin` is configured for pretty output.",
+   "prompts": [
+    "Which data should become ordinary trait metadata instead of a downcast target?",
+    "Where does `as_any()` belong if the specialized path still needs a concrete check?",
+    "How do you keep the rest of the codebase from turning every call into a downcast?"
+   ],
+   "acceptanceCriteria": [
+    "You keep common plugin facts on the trait surface or in an explicit metadata struct.",
+    "You add `as_any()` only as a narrow escape hatch if it is still needed.",
+    "You explain why repeated downcasting would be a design smell."
+   ],
+   "hints": [
+    "The question is not whether downcasting can work. The question is whether it should be the main API.",
+    "Treat the specialized concrete query as an exception path."
+   ]
+  },
+  {
+   "number": 5,
+   "kind": "design or production scenario",
+   "title": "Design explicit metadata for a plugin system",
+   "objective": "Model a plugin registry without pretending the runtime can infer every important fact.",
+   "starterPrompt": "Design a plugin contract for exporters that need name, kind, version, config format, and capabilities, plus one optional specialized inspection path.",
+   "prompts": [
+    "Which fields belong in a `PluginMetadata` struct?",
+    "Which facts belong as capability enums instead of stringly typed free text?",
+    "Which metadata should be available without any downcast at all?",
+    "What test or observability hooks would you add around plugin registration?"
+   ],
+   "acceptanceCriteria": [
+    "You define an explicit metadata shape instead of relying on runtime type names.",
+    "You keep at least one capability or kind as a stronger type than a raw string when appropriate.",
+    "You mention at least one testing or observability hook, such as registration tests, config schema checks, or startup metadata logging."
+   ],
+   "hints": [
+    "If operators need the fact, make it a normal API.",
+    "A plugin registry is easier to operate when the metadata is boring and explicit."
+   ]
+  },
+  {
+   "number": 6,
+   "kind": "design or production scenario",
+   "title": "Choose runtime introspection, macros, schema generation, or no reflection at all",
+   "objective": "Make the introspection choice from boundary shape instead of habit.",
+   "starterPrompt": "You are designing a platform with request-scoped extensions, a browser config form, an internal admin CLI, and a public event schema.",
+   "prompts": [
+    "Which concern wants a typemap inside one process?",
+    "Which concern wants compile-time schema generation from DTOs?",
+    "Which concern wants ordinary explicit descriptor structs with no `Any` at all?",
+    "Which concern should avoid `TypeId` and `type_name::<T>()` because the contract is public or persistent?"
+   ],
+   "acceptanceCriteria": [
+    "You map at least three concerns to different Rust-native tools.",
+    "You keep public or persistent boundaries away from process-local type identity tricks.",
+    "You justify one compile-time approach and one runtime approach in operational terms."
+   ],
+   "hints": [
+    "One system can legitimately use more than one introspection style.",
+    "The cleanest answer starts from the boundary contract, not from a favorite mechanism."
+   ]
+  }
+ ],
+ "reviewQuestions": [
+  "Why does Rust offer `TypeId` and `Any` without offering general field reflection?",
+  "What problem does `'static` solve in many `Any`-based designs?",
+  "Why is `type_name::<T>()` useful for diagnostics but weak as a contract key?",
+  "How does `as_any()` differ from ordinary trait methods as a design tool?",
+  "Why should schema generation usually target DTOs rather than arbitrary live values?"
+ ],
+ "lab": {
+  "title": "Runnable lab · Tiny `TypeId` registry",
+  "filename": "typemap_lab.rs",
+  "runKey": "ch21_ex_typemap_lab",
+  "expectedOutput": "port = 8080\nlabel = billing\nmissing bool = true",
+  "initialCode": "use std::any::{Any, TypeId};\nuse std::collections::HashMap;\n\n#[derive(Default)]\nstruct TypeMap {\n    values: HashMap<TypeId, Box<dyn Any>>,\n}\n\nimpl TypeMap {\n    fn insert<T: 'static>(&mut self, value: T) {\n        // store by concrete type id\n    }\n\n    fn get<T: 'static>(&self) -> Option<&T> {\n        None\n    }\n}\n\nfn main() {\n    let mut map = TypeMap::default();\n    map.insert::<u16>(8080);\n    map.insert::<String>(String::from(\"billing\"));\n\n    println!(\"port = {}\", map.get::<u16>().copied().unwrap_or(0));\n    println!(\"label = {}\", map.get::<String>().map(String::as_str).unwrap_or(\"none\"));\n    println!(\"missing bool = {}\", map.get::<bool>().is_none());\n}"
+ },
+ "proseHeadings": [
+  "Builds on Chapters 14, 19, and 20",
+  "Opening scenario",
+  "A practical decision order",
+  "Mental model",
+  "Core concepts",
+  "The four tools, and what each one is for",
+  "Why Rust has limited runtime reflection",
+  "Any and TypeId: erase a type, then recover it safely",
+  "Downcasting: recovering one named type by borrow, by mut, or by value",
+  "Trait-object-based reflection patterns",
+  "Compile-time introspection through macros",
+  "Generating schema instead of inspecting values",
+  "Plugin systems that declare rather than infer",
+  "Designing explicit metadata systems",
+  "What changes by background",
+  "Production patterns",
+  "Pitfalls and tradeoffs",
+  "Examples",
+  "Example 1: a small `TypeId` + `Any` registry",
+  "Example 2: explicit plugin metadata plus optional downcast",
+  "Exercises",
+  "Summary"
+ ],
+ "proseParagraphs": [
+  "Runtime introspection is limited in Rust, so production systems need explicit metadata and generated descriptors. This chapter covers trait-based inspection, registries, and schema surfaces.",
+  "Chapter 14 introduced traits and trait objects. Chapter 19 covered schema and wire contracts. Chapter 20 covered compile-time metaprogramming. Reflection and introspection in Rust sit across those boundaries.",
+  "A service platform needs typed request extensions, plugin capability metadata, and admin-facing schema descriptors. The business requirement is narrow introspection: use TypeId and Any only for type-keyed registries, expose plugin metadata as ordinary trait methods, and generate ",
+  "It helps to see the whole landscape before the details, because &ldquo;reflection&rdquo; in Rust is not one feature but four narrow tools that solve four different problems. Two of them work at runtime and two of them work at compile time. The runtime pair, TypeId and Any, gives ",
+  "Two of those four tools are routinely misused as stable identifiers. The second half marks which ones:",
+  "The absence of broad reflection is a design choice, not a missing feature. Rust specializes generic code by monomorphization and resolves most calls statically, which means the per-type metadata a reflective runtime would need to keep alive has usually been compiled away by the t",
+  "TypeId is a small, copyable token that uniquely identifies one concrete type, valid within a single process and a single build of your program. Any is the trait that lets you store a value behind an erased pointer such as Box<dyn Any> and later ask, at runtime, &ldquo;is the thin",
+  "A key correction for reflection-heavy backgrounds: `TypeId` is runtime type identity, not a schema, not a field list, and not a stable public protocol key.",
+  "Downcasting is the act of recovery, and it comes in three forms that mirror Rust&rsquo;s ownership choices. The form you pick follows how the erased container holds the value and what the caller needs to do with it: read it, mutate it in place, or take ownership back. None of the",
+  "Downcasting is precise and explicit. You only recover a concrete type you already know how to name. That is why it is useful as an edge tool and weak as a general application architecture.",
+  "This is where most of what other languages call reflection actually happens in Rust, just earlier in the timeline. A derive macro reads the syntax of your struct or enum and writes more Rust before type checking, so a Serialize implementation that &ldquo;knows&rdquo; every field ",
+  "When you need a machine-readable description of a type for documentation, client generation, or validation, generate it from the source rather than inspecting live values. A crate such as schemars uses the same derive machinery to turn a transport DTO into a JSON Schema at build ",
+  "A plugin host is the classic place where engineers from reflective languages reach for runtime inspection: load a plugin, scan it for its name and capabilities, dispatch accordingly. The calmer Rust design inverts that. Each plugin returns a descriptor through an ordinary trait m",
+  "Reflection is one of the topics where prior experience cuts both ways: the vocabulary transfers, but the reflexes mislead. The shift to keep in mind is that Rust moves structural introspection from a runtime capability you call to a compile-time capability you generate, and keeps",
+  "If the code only works after many downcasts, the system is probably missing an explicit contract. Rust reflection tools are strongest when they stay narrow and explicit.",
+  "The container is erased, but recovery is still type-checked and explicit.",
+  "What to look at: every method on TypeMap uses the generic parameter T twice over, once to compute TypeId::of::<T>() as the map key and once to drive the downcast_ref::<T>() on the way out. The store itself is untyped (HashMap<TypeId, Box<dyn Any>>), yet the public API only ever r",
+  "`TypeId` keys the erased store by concrete type, not by string name.",
+  "downcast_ref::<T>() recovers one known type and returns Option.",
+  "Request extensions and typed registries are simpler than trying to reflect arbitrary structs.",
+  "The common path uses trait methods. Downcasting exists only for the rare specialized path.",
+  "What to look at: two of the three results come straight off the trait. Listing the names and reading metadata().kind never touches Any at all, because that data lives on the trait every plugin implements. Only the third result, the pretty flag, is specific to one concrete plugin,",
+  "Names and kinds are ordinary trait data, not values inferred at runtime.",
+  "`as_any()` is there for one narrow specialized query, not for every call.",
+  "Plugin systems are usually easiest to operate when capabilities and config formats are explicit.",
+  "The repository also includes standalone Rust source under examples/ch21_reflection_and_type_introspection/ so the chapter examples can be reviewed as ordinary files outside the in-browser editor.",
+  "The companion exercise page asks you to build a small `TypeId` registry, downcast safely from erased values, and design explicit metadata for a plugin boundary instead of leaning on broad runtime reflection."
+ ],
+ "codeSamples": {
+  "reflection_any_typeid_registry": "use std::any::{Any, TypeId};\nuse std::collections::HashMap;\n\n#[derive(Debug)]\nstruct RequestContext {\n    trace_id: &'static str,\n}\n\n#[derive(Debug)]\nstruct RetryBudget(u32);\n\n#[derive(Default)]\nstruct TypeMap {\n    values: HashMap<TypeId, Box<dyn Any>>,\n}\n\nimpl TypeMap {\n    fn insert<T: 'static>(&mut self, value: T) {\n        self.values.insert(TypeId::of::<T>(), Box::new(value));\n    }\n\n    fn get<T: 'static>(&self) -> Option<&T> {\n        self.values.get(&TypeId::of::<T>())?.downcast_ref::<T>()\n    }\n\n    fn contains<T: 'static>(&self) -> bool {\n        self.values.contains_key(&TypeId::of::<T>())\n    }\n}\n\nfn main() {\n    let mut request_scoped = TypeMap::default();\n    request_scoped.insert(RequestContext { trace_id: \"req-7\" });\n    request_scoped.insert(RetryBudget(3));\n\n    println!(\"has context = {}\", request_scoped.contains::<RequestContext>());\n    println!(\"retries = {}\", request_scoped.get::<RetryBudget>().unwrap().0);\n    println!(\"trace = {}\", request_scoped.get::<RequestContext>().unwrap().trace_id);\n}",
+  "reflection_plugin_metadata_downcast": "use std::any::Any;\n\n#[derive(Debug, Clone, Copy)]\nstruct PluginMetadata {\n    name: &'static str,\n    kind: &'static str,\n    config_format: &'static str,\n}\n\ntrait Plugin {\n    fn metadata(&self) -> PluginMetadata;\n    fn run(&self, input: &str) -> String;\n    fn as_any(&self) -> &dyn Any;\n}\n\nstruct JsonFormatter {\n    pretty: bool,\n}\n\nstruct RedactSecrets;\n\nimpl Plugin for JsonFormatter {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"json\",\n            kind: \"formatter\",\n            config_format: \"json\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        if self.pretty {\n            format!(\"pretty({})\", input)\n        } else {\n            format!(\"compact({})\", input)\n        }\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nimpl Plugin for RedactSecrets {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"redact\",\n            kind: \"filter\",\n            config_format: \"none\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        input.replace(\"token=\", \"token=***\")\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nfn main() {\n    let plugins: Vec<Box<dyn Plugin>> = vec![\n        Box::new(JsonFormatter { pretty: true }),\n        Box::new(RedactSecrets),\n    ];\n\n    let listed = plugins\n        .iter()\n        .map(|plugin| plugin.metadata().name)\n        .collect::<Vec<_>>()\n        .join(\",\");\n\n    let pretty = plugins\n        .iter()\n        .find_map(|plugin| plugin.as_any().downcast_ref::<JsonFormatter>())\n        .map(|json| json.pretty)\n        .unwrap_or(false);\n\n    println!(\"plugins = {}\", listed);\n    println!(\"json pretty = {}\", pretty);\n    println!(\"first kind = {}\", plugins[0].metadata().kind);\n}"
+ },
+ "labReferenceSolution": null
+}

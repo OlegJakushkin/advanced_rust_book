@@ -1,82 +1,83 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "An OS thread is an owned execution boundary",
-    body: "A spawned Rust thread runs independently under the OS scheduler. If it outlives the current stack frame, the closure must own what it uses or the compiler will reject the design.",
+    title: "A spawned thread is an independent execution boundary you must account for",
+    body: "Once thread::spawn returns, the child runs under the OS scheduler on its own timeline and may keep running after the function that started it returns. The compiler refuses to let that detached thread borrow short-lived stack data, because there is no longer anyone guaranteeing the data outlives the thread. That single rule explains why move closures, owned jobs, and Arc show up everywhere in threaded Rust: the thread either owns what it touches or shares it through something that lives long enough.",
   },
   {
-    title: "Thread safety is expressed in types, not in comments",
-    body: "Rust uses ownership, borrowing, and the auto traits `Send` and `Sync` to decide which values may move across threads and which shared references are safe to observe concurrently.",
+    title: "Thread safety is a property of types, checked at compile time",
+    body: "In most languages, whether a value is safe to share across threads is documentation and discipline. In Rust it is encoded in two auto traits, Send and Sync, that the compiler derives for almost every type automatically. A data race is not a runtime bug you debug after the fact; it is usually a type error that stops the build, because the values involved were never Send or Sync in the first place.",
   },
   {
-    title: "Choose the concurrency shape before you choose the primitive",
-    body: "Some workloads want shared immutable state, some want synchronized mutable state, some want owned messages, and some want data parallelism over borrowed slices. The primitive follows the model.",
+    title: "Pick the concurrency shape first, then the primitive that fits it",
+    body: "There is no single 'correct' tool. Some work wants one owner of mutable state receiving owned messages; some wants immutable state shared read-only by many threads; some wants synchronized mutation behind a lock; some wants one large collection split into borrowed slices for parallel CPU work. Each of these maps to a different primitive, and most painful threaded code comes from forcing the wrong shape, usually a global Arc-Mutex around everything, onto a problem that wanted a channel or a scoped split.",
   },
 ]
 
 const executionKinds = [
   {
     title: "OS thread",
-    body: "Scheduled by the operating system. Good for blocking work, CPU-bound workers, and explicit parallelism. Created with `std::thread::spawn` or `std::thread::scope`.",
+    body: "Scheduled by the operating system. Good for blocking work, CPU-bound workers, and explicit parallelism. Created with thread::spawn or thread::scope, and the subject of this chapter.",
   },
   {
     title: "Async task",
-    body: "A user-space task driven by an executor. Cheaper to create than an OS thread, but the task should not block the executor thread. We cover this model in a later async chapter.",
+    body: "A user-space task driven by an executor inside your process. Far cheaper to create than an OS thread, but it must not block the executor thread it runs on. This is a later-chapter topic, not this one.",
   },
   {
     title: "Future",
-    body: "A state machine describing async work. A future does nothing until some executor polls it. A future is not a thread and not a task scheduler.",
+    body: "A state machine describing async work. A future does nothing until some executor polls it forward; it is not a thread and not a scheduler, just the value an async block produces.",
   },
   {
     title: "Executor",
-    body: "The runtime component that polls futures and often multiplexes many tasks onto a smaller number of OS threads.",
+    body: "The runtime component that polls futures and multiplexes many tasks onto a smaller number of OS threads. It is the scheduler for the async world, separate from the OS scheduler.",
   },
   {
-    title: "Data parallelism",
-    body: "One collection or numerical workload is split across worker threads. Work-stealing schedulers are common here because they balance uneven chunk sizes well.",
+    title: "Data-parallel job",
+    body: "One collection or numerical workload split across worker threads. Work-stealing schedulers fit well here because real data rarely divides into perfectly even chunks.",
   },
   {
     title: "Distributed worker",
-    body: "Another process or machine entirely. Once work crosses the network, `Send` and `Sync` stop being the main contract. Serialization, retries, and idempotency become the real boundary.",
+    body: "Another process or machine entirely. Once work crosses the network, Send and Sync stop being the contract; serialization, retries, and idempotency become the real boundary instead.",
   },
 ]
 
 const threadSafetyCards = [
   {
-    title: "Rust's thread safety model",
-    body: "Safe Rust rules out data races by refusing unsynchronized shared mutable aliasing. The same ownership rules that stop local use-after-move bugs also shape thread boundaries.",
+    title: "Data races are ruled out by the ownership rules",
+    body: "Safe Rust forbids unsynchronized shared mutable aliasing, and that single rule is what eliminates data races. The same borrow-checker logic that stops a local use-after-move bug is what shapes a sound thread boundary; concurrency does not get a separate, weaker rulebook.",
   },
   {
-    title: "`thread::spawn` requires owned or `'static` captures",
-    body: "A detached thread may outlive the current stack frame, so a plain spawned thread cannot keep borrowing short-lived stack data. That is why `move` closures appear so often.",
+    title: "Spawned threads need owned or 'static captures",
+    body: "A detached thread can outlive the stack frame that started it, so it cannot keep borrowing short-lived local data. That is why a move closure shows up on almost every spawn: the thread takes ownership of what it needs so the data lives as long as the thread does.",
   },
   {
-    title: "Join handles surface failure explicitly",
-    body: "A child thread returns a `JoinHandle<T>`. Joining yields `Result<T, _>` because the child may panic. Production code should treat worker panics as observable failures, not as background mysteries.",
+    title: "Join handles make failure observable",
+    body: "Spawning returns a JoinHandle, and joining it yields a Result because the child may have panicked. Treat a worker panic as a first-class operational signal you surface and act on, not a silent background failure you discover from missing output.",
   },
   {
-    title: "OS thread cost is real",
-    body: "Threads are not goroutines and not async tasks. They have stack, scheduler, and wake-up cost. They are excellent when the workload justifies them and noisy when sprayed per tiny unit of work.",
+    title: "OS threads cost real resources",
+    body: "These are not goroutines or async tasks. Each thread carries a stack, scheduler bookkeeping, and wake-up latency. They earn their cost on substantial CPU-bound or blocking work and become wasteful noise when sprayed one-per-tiny-unit-of-work.",
   },
 ]
 
 const sendSyncDefinitions = [
   {
-    title: "`Send`",
-    body: "A value of type `T` may be moved to another thread safely.",
+    title: "Send",
+    body: "A type is Send when a value of it can be moved to another thread safely. This is the trait thread::spawn asks for on everything its closure captures.",
   },
   {
-    title: "`Sync`",
-    body: "A shared reference `&T` may be used from multiple threads safely. A common shorthand is: `T` is `Sync` when `&T` is `Send`.",
+    title: "Sync",
+    body: "A type is Sync when a shared reference to it can be used from several threads at once safely. The precise shorthand is: T is Sync exactly when a shared reference to T is Send.",
   },
 ]
 
@@ -84,111 +85,115 @@ const sendSyncExamples = [
   {
     title: "String",
     traitText: "Send + Sync",
-    body: "An owned string can move to another thread, and shared references to it are safe because mutation still requires ordinary Rust rules.",
+    body: "An owned string moves to another thread freely, and shared references are safe because any mutation still goes through ordinary borrow rules. The common case just works.",
   },
   {
     title: "Rc<T>",
     traitText: "!Send + !Sync",
-    body: "Reference counting is not atomic, so `Rc<T>` is single-thread only. This is one of the most useful compile-time corrections for engineers coming from C++ and C#.",
+    body: "Its reference count is a plain non-atomic integer, so two threads bumping it would race. Rc is therefore single-thread only. Catching this at compile time is one of the most useful corrections for engineers arriving from C++ and C#.",
   },
   {
     title: "Arc<T>",
-    traitText: "Send + Sync when `T` is Send + Sync",
-    body: "Atomic reference counting makes shared ownership thread-safe, but it does not bless a non-thread-safe inner type magically.",
+    traitText: "Send + Sync when T is",
+    body: "The atomic reference count makes shared ownership safe to pass around threads. It does not, however, make a non-thread-safe inner value safe; Arc only inherits the traits its contents already have.",
   },
   {
     title: "RefCell<T>",
-    traitText: "Send when `T: Send`, but not Sync",
-    body: "You may move a `RefCell<T>` to another thread if the inner value can move, but shared references to the same `RefCell<T>` are not safe across threads.",
+    traitText: "Send if T is, never Sync",
+    body: "You can move a RefCell to another thread when its contents can move, but you cannot share references to one across threads, because its runtime borrow flags are not synchronized.",
   },
   {
     title: "Mutex<T>",
-    traitText: "Send + Sync when `T: Send`",
-    body: "The mutex provides synchronized exclusive access. This is the shared-state counterpart to ordinary exclusive borrowing.",
+    traitText: "Send + Sync when T is Send",
+    body: "A Mutex provides synchronized exclusive access, which is the shared-state counterpart to an exclusive borrow. This is what upgrades an otherwise single-thread value into something many threads can mutate safely.",
   },
 ]
 
 const sharedStateCards = [
   {
-    title: "Use shared state when the state is semantically shared",
-    body: "`Arc<T>` is a strong fit for immutable shared configuration and schemas. `Arc<Mutex<T>>` is a fit when several threads truly coordinate around one mutable owner.",
+    title: "Share state only when the state is genuinely shared",
+    body: "Plain Arc is the right fit for immutable shared configuration, schemas, or lookup tables that many threads read. Reach for Arc around a Mutex only when several threads truly coordinate around one mutable owner, not as a reflex.",
   },
   {
-    title: "Lock scope is the real optimization surface",
-    body: "Keep the critical section small. Do not hold a mutex while doing blocking IO, large allocations, or expensive CPU work if the design can stage work outside the lock.",
+    title: "Lock scope is where the performance lives",
+    body: "The critical section, the span of code holding the lock, is your main optimization surface. Keep it tiny. Do not hold a mutex across blocking IO, large allocations, or heavy CPU work if you can compute the result first and only take the lock to store it.",
   },
   {
-    title: "A lock is two choices",
-    body: "`Arc<Mutex<T>>` means shared ownership plus synchronized mutation. If only one of those is true, the type is already telling you to simplify the design.",
+    title: "A lock encodes two separate decisions",
+    body: "Arc around a Mutex says two things at once: ownership is shared, and mutation is synchronized. If only one of those is actually true for your data, the type is over-specified and the design wants to be simpler, often a channel or a plain Arc.",
   },
 ]
 
 const messagePassingCards = [
   {
-    title: "Channels move ownership on purpose",
-    body: "Message passing is often calmer when one subsystem should own mutable state and other threads should submit work or results as owned messages.",
+    title: "Channels transfer ownership by design",
+    body: "Sending a value down a channel moves it; the receiver becomes the new owner. This is calmest when one subsystem should own the mutable state and everyone else submits work or results as owned messages rather than reaching into shared memory.",
   },
   {
-    title: "`mpsc` is a standard-library baseline",
-    body: "Rust's standard library provides multiple-producer, single-consumer channels. That is enough for many worker-result and command-loop designs.",
+    title: "mpsc is the standard-library baseline",
+    body: "The standard library ships multiple-producer, single-consumer channels. That single shape covers a surprising amount of ground: worker-to-aggregator result collection and single-owner command loops both fall out of it naturally.",
   },
   {
-    title: "Backpressure is a design choice",
-    body: "An unbounded queue and a bounded queue tell different operational stories. Standard `sync_channel` or ecosystem channels are useful when you want producers to slow down instead of growing memory without limit.",
+    title: "Bounded versus unbounded is a backpressure decision",
+    body: "An unbounded channel never blocks the sender but can grow memory without limit under overload. A bounded sync_channel makes a full queue push back on producers instead. Choosing between them is choosing what happens when consumers fall behind.",
   },
 ]
 
 const scopedThreadCards = [
   {
-    title: "`thread::scope` still spawns OS threads",
-    body: "Scoped threads are not lighter-weight threads. The win is not scheduler magic. The win is lifetime shape: child threads are guaranteed to join before the scope exits.",
+    title: "Scoped threads are still real OS threads",
+    body: "thread::scope does not give you lighter or cheaper threads. The benefit is not scheduling; it is lifetime. The scope guarantees every child it spawned has joined before it returns, which changes what those children are allowed to borrow.",
   },
   {
-    title: "Borrowed data becomes possible again",
-    body: "Because the scope joins children before exit, the spawned closures may borrow stack data such as slices from the parent. This is often the cleanest shape for request-local CPU work.",
+    title: "Borrowing stack data becomes legal again",
+    body: "Because the join-before-exit guarantee bounds how long a child can run, the closures may borrow data from the parent stack, such as slices of a local array. For request-local CPU work this is usually the cleanest shape available.",
   },
   {
-    title: "Great for slice splitting and chunked CPU work",
-    body: "A scoped thread often removes fake cloning and `'static` pressure when the parent already owns one large collection and just wants parallel borrowed views.",
+    title: "Ideal for splitting one collection across cores",
+    body: "When the parent already owns one large collection and just wants parallel read-only or disjoint views into it, a scoped split removes the fake clones and 'static pressure that a plain spawn would otherwise force on you.",
   },
 ]
 
 const workStealingCards = [
   {
-    title: "Work stealing is a scheduler strategy",
-    body: "Each worker starts with local work. When it runs dry, it steals work from another worker. That reduces load imbalance for uneven CPU-bound tasks.",
+    title: "Work stealing is a scheduling strategy",
+    body: "Each worker starts with its own queue of work. When a worker empties its queue, it steals tasks from a busier worker instead of going idle. That self-balancing is what keeps cores busy when task sizes are uneven.",
   },
   {
-    title: "Strong fit for data parallelism",
-    body: "Fork-join workloads and parallel collection transforms often benefit from work-stealing pools because chunk sizes are rarely perfectly even in production data.",
+    title: "It fits data parallelism well",
+    body: "Fork-join workloads and parallel collection transforms benefit most, because production data almost never divides into perfectly equal chunks and a static split would leave some cores idle while others finish late.",
   },
   {
-    title: "Distinct from manual threads and from async executors",
-    body: "Rust's standard library gives explicit thread primitives. Work-stealing pools are usually an ecosystem-layer tool such as Rayon for CPU work. Async executors may also use work stealing, but for futures rather than manual worker threads.",
+    title: "Not the same as manual threads or async executors",
+    body: "The standard library gives you explicit thread primitives but no work-stealing pool. That is an ecosystem tool, Rayon being the usual choice for CPU work. Async executors may also steal work, but they balance futures, not hand-managed worker threads.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Rust threads feel closest to `std::thread`, but Rust adds compile-time rules around aliasing and thread transfer. In C++, thread safety is often a discipline problem. In Rust, many illegal transfers do not compile at all.",
+    body: "std::thread is the closest analogue, and RAII and move semantics carry straight over. The shift is that thread safety stops being a review discipline you enforce by convention and becomes a compile-time contract: sharing a non-atomic refcounted pointer or a plain mutable reference across a thread boundary is a type error, not a data race you find later with a sanitizer.",
   },
   {
     title: "C# background",
-    body: "`Thread` is the closer comparison for this chapter, not `Task`. C# tasks and thread-pool work items are more like later async or pooled-runtime discussions. Rust separates those models more sharply.",
+    body: "Anchor this chapter on Thread, not Task. C# tasks and thread-pool work items belong to the later async and pooled-runtime story; here we are talking about real OS threads with real cost. The harder adjustment is that there is no garbage collector to paper over shared lifetime, so you decide explicitly whether a thread owns its data, shares it through Arc, or borrows it inside a scope.",
   },
   {
     title: "Go background",
-    body: "Goroutines are cheap user-space tasks. `std::thread::spawn` is a heavier OS-thread tool. Rust async tasks later become the closer comparison, but Rust still keeps ownership transfer and borrowed-data lifetime far more explicit.",
+    body: "A goroutine is a cheap user-space task; thread::spawn is a heavier OS thread, and the cheap-task instinct maps better onto Rust async later. Go also leans on 'share memory by communicating' as a convention, while Rust makes it structural: ownership transfer over a channel and borrowed-data lifetime are enforced by the compiler rather than left to you to get right.",
+  },
+  {
+    title: "Python background",
+    body: "Forget the GIL. Rust threads run truly in parallel with no global lock, so CPU-bound work actually scales across cores, which it never does with Python threads. The flip side is that the interpreter is no longer serializing access for you: shared mutable state needs an explicit Mutex or an atomic, and the compiler will insist on it rather than letting two threads quietly race.",
   },
 ]
 
 const productionPatterns = [
-  "Prefer owned work messages when one thread should own mutable state and the rest of the system should submit commands or results.",
-  "Prefer `Arc<T>` alone for shared immutable configuration. Add a lock only when coordinated mutation is genuinely part of the model.",
-  "Use scoped threads for request-local CPU work over borrowed slices or borrowed read-only state when the parent already owns the data.",
-  "Name important threads with `std::thread::Builder` and treat `join` failures as first-class operational signals.",
-  "Reach for work-stealing or data-parallel libraries when the real job is CPU-bound parallel iteration, not hand-managed long-lived worker threads.",
+  "Prefer owned work messages when one thread should own the mutable state and the rest of the system should submit commands or results to it.",
+  "Prefer a plain Arc for shared immutable configuration. Add a lock only when coordinated mutation is genuinely part of the model, not to silence the borrow checker.",
+  "Use scoped threads for request-local CPU work over borrowed slices or borrowed read-only state when the parent already owns the data and outlives the work.",
+  "Name important threads with thread::Builder and treat join failures as first-class operational signals rather than swallowed errors.",
+  "Reach for a work-stealing or data-parallel library when the real job is CPU-bound parallel iteration, not hand-managed long-lived worker threads.",
   "Keep the multithreaded shell thin. Put parsing, normalization, and domain decisions in ordinary functions so the threaded boundary stays easy to test.",
 ]
 
@@ -208,12 +213,12 @@ const operationalCards = [
 ]
 
 const pitfalls = [
-  "Spawning unbounded OS threads for tiny units of work because it resembles goroutines or thread-pool tasks from another language.",
-  "Defaulting to one giant `Arc<Mutex<HashMap<...>>>` because it compiles. A broad lock often hides several different ownership domains and several different performance problems.",
-  "Holding a mutex while doing blocking IO or expensive computation, then blaming Rust rather than the lock scope.",
-  "Using `thread::spawn` when `thread::scope` would have expressed the real borrowed-lifetime model more directly.",
-  "Confusing OS threads, async tasks, data-parallel work stealing, and distributed workers. They solve different scheduling and ownership problems.",
-  "Writing `unsafe impl Send` or `unsafe impl Sync` for a type with hidden raw pointers or thread-affine resources without a proof. The invariants must cover aliasing, mutation, and drop behavior across threads.",
+  "Spawning unbounded OS threads for tiny units of work because it resembles goroutines or thread-pool tasks from another language. Each thread has real cost.",
+  "Defaulting to one giant Arc-Mutex-HashMap because it compiles. A broad lock usually hides several distinct ownership domains and several distinct performance problems behind one bottleneck.",
+  "Holding a mutex across blocking IO or expensive computation, then blaming Rust for the contention rather than the oversized critical section.",
+  "Using thread::spawn when thread::scope would have expressed the real borrowed-lifetime model directly, forcing clones or 'static workarounds you did not need.",
+  "Confusing OS threads, async tasks, data-parallel work stealing, and distributed workers. They solve different scheduling and ownership problems and have different costs.",
+  "Writing an unsafe Send or Sync impl for a type with hidden raw pointers or thread-affine resources without a real proof. The invariant must cover aliasing, mutation, and drop behavior across threads.",
 ]
 
 export function PageCh22MultithreadingInRust() {
@@ -265,8 +270,10 @@ export function PageCh22MultithreadingInRust() {
               <h3 className="text-lg font-semibold text-foreground mb-2">Builds on Chapters 04, 07, 09, and 14</h3>
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 04 established ownership and borrowing. Chapter 07 separated moves, copies, and clones. Chapter 09
-                introduced `Arc`, `Mutex`, and related pointer choices. Chapter 14 explained trait-based boundaries. This
-                chapter applies those ideas to OS threads directly.
+                introduced <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc</code>,{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex</code>, and related pointer
+                choices. Chapter 14 explained trait-based boundaries. This chapter applies those ideas to OS threads
+                directly.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
@@ -287,20 +294,31 @@ export function PageCh22MultithreadingInRust() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">The problem this chapter solves</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            A request-processing service performs CPU-heavy preprocessing, updates a metrics index, and dispatches
-            background jobs to worker threads. The business requirement is to define each thread boundary by ownership:
-            move owned jobs, share immutable configuration with Arc, synchronize only truly shared mutation, and use
-            scoped threads for local borrowed slices.
+            Picture a request-processing service with three kinds of work happening at once. It does CPU-heavy
+            preprocessing on incoming payloads, it keeps a shared metrics index up to date, and it hands off slower
+            background jobs to a pool of worker threads. In another language you might reach for one shared object guarded
+            by a lock and call it a day. In Rust the more durable design names each boundary by its ownership story: jobs
+            are <em>moved</em> into the workers that run them, immutable configuration is <em>shared</em> read-only through
+            an <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc</code>, genuinely shared mutation
+            goes behind a lock and nothing else does, and a one-shot parallel pass over local data uses a scoped split so
+            the threads can <em>borrow</em> instead of clone.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground leading-6">
+            That is the spine of the chapter. Each of those four moves, move, share, synchronize, and borrow-in-scope, is
+            a distinct primitive with a distinct cost, and the skill is matching the primitive to the workload rather than
+            defaulting to whichever one compiled first.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-            <h4 className="font-semibold text-foreground mb-2">One correction before we go further</h4>
+            <h4 className="font-semibold text-foreground mb-2">One distinction to hold onto: this is about OS threads</h4>
             <p className="text-sm text-muted-foreground leading-6">
-              This chapter is about <strong className="text-foreground">OS threads</strong>. It is not about async tasks,
-              futures, or executors, even though those models also involve concurrency. Keep those separate in your head:
-              threads are scheduled by the OS, async tasks are scheduled by an executor, and distributed workers are other
-              processes or machines.
+              Everything here concerns <strong className="text-foreground">OS threads</strong>, the kind the operating
+              system schedules and that cost real memory and scheduler attention. It is deliberately not about async tasks,
+              futures, or executors, even though those also do concurrent work. The two models look similar from a distance
+              and solve different problems, so keep them in separate boxes: threads are scheduled by the OS, async tasks
+              are scheduled by an executor inside your process, and distributed workers are other processes or machines
+              entirely. We cover the async model in its own chapter.
             </p>
           </div>
         </section>
@@ -327,7 +345,25 @@ export function PageCh22MultithreadingInRust() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Concurrency vocabulary before APIs</h4>
+            <h4 className="font-semibold text-foreground mb-3">Naming the execution models before the APIs</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              Most confusion in this area is vocabulary, not code. &quot;Concurrency&quot; gets stretched across several
+              unrelated mechanisms with different schedulers, different costs, and different ownership rules. Before any
+              API, fix the terms. The diagram shows who schedules what: the OS schedules threads, an executor schedules
+              tasks inside one process, and distributed work runs in other processes entirely.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  W[Concurrent work] --> OS[OS thread]\n  W --> AT[Async task]\n  W --> DP[Data parallel job]\n  W --> DW[Distributed worker]`}
+              caption="One label, four execution models. Each branch is a different kind of concurrent work with a different cost."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Each of those four kinds is scheduled by something different. The same four branches map to four
+              schedulers:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  OS[OS thread] -->|scheduled by| Kernel[OS scheduler]\n  AT[Async task] -->|polled by| Exec[Executor in-process]\n  DP[Data parallel job] -->|balanced by| Pool[Work-stealing pool]\n  DW[Distributed worker] -->|carried by| Net[Network and serialization]\n  AT -.drives.-> Fut[Future state machine]`}
+              caption="Four schedulers for the four models. This chapter is the OS-thread branch; the others have their own contracts and costs."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {executionKinds.map((kind) => (
                 <div key={kind.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -364,7 +400,28 @@ let answer = handle.join().unwrap();`}</code>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Send and Sync</h4>
+            <h4 className="font-semibold text-foreground mb-3">Send and Sync: the two traits that gate every thread boundary</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              These two auto traits are the entire mechanism behind &quot;data races do not compile.&quot; They are marker
+              traits with no methods; the compiler derives them automatically for a type when all of its fields qualify.
+              When you call <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">thread::spawn</code>, its
+              signature quietly requires the closure (and everything it captures) to be{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code>. A type that is not{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send</code> simply will not fit through
+              that boundary, and you get a compile error pointing at the capture rather than a race at 3 a.m. The diagram
+              shows the two questions the compiler is really asking.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  V[A value of type T] --> Q1{Move to another thread}\n  Q1 -->|needs T is Send| Spawn[thread::spawn closure]\n  V --> Q2{Share a reference across threads}\n  Q2 -->|needs T is Sync| Share[Arc read by many]`}
+              caption="Two questions the compiler asks: moving a value across a thread needs Send; sharing a reference needs Sync."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Those two questions are exactly what separates the two reference-counted pointers at a thread boundary:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  RC[Rc] -->|not Send, not Sync| Reject[rejected at compile time]\n  ARC[Arc] -->|Send and Sync if T is| Accept[crosses the boundary]`}
+              caption="Rc fails both checks because its refcount is non-atomic; Arc passes when its contents do, so only Arc crosses the boundary."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {sendSyncDefinitions.map((item) => (
                 <div key={item.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -420,7 +477,7 @@ let answer = handle.join().unwrap();`}</code>
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
                   A <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">move</code> closure transfers
-                  ownership of captured non-`Copy` values into the child thread. That is the calm default for jobs, owned
+                  ownership of captured non-Copy values into the child thread. That is the calm default for jobs, owned
                   buffers, and request-local domain data that must survive independently in the worker.
                 </p>
               </div>
@@ -499,22 +556,32 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 A useful production rule: if the work is CPU-bound collection processing, a Rayon-style work-stealing pool
-                is often calmer than hand-rolling many `std::thread::spawn` calls. If the work is IO-bound waiting, an async
-                executor is usually the more honest model. If the work crosses the network, you are in distributed systems.
+                is often calmer than hand-rolling many{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">thread::spawn</code> calls. If the work
+                is IO-bound waiting, an async executor is usually the more honest model. If the work crosses the network,
+                you are in distributed systems.
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparing Rust concurrency with C++, C#, and Go</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            If you already write concurrent code somewhere else, the syntax is the easy part. What trips people up is the
+            mental-model shift, so read whichever card matches your background before the examples.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -590,6 +657,16 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: ownership flows in one direction. Each job <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec</code>{" "}
+              is moved into its worker, so the worker is the sole owner while it runs; results travel back as small owned
+              tuples over the channel, and only the main thread builds the final map. No worker ever touches that map, so
+              there is nothing to lock.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  M[main] -->|move ingest jobs| W1[ingest worker]\n  M -->|move index jobs| W2[index worker]\n  W1 -->|send worker total| Ch[(mpsc channel)]\n  W2 -->|send worker total| Ch\n  M -->|join both| J[handles joined]\n  Ch -->|drain rx| Agg[main aggregates totals]`}
+              caption="Jobs move out to the workers; totals come back over one channel; aggregation happens in a single owner. Move out, message back."
+            />
             <RustCodeEditor
               code={codes.multithreading_owned_jobs_channel}
               onChange={(newCode) => updateCode("multithreading_owned_jobs_channel", newCode)}
@@ -629,7 +706,10 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="font-semibold text-foreground">Example 2: shared state with `Arc&lt;Mutex&lt;...&gt;&gt;`</h4>
+                <h4 className="font-semibold text-foreground">
+                  Example 2: shared state with{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc&lt;Mutex&lt;...&gt;&gt;</code>
+                </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   Shared state is sometimes the honest model. The important engineering work is then lock scope, contention,
                   and who really needs to mutate what.
@@ -646,6 +726,17 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: the two wrappers do two separate jobs. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc</code>{" "}
+              is what lets every thread reach the same map (each thread gets its own clone of the handle, all pointing at
+              one allocation), and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex</code> is what
+              serializes the writes so two increments cannot collide. Read the diagram as: everyone shares the pointer,
+              but only the lock holder may mutate.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Arc[(Arc Mutex HashMap)] --> T1[thread api]\n  Arc --> T2[thread api]\n  Arc --> T3[thread billing]\n  Arc --> T4[thread api]\n  T1 -->|lock, increment, unlock| Crit{Mutex held by one}\n  T2 -->|wait then lock| Crit\n  T3 -->|wait then lock| Crit\n  T4 -->|wait then lock| Crit\n  Crit --> Main[main reads final counts]`}
+              caption="Shared ownership via Arc, exclusive mutation via Mutex. The lock is the bottleneck, so keeping the critical section tiny is the whole optimization."
+            />
             <RustCodeEditor
               code={codes.multithreading_shared_state_metrics}
               onChange={(newCode) => updateCode("multithreading_shared_state_metrics", newCode)}
@@ -662,13 +753,15 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Shared ownership</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `Arc` makes the counter map reachable from several threads.
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc</code> makes the counter map
+                  reachable from several threads.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Synchronized mutation</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `Mutex` narrows mutation to one thread at a time.
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex</code> narrows mutation to one
+                  thread at a time.
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -700,6 +793,17 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              What to look at: nothing is cloned and nothing is wrapped in <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Arc</code>.
+              The parent owns the array the whole time; the children borrow non-overlapping slices of it. This compiles
+              only because <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">thread::scope</code>{" "}
+              guarantees every child joins before the scope returns, so the borrows provably cannot outlive the data.
+              That join-before-exit guarantee is the entire reason scoped threads can do what a plain spawn cannot.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Arr[values owned by parent] --> Split[split_at index 3]\n  Split -->|borrow left slice| L[scope child: sum left]\n  Split -->|borrow right slice| R[scope child: sum right]\n  L -->|join| P[parent combines]\n  R -->|join| P\n  P --> Exit[scope exits, borrows end]`}
+              caption="The parent keeps ownership; children borrow disjoint slices and are joined before the scope can return. No Arc, no clone, no 'static requirement."
+            />
             <RustCodeEditor
               code={codes.multithreading_scoped_threads_sum}
               onChange={(newCode) => updateCode("multithreading_scoped_threads_sum", newCode)}
@@ -746,9 +850,9 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to classify `Send` and `Sync`, repair non-`'static` thread captures,
-            compare channel-based and shared-state designs, and choose among scoped threads, work stealing, async tasks,
-            and distributed workers from workload shape.
+            The companion exercise page asks you to classify types by Send and Sync, repair non-&apos;static thread
+            captures, compare channel-based and shared-state designs, and choose among scoped threads, work stealing,
+            async tasks, and distributed workers from the shape of a workload.
           </p>
           <Button onClick={() => setCurrentPage(43)} className="gap-2">
             Open Chapter 22 Exercises
@@ -759,722 +863,15 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            <li>Rust multithreading is built on ordinary ownership plus the auto traits `Send` and `Sync`.</li>
-            <li>OS threads, async tasks, futures, executors, data parallelism, and distributed workers are different execution models with different costs.</li>
-            <li>`thread::spawn` usually wants owned captured data; `thread::scope` is the tool when borrowed stack data is the honest model.</li>
-            <li>Shared state with `Arc` and locks can be correct, but channels are often calmer when one thread should own mutation.</li>
-            <li>Work stealing is a scheduler strategy, commonly used in data-parallel libraries, not a synonym for manual thread spawning.</li>
-            <li>Good production thread design is observable, join-aware, and explicit about queue growth, contention, and panic handling.</li>
+            <li>Rust multithreading is ordinary ownership plus two auto traits, Send and Sync, that turn most data races into compile errors.</li>
+            <li>OS threads, async tasks, futures, executors, data parallelism, and distributed workers are different execution models with different schedulers and different costs.</li>
+            <li>thread::spawn usually wants owned captured data; thread::scope is the tool when borrowing local stack data is the honest model.</li>
+            <li>Shared state with Arc and a lock can be correct, but a channel is often calmer when only one thread should own the mutation.</li>
+            <li>Work stealing is a scheduler strategy used by data-parallel libraries, not a synonym for spawning threads by hand.</li>
+            <li>Good production thread design is observable, join-aware, and explicit about queue growth, lock contention, and panic handling.</li>
           </ul>
         </section>
       </div>
     </div>
   )
 }
-````
-
-### File: `components/rust-book/pages/page-ch22-multithreading-in-rust-exercises.tsx`
-```tsx
-"use client"
-
-import { useEffect } from "react"
-import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
-import { useBook } from "../book-context"
-import { PAGES } from "../types"
-import { Button } from "@/components/ui/button"
-import { RustPracticeCard } from "../rust-practice-card"
-
-interface Exercise {
-  number: number
-  kind: string
-  title: string
-  objective: string
-  starterPrompt: string
-  prompts?: string[]
-  acceptanceCriteria: string[]
-  hints: string[]
-}
-
-const exercises: Exercise[] = [
-  {
-    number: 1,
-    kind: "warm-up comprehension",
-    title: "Decide whether a type is Send, Sync, both, or neither",
-    objective: "Practice reading thread-boundary capability from type semantics instead of from guesswork.",
-    starterPrompt:
-      "Classify `String`, `Rc<String>`, `Arc<String>`, `RefCell<Vec<u8>>`, `Mutex<Vec<u8>>`, and one wrapper around a raw pointer you have not audited.",
-    prompts: [
-      "Which values can move to another thread safely as owned values?",
-      "Which shared references are safe to use from multiple threads?",
-      "Which type is single-thread only because the ownership counter or borrow checks are not thread-safe?",
-      "Which type should never get an `unsafe impl Send` or `Sync` casually?",
-    ],
-    acceptanceCriteria: [
-      "You define `Send` and `Sync` precisely before classifying any example.",
-      "You identify `Rc<T>` as not appropriate for thread transfer or cross-thread sharing.",
-      "You distinguish `Arc<T>` from `Arc<Mutex<T>>` instead of treating them as the same idea.",
-      "You state that a raw-pointer wrapper needs an explicit proof before any unsafe auto-trait impl is acceptable.",
-    ],
-    hints: [
-      "Start from ownership movement first, then shared-reference safety second.",
-      "A type that compiles in one thread is not automatically safe to move or share across threads.",
-    ],
-  },
-  {
-    number: 2,
-    kind: "code reading",
-    title: "Compare a channel-based design with a shared-state design",
-    objective: "Read two production shapes and explain when each one is the calmer model.",
-    starterPrompt:
-      "Compare a worker-result pipeline built around `mpsc::channel` against a design built around `Arc<Mutex<HashMap<String, usize>>>`.",
-    prompts: [
-      "Which design keeps one thread as the owner of mutation?",
-      "Which design makes contention and lock scope the main runtime risk?",
-      "Which design is easier to reason about when message order matters?",
-      "Which design is easier to reason about when many threads truly need to observe and update the same structure?",
-    ],
-    acceptanceCriteria: [
-      "You explain ownership and mutation authority clearly for both designs.",
-      "You name one operational win and one operational cost for message passing.",
-      "You name one operational win and one operational cost for shared-state locking.",
-      "You avoid claiming that one model is globally superior in every workload.",
-    ],
-    hints: [
-      "Ask where the mutable state really lives.",
-      "A strong answer talks about contention, backlog, and failure visibility, not only syntax.",
-    ],
-  },
-  {
-    number: 3,
-    kind: "implementation",
-    title: "Move owned jobs into worker threads and report totals",
-    objective: "Implement a small multithreaded design where workers own their job batches and publish results back to the caller.",
-    starterPrompt:
-      "Spawn two worker threads, move an owned `Vec<Job>` into each one, compute a per-worker total, and return the totals through a channel.",
-    prompts: [
-      "Use `move` closures deliberately.",
-      "Keep the worker input owned rather than borrowing stack-local job slices into `thread::spawn`.",
-      "Join both workers before treating the result as complete.",
-      "Print one total per worker plus a grand total.",
-    ],
-    acceptanceCriteria: [
-      "Each worker closure owns its input jobs.",
-      "The design uses a channel for results instead of a shared mutable result map updated by both workers directly.",
-      "The caller joins the workers explicitly.",
-      "The runnable lab prints the expected ingest, index, and grand totals.",
-    ],
-    hints: [
-      "This is a good place to choose channels first and shared state second.",
-      "A `move` closure should consume the job vector and the sender clone cleanly.",
-    ],
-  },
-  {
-    number: 4,
-    kind: "debugging or refactoring",
-    title: "Repair a thread boundary that captures the wrong thing",
-    objective: "Fix two classic compile-time failures: borrowing stack data into `thread::spawn` and sending single-thread-only state across threads.",
-    starterPrompt:
-      "You inherit one function that borrows a local slice into `thread::spawn` and another that tries to send `Rc<RefCell<State>>` into a thread.",
-    prompts: [
-      "Which case wants owned data moved into the child thread?",
-      "Which case wants `thread::scope` because the work is local and borrowed data is actually fine?",
-      "Which case wants `Arc<Mutex<T>>` only if the state is semantically shared across threads?",
-      "Which case should become message passing instead of shared mutation?",
-    ],
-    acceptanceCriteria: [
-      "You repair at least one case by moving owned data.",
-      "You repair at least one case by choosing scoped threads for borrowed data.",
-      "You explain why `Rc<RefCell<T>>` is the wrong cross-thread shape.",
-      "You justify any `Arc<Mutex<T>>` repair in semantic terms rather than as a compiler escape hatch.",
-    ],
-    hints: [
-      "There are at least three valid repairs here. The right one depends on the lifetime and ownership story.",
-      "If the child cannot outlive the parent, `thread::scope` deserves a look before cloning everything.",
-    ],
-  },
-  {
-    number: 5,
-    kind: "design or production scenario",
-    title: "Choose channel-based or shared-state concurrency for a service",
-    objective: "Map one realistic service boundary to the concurrency model that makes ownership easiest to operate.",
-    starterPrompt:
-      "You are designing `accept request -> parse -> schedule work -> update metrics -> publish completion` for a CPU-heavy service with a few hot counters and one central retry table.",
-    prompts: [
-      "Which parts want owned messages over channels?",
-      "Which parts truly want shared immutable state through `Arc<T>` only?",
-      "Which parts, if any, justify `Arc<Mutex<T>>` or another synchronized shared-state tool?",
-      "What backpressure or contention signal would you monitor in production?",
-    ],
-    acceptanceCriteria: [
-      "You choose at least one channel-based boundary and justify it.",
-      "You choose at least one immutable shared-state boundary and justify it.",
-      "You justify any mutable shared-state boundary in terms of real shared ownership, not convenience.",
-      "You mention at least one observability hook such as queue depth, lock wait, or worker panic count.",
-    ],
-    hints: [
-      "A service can legitimately use more than one concurrency model at once.",
-      "The cleanest design usually has one owner per mutable subsystem, even if some immutable data is shared widely.",
-    ],
-  },
-  {
-    number: 6,
-    kind: "design or production scenario",
-    title: "Choose OS threads, scoped threads, work stealing, async tasks, or distributed workers",
-    objective: "Practice distinguishing five execution models that are often blurred together in design reviews.",
-    starterPrompt:
-      "You must parallelize four workloads: a request-local slice transform, a large CPU-bound collection map, a network fan-out with many waiting sockets, and a job that must run on another machine for isolation or capacity reasons.",
-    prompts: [
-      "Which workload wants scoped OS threads because it only borrows parent-owned data briefly?",
-      "Which workload wants a work-stealing data-parallel scheduler because chunk sizes may be uneven?",
-      "Which workload is an async-task problem rather than an OS-thread problem?",
-      "Which workload is no longer a multithreading problem because the boundary is distributed?",
-    ],
-    acceptanceCriteria: [
-      "You keep OS threads, async tasks, and distributed workers clearly separate.",
-      "You choose scoped threads for at least one borrowed local CPU-bound case.",
-      "You choose a work-stealing or data-parallel model for at least one uneven CPU-bound collection workload.",
-      "You explain why network fan-out is more naturally an async-task or executor problem than a raw-thread spray.",
-    ],
-    hints: [
-      "One of the easiest design mistakes is solving waiting with more threads when the real model is async IO.",
-      "Another is calling a cross-machine queue 'multithreading' when the ownership and failure model has already changed completely.",
-    ],
-  },
-]
-
-const reviewQuestions = [
-  "What does `Send` mean, and what does `Sync` mean?",
-  "Why is a `move` closure the ordinary shape for `thread::spawn`?",
-  "When is `thread::scope` a better answer than cloning or heap-sharing more data?",
-  "What is the difference between message passing and shared-state locking as an ownership design?",
-  "Why is work stealing a scheduler strategy rather than a synonym for threads?",
-  "Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?",
-]
-
-const workingLoop = [
-  "Name the execution model first: OS thread, scoped OS thread, async task, work-stealing data parallelism, or distributed worker.",
-  "Name the ownership boundary second: moved owner, borrowed slice inside a scope, shared immutable state, or synchronized mutable state.",
-  "Choose the primitive third: channel, `Arc`, `Mutex`, scoped thread, or a higher-level scheduler.",
-  "Define one failure signal and one observability signal before calling the design production-ready.",
-]
-
-export function PageCh22MultithreadingInRustExercises() {
-  const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 43
-  const page = PAGES[pageIndex]
-
-  useEffect(() => {
-    markPageComplete(pageIndex)
-  }, [markPageComplete, pageIndex])
-
-  return (
-    <div className="h-full flex flex-col">
-      <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-          <Trophy className="h-4 w-4" />
-          Chapter 22 · Page {pageIndex + 1} of {PAGES.length}
-        </div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
-        <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice Rust multithreading the way it shows up in real systems: explicit thread-boundary ownership, honest
-          `Send` and `Sync` reasoning, deliberate shared-state choices, and clear separation from async or distributed work.
-        </p>
-      </div>
-
-      <div data-book-scroll-area className="flex-1 space-y-6 overflow-y-auto pr-1">
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
-              <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as a concurrency design review. The best answer does not stop at “use threads.” It
-                states what crosses the boundary by ownership, which values are merely shared, where synchronization
-                exists, and why a different execution model might actually be the more honest choice.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setCurrentPage(42)} className="gap-2 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Chapter 22
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            {workingLoop.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="grid gap-4">
-          {exercises.map((exercise) => (
-            <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Multithreading drill
-                </span>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Objective</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.objective}</p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <h4 className="font-medium text-foreground">Starter prompt</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
-                  {exercise.prompts?.length ? (
-                    <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                      {exercise.prompts.map((prompt) => (
-                        <li key={prompt}>{prompt}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-border bg-card p-4">
-                <h4 className="font-medium text-foreground mb-2">Acceptance criteria</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.acceptanceCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <details className="mt-4 rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer list-none flex items-center gap-2 font-medium text-foreground">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                  Optional hints
-                </summary>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
-                  {exercise.hints.map((hint) => (
-                    <li key={hint}>{hint}</li>
-                  ))}
-                </ul>
-              </details>
-            </article>
-          ))}
-        </section>
-
-        <RustPracticeCard
-          title="Runnable lab · Move owned jobs into worker threads and report results"
-          description={
-            <>
-              Repair the starter so each worker thread owns its job batch, sums the job costs, and sends the result back to
-              the caller through a channel. The checker expects a real
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">move</code>
-              thread boundary and the correct ingest, index, and grand totals.
-            </>
-          }
-          filename="owned_jobs_channel_lab.rs"
-          runKey="ch22_ex_owned_jobs_channel"
-          expectedOutput={"ingest = 5\nindex = 4\ngrand = 9"}
-          helperText={
-            <>
-              Tip: keep the worker input as an owned <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;Job&gt;</code>,
-              spawn with a <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">move</code> closure, compute the total from{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">job.cost</code>, and send{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">(worker, total)</code> back over the channel.
-            </>
-          }
-          initialCode={`use std::sync::mpsc;\nuse std::thread;\n\n#[derive(Debug)]\nstruct Job {\n    cost: u32,\n}\n\nfn spawn_worker(\n    tx: mpsc::Sender<(&'static str, u32)>,\n    worker: &'static str,\n    jobs: Vec<Job>,\n) -> thread::JoinHandle<()> {\n    thread::spawn(|| {\n        let total = 0;\n        tx.send((worker, total)).unwrap();\n    })\n}\n\nfn main() {\n    let (tx, rx) = mpsc::channel();\n\n    let ingest_jobs = vec![Job { cost: 2 }, Job { cost: 3 }];\n    let index_jobs = vec![Job { cost: 4 }];\n\n    let ingest = spawn_worker(tx.clone(), "ingest", ingest_jobs);\n    let index = spawn_worker(tx, "index", index_jobs);\n\n    ingest.join().unwrap();\n    index.join().unwrap();\n\n    let mut ingest_total = 0;\n    let mut index_total = 0;\n    let mut grand = 0;\n\n    for (worker, total) in rx {\n        grand += total;\n        if worker == "ingest" {\n            ingest_total = total;\n        } else if worker == "index" {\n            index_total = total;\n        }\n    }\n\n    println!(\"ingest = {}\", ingest_total);\n    println!(\"index = {}\", index_total);\n    println!(\"grand = {}\", grand);\n}`}
-        />
-
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Review questions</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-            {reviewQuestions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
-          <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to classify `Send` and `Sync` without hand-waving, move owned data
-            into worker threads intentionally, compare channel-driven and lock-driven designs from workload shape, and
-            explain clearly when the right answer is scoped OS threads, work stealing, async tasks, or distributed workers.
-          </p>
-        </section>
-      </div>
-    </div>
-  )
-}
-````
-
-### File: `examples/ch22_multithreading_in_rust/owned_jobs_over_channel.rs`
-````
-use std::collections::HashMap;
-use std::sync::mpsc;
-use std::thread;
-
-#[derive(Debug)]
-struct Job {
-    name: &'static str,
-    cost: u32,
-}
-
-fn spawn_worker(
-    tx: mpsc::Sender<(&'static str, u32)>,
-    worker: &'static str,
-    jobs: Vec<Job>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let total: u32 = jobs.iter().map(|job| job.cost).sum();
-        tx.send((worker, total)).unwrap();
-    })
-}
-
-fn main() {
-    let (tx, rx) = mpsc::channel();
-
-    let ingest_jobs = vec![
-        Job {
-            name: "parse",
-            cost: 3,
-        },
-        Job {
-            name: "validate",
-            cost: 2,
-        },
-    ];
-    let index_jobs = vec![
-        Job {
-            name: "index",
-            cost: 4,
-        },
-        Job {
-            name: "flush",
-            cost: 1,
-        },
-    ];
-
-    let ingest = spawn_worker(tx.clone(), "ingest", ingest_jobs);
-    let index = spawn_worker(tx, "index", index_jobs);
-
-    ingest.join().unwrap();
-    index.join().unwrap();
-
-    let mut totals = HashMap::new();
-    for (worker, total) in rx {
-        totals.insert(worker, total);
-    }
-
-    let grand: u32 = totals.values().copied().sum();
-
-    println!("ingest total = {}", totals.get("ingest").copied().unwrap_or(0));
-    println!("index total = {}", totals.get("index").copied().unwrap_or(0));
-    println!("grand total = {}", grand);
-}
-````
-
-### File: `examples/ch22_multithreading_in_rust/shared_state_route_counts.rs`
-````
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-fn main() {
-    let counts = Arc::new(Mutex::new(HashMap::<&'static str, usize>::new()));
-    let mut handles = Vec::new();
-
-    for route in ["api", "api", "billing", "api"] {
-        let counts = Arc::clone(&counts);
-        handles.push(thread::spawn(move || {
-            let mut map = counts.lock().unwrap();
-            *map.entry(route).or_insert(0) += 1;
-        }));
-    }
-
-    for handle in handles {
-        handle.join().unwrap();
-    }
-
-    let map = counts.lock().unwrap();
-    println!("api = {}", map.get("api").copied().unwrap_or(0));
-    println!("billing = {}", map.get("billing").copied().unwrap_or(0));
-    println!("routes = {}", map.len());
-}
-````
-
-### File: `examples/ch22_multithreading_in_rust/scoped_threads_slice_sum.rs`
-````
-use std::thread;
-
-fn main() {
-    let values = [2_u32, 4, 6, 8, 10, 12];
-    let split_at = 3;
-
-    thread::scope(|scope| {
-        let (left, right) = values.split_at(split_at);
-
-        let left_handle = scope.spawn(move || left.iter().copied().sum::<u32>());
-        let right_handle = scope.spawn(move || right.iter().copied().sum::<u32>());
-
-        let left_total = left_handle.join().unwrap();
-        let right_total = right_handle.join().unwrap();
-
-        println!("left = {}", left_total);
-        println!("right = {}", right_total);
-        println!("total = {}", left_total + right_total);
-    });
-}
-````
-
-### File: `components/rust-book/pages/index.ts`
-````diff
---- components/rust-book/pages/index.ts
-+++ components/rust-book/pages/index.ts
-@@ -40,3 +40,5 @@ export { PageCh20Metaprogramming } from "./page-ch20-metaprogramming"
- export { PageCh20MetaprogrammingExercises } from "./page-ch20-metaprogramming-exercises"
- export { PageCh21ReflectionAndTypeIntrospection } from "./page-ch21-reflection-and-type-introspection"
- export { PageCh21ReflectionAndTypeIntrospectionExercises } from "./page-ch21-reflection-and-type-introspection-exercises"
-+export { PageCh22MultithreadingInRust } from "./page-ch22-multithreading-in-rust"
-+export { PageCh22MultithreadingInRustExercises } from "./page-ch22-multithreading-in-rust-exercises"
-````
-
-### File: `components/rust-book/index.tsx`
-````diff
---- components/rust-book/index.tsx
-+++ components/rust-book/index.tsx
-@@ -51,6 +51,8 @@ import {
-   PageCh20MetaprogrammingExercises,
-   PageCh21ReflectionAndTypeIntrospection,
-   PageCh21ReflectionAndTypeIntrospectionExercises,
-+  PageCh22MultithreadingInRust,
-+  PageCh22MultithreadingInRustExercises,
- } from "./pages"
- 
- const PAGE_COMPONENTS = [
-@@ -98,6 +100,8 @@ const PAGE_COMPONENTS = [
-   PageCh20MetaprogrammingExercises,
-   PageCh21ReflectionAndTypeIntrospection,
-   PageCh21ReflectionAndTypeIntrospectionExercises,
-+  PageCh22MultithreadingInRust,
-+  PageCh22MultithreadingInRustExercises,
- ]
- 
- function BookContent() {
-````
-
-### File: `components/rust-book/types.ts`
-````diff
---- components/rust-book/types.ts
-+++ components/rust-book/types.ts
-@@ -10,6 +10,7 @@ import { DEFAULT_CODES_CH18 } from "./default-codes-ch18"
- import { DEFAULT_CODES_CH19 } from "./default-codes-ch19"
- import { DEFAULT_CODES_CH20 } from "./default-codes-ch20"
- import { DEFAULT_CODES_CH21 } from "./default-codes-ch21"
-+import { DEFAULT_CODES_CH22 } from "./default-codes-ch22"
- 
- export interface PageConfig {
-   id: string
-@@ -523,6 +524,30 @@ export const CHAPTERS: ChapterConfig[] = [
-         icon: "trophy",
-       },
-     ],
-+  },
-+  {
-+    id: "ch22-multithreading-in-rust",
-+    title: "Chapter 22 · Multithreading in Rust",
-+    icon: "book",
-+    pages: [
-+      {
-+        id: "ch22-multithreading-in-rust",
-+        title: "Multithreading in Rust",
-+        shortTitle: "Multithreading",
-+        description:
-+          "Rust's thread safety model, Send and Sync, spawning and scoped threads, shared state, channels, work stealing, and cross-language tradeoffs",
-+        icon: "book",
-+        codeKeys: [
-+          "multithreading_owned_jobs_channel",
-+          "multithreading_shared_state_metrics",
-+          "multithreading_scoped_threads_sum",
-+        ],
-+      },
-+      {
-+        id: "ch22-multithreading-in-rust-exercises",
-+        title: "Chapter 22 Exercises",
-+        shortTitle: "Exercises",
-+        description: "Classify Send and Sync, move owned data into worker threads, and compare channel-based and shared-state designs",
-+        icon: "trophy",
-+      },
-+    ],
-   },
- ]
- 
-@@ -962,5 +987,6 @@ export const DEFAULT_CODES: Record<string, string> = {
-   ...DEFAULT_CODES_CH19,
-   ...DEFAULT_CODES_CH20,
-   ...DEFAULT_CODES_CH21,
-+  ...DEFAULT_CODES_CH22,
- }
- 
- export interface BookState {
-````
-
-### File: `components/rust-book/rust-simulator.ts`
-````diff
---- components/rust-book/rust-simulator.ts
-+++ components/rust-book/rust-simulator.ts
-@@ -1,3 +1,4 @@
-+import { simulateCh22Output } from "./rust-simulator-ch22"
- import { simulateCh21Output } from "./rust-simulator-ch21"
- import { simulateCh20Output } from "./rust-simulator-ch20"
- import { simulateCh19Output } from "./rust-simulator-ch19"
-@@ -38,7 +39,7 @@ const RUST_PRIMITIVE_TYPES = new Set([
- ])
- 
- const RUST_STANDARD_TYPES = new Set([
--  "Arc", "BTreeMap", "BTreeSet", "Box", "BuildHasherDefault", "Cell", "Clone", "Context", "Copy", "Cow", "CString", "CStr", "Debug", "Default", "Display", "Entry", "Future", "HashMap", "HashSet", "IntoIterator", "Iterator", "MaybeUninit", "Mutex", "NonNull", "Option", "PhantomData", "Pin", "Poll", "RandomState", "Rc", "RefCell", "Result", "Send", "String", "Sync", "Vec", "Wake", "Weak", "Waker",
-+  "Arc", "BTreeMap", "BTreeSet", "Box", "BuildHasherDefault", "Cell", "Clone", "Context", "Copy", "Cow", "CString", "CStr", "Debug", "Default", "Display", "Entry", "Future", "HashMap", "HashSet", "IntoIterator", "Iterator", "JoinHandle", "MaybeUninit", "Mutex", "NonNull", "Option", "PhantomData", "Pin", "Poll", "RandomState", "Rc", "Receiver", "RefCell", "Result", "ScopedJoinHandle", "Send", "Sender", "String", "Sync", "SyncSender", "Vec", "Wake", "Weak", "Waker",
- ])
- 
- const RUST_TYPE_CONTEXT_KEYWORDS = new Set([
-@@ -1000,6 +1001,9 @@ function findCompilationError(code: string, filename: string): string | null {
- export function simulateRustExecution(code: string, key?: string, filename = "main.rs"): string {
-   const compilationError = findCompilationError(code, filename)
-   if (compilationError) return compilationError
-+
-+  const ch22Output = simulateCh22Output(code, key)
-+  if (ch22Output !== null) return ch22Output
- 
-   const ch21Output = simulateCh21Output(code, key)
-   if (ch21Output !== null) return ch21Output
-````
-
-### File: `components/rust-code-editor.tsx`
-````diff
---- components/rust-code-editor.tsx
-+++ components/rust-code-editor.tsx
-@@ -16,7 +16,7 @@ const RUST_KEYWORDS = [
- 
- const RUST_TYPES = [
-   "i8", "i16", "i32", "i64", "i128", "isize",
--  "u8", "u16", "u32", "u64", "u128", "usize",
-+  "u8", "u16", "u32", "u64", "u128", "usize", "JoinHandle", "ScopedJoinHandle", "Sender", "Receiver", "SyncSender",
-   "f32", "f64", "bool", "char", "str", "String", "Vec", "Option", "Result", "Box", "MaybeUninit", "NonNull", "CString", "CStr",
-   "Any", "TypeId", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Rc", "Arc", "Weak", "RefCell", "Cell", "Mutex", "Pin", "Context", "Poll", "Waker", "Future", "RandomState", "BuildHasherDefault", "TokenStream"
- ]
-````
-
-### File: `components/rust-book/rust-simulator-ch22.ts`
-````
-function parseNumericList(source?: string): number[] {
-  if (!source) return []
-
-  return source
-    .split(",")
-    .map((part) =>
-      part
-        .trim()
-        .replace(/_/g, "")
-        .replace(/(?:i|u)(?:8|16|32|64|128|size)$/i, "")
-    )
-    .filter((part) => part.length > 0)
-    .map((part) => Number(part))
-    .filter((value) => !Number.isNaN(value))
-}
-
-function parseQuotedList(source?: string): string[] {
-  if (!source) return []
-  return Array.from(source.matchAll(/"([^"]+)"/g), (match) => match[1])
-}
-
-function parseWorkerJobSums(code: string): Record<string, number> {
-  const vectorSums: Record<string, number> = {}
-
-  for (const match of code.matchAll(/let\s+([a-zA-Z_]\w*)\s*=\s*vec!\[([\s\S]*?)\]\s*;/g)) {
-    const name = match[1]
-    const body = match[2]
-    const costs = Array.from(body.matchAll(/cost:\s*(\d+)/g), (costMatch) => Number(costMatch[1]))
-    vectorSums[name] = costs.reduce((sum, value) => sum + value, 0)
-  }
-
-  const workerSums: Record<string, number> = {}
-  for (const match of code.matchAll(
-    /spawn_worker\(\s*tx(?:\.clone\(\))?\s*,\s*"([^"]+)"\s*,\s*([a-zA-Z_]\w*)\s*\)/g
-  )) {
-    const worker = match[1]
-    const vectorName = match[2]
-    workerSums[worker] = vectorSums[vectorName] ?? 0
-  }
-
-  return workerSums
-}
-
-export function simulateCh22Output(code: string, key?: string): string | null {
-  if (key === "multithreading_owned_jobs_channel") {
-    const totals = parseWorkerJobSums(code)
-    const grand = Object.values(totals).reduce((sum, value) => sum + value, 0)
-
-    return `ingest total = ${totals["ingest"] ?? 0}\nindex total = ${totals["index"] ?? 0}\ngrand total = ${grand}`
-  }
-
-  if (key === "multithreading_shared_state_metrics") {
-    const routeSource = code.match(/for\s+route\s+in\s*\[([\s\S]*?)\]/)?.[1]
-    const routes = parseQuotedList(routeSource)
-    const usesArcMutex = /Arc::new\(\s*Mutex::new/.test(code) && /lock\(\)\.unwrap\(\)/.test(code)
-
-    const counts: Record<string, number> = {}
-    if (usesArcMutex) {
-      for (const route of routes) {
-        counts[route] = (counts[route] ?? 0) + 1
-      }
-    }
-
-    return `api = ${counts["api"] ?? 0}\nbilling = ${counts["billing"] ?? 0}\nroutes = ${Object.keys(counts).length}`
-  }
-
-  if (key === "multithreading_scoped_threads_sum") {
-    const values = parseNumericList(code.match(/let\s+values\s*=\s*\[([^\]]+)\]/)?.[1])
-    const splitAt = Number(code.match(/let\s+split_at\s*=\s*(\d+)/)?.[1] ?? "0")
-    const hasScope = /thread::scope\(/.test(code) && /scope\.spawn\(/.test(code)
-
-    if (!hasScope) {
-      return "left = 0\nright = 0\ntotal = 0"
-    }
-
-    const left = values.slice(0, splitAt).reduce((sum, value) => sum + value, 0)
-    const right = values.slice(splitAt).reduce((sum, value) => sum + value, 0)
-
-    return `left = ${left}\nright = ${right}\ntotal = ${left + right}`
-  }
-
-  if (key === "ch22_ex_owned_jobs_channel") {
-    const totals = parseWorkerJobSums(code)
-    const hasMoveSpawn = /thread::spawn\(\s*move\s*\|\|/.test(code)
-    const sendsResult = /tx\.send\(\s*\(\s*worker\s*,\s*total\s*\)\s*\)/.test(code)
-    const sumsCosts =
-      /job\.cost/.test(code) &&
-      (/\.sum::<u32>\(\)/.test(code) || /\.sum\(\)/.test(code) || /for\s+job\s+in\s+jobs/.test(code))
-    const joins = (code.match(/join\(\)\.unwrap\(\)/g) ?? []).length >= 2
-
-    if (hasMoveSpawn && sendsResult && sumsCosts && joins) {
-      const grand = Object.values(totals).reduce((sum, value) => sum + value, 0)
-      return `ingest = ${totals["ingest"] ?? 0}\nindex = ${totals["index"] ?? 0}\ngrand = ${grand}`
-    }
-
-    return "ingest = 0\nindex = 0\ngrand = 0"
-  }
-
-  return null
-}
-````

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bug,
   Cpu,
+  GitBranch,
   Shield,
   TriangleAlert,
   Wrench,
@@ -14,6 +15,7 @@ import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
@@ -35,15 +37,19 @@ const mentalModelPoints = [
 const comparisons = [
   {
     title: "C++ background",
-    body: "RAII and move semantics transfer well, but Rust is stricter about aliasing. What is convention in C++ becomes type-checked ordinary code in Rust. Returning or storing references therefore requires a cleaner proof story.",
+    body: "RAII and move semantics transfer almost directly, but the aliasing rule that lived in your head and your code review now lives in the type system. A returned reference is not a pointer you promise to keep valid; it is a relationship the compiler will refuse to let you violate.",
   },
   {
     title: "C# background",
-    body: "In C#, object lifetime is usually runtime-managed. In Rust, if a function returns borrowed data, the compiler must prove the owner already outlives that use. If the proof would be awkward, returning owned data is often the simpler API.",
+    body: "Object lifetime is runtime-managed by the GC, so you rarely think about who outlives whom. In Rust that question moves to compile time: if a function hands back borrowed data, the caller's owner must provably outlive the result. When the proof gets awkward, returning an owned value is the cleaner API, not a fallback.",
   },
   {
     title: "Go background",
-    body: "Go slices and strings often feel cheap to pass around, but backing storage and reuse can still create subtle boundary issues. Rust makes the borrow boundary explicit and asks you to choose when data remains borrowed and when it becomes owned.",
+    body: "Slices and strings feel free to pass around because the runtime tracks the backing array, and a leaked reference into a reused buffer is a silent bug you find in production. Rust makes that boundary a compile error instead, and asks you up front to choose: does this stage observe the data, or must it own it?",
+  },
+  {
+    title: "Python background",
+    body: "Reference semantics and reference counting mean two names can quietly point at the same mutable object, and shared mutation is normal. Rust forbids exactly that aliasing-plus-mutation pattern at compile time: many readers or one writer, never both. The shift is treating a mutable reference as a proof of exclusive access rather than just another handle.",
   },
 ]
 
@@ -183,6 +189,17 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
               </div>
             ))}
           </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              The three ideas stack in one direction. Ownership is the foundation; a borrow is a temporary permission
+              granted by an owner; a lifetime is just the compiler&apos;s name for the span during which that borrow stays
+              valid. Read the diagram top to bottom and notice that nothing below the owner can outlive it.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  O[Owner: holds the value, runs cleanup] --> S[Shared borrow &T: read-only view]\n  O --> M[Mutable borrow &mut T: exclusive access]\n  S --> L[Lifetime: borrow valid only while owner lives]\n  M --> L\n  L --> D[Owner dropped: all borrows must already be gone]`}
+              caption="Ownership sits underneath; borrows are permissions the owner grants; the lifetime is the window in which a borrow is usable. The owner cannot be dropped while any borrow is still live."
+            />
+          </div>
         </section>
 
         <section className="space-y-5">
@@ -213,7 +230,16 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Borrowing rules</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The whole borrow checker reduces to one exclusivity rule, and it is easier to hold as a small state machine
+              than as a paragraph. At any moment a value is in exactly one of three states: nobody is borrowing it, several
+              readers are, or one writer is. The forbidden combination is the one the diagram never lets you reach.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Free\n  Free --> Shared: take &T\n  Shared --> Shared: take another &T\n  Shared --> Free: last reader ends\n  Free --> Exclusive: take &mut T\n  Exclusive --> Free: writer ends\n  note right of Exclusive: only one &mut T, and no &T at the same time`}
+              caption="Any number of shared readers, or exactly one exclusive writer, never both. Every borrow error is the compiler keeping you out of the missing fourth state: a writer plus a reader at once."
+            />
+            <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside mt-4">
               {borrowingRules.map((rule) => (
                 <li key={rule}>{rule}</li>
               ))}
@@ -240,6 +266,15 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Lifetimes in function signatures</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              A lifetime parameter answers one question for a function that returns a reference: which input does the
+              output borrow from? When there is only one candidate input, the answer is obvious and Rust writes it for you;
+              when there are several, you have to point at the right one. The diagram traces that decision.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  R[Function returns a reference?] -->|no| Own[No lifetime needed]\n  R -->|yes| C[How many input borrows could it come from?]\n  C -->|one| El[Elision ties output to that input]\n  C -->|several| Ex[Write an explicit lifetime to pick which input]\n  El --> Ok[Output borrow tied to a real owner]\n  Ex --> Ok`}
+              caption="The lifetime is not extending anything; it only records which input owner the returned reference is tied to. One input means elision can do it; several means you choose."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
@@ -314,16 +349,26 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Where prior-language instincts help and where they mislead</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisons.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Coming from another language</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The mechanics of borrowing are not the hard part. The hard part is that ownership and aliasing rules you used
+            to enforce by habit, by convention, or by trusting a runtime are now checked by the compiler. Each of these
+            cards names the single mental-model shift that trips people up most when they bring instincts from a specific
+            language.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {comparisons.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -389,6 +434,15 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: the shared borrow for <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">request_size</code> is
+              created, used, and finished before <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">append_trace</code> ever
+              asks for its mutable borrow. The two borrows do not overlap in time, which is exactly why the code compiles.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Own[request: owned String] -->|&request| Read[request_size reads len]\n  Read --> End[shared borrow ends]\n  End -->|&mut request| Write[append_trace pushes trace id]\n  Write --> Own2[request mutated in place]`}
+              caption="Shared borrow first, then it ends, then the exclusive mutable borrow. Sequencing the two so they never coexist is the design move, not cloning."
+            />
             <RustCodeEditor
               code={codes.ownership_borrowing_shared_mutable}
               onChange={(newCode) => updateCode("ownership_borrowing_shared_mutable", newCode)}
@@ -438,6 +492,24 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-2">
+              What to look at: compare where each function&apos;s result gets its validity. Two of them return a slice that
+              borrows from an input, so their output lives only as long as that input; the third builds a brand-new
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">String</code> it owns outright. The diagram
+              groups the three by that distinction.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  FS[first_segment path: &str] -->|one input, elided| Slice1[returns &str into path]\n  PL[pick_longer left, right: &'a str] -->|two inputs, explicit 'a| Slice2[returns &str into one of them]\n  Slice1 --> Borrowed[Output borrows: valid only while input lives]\n  Slice2 --> Borrowed`}
+              caption="The two functions that return slices: first_segment uses elision because it has one input; pick_longer needs an explicit 'a to pick which of two inputs the result borrows from. Either way the output is valid only while that input lives."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The third function takes the opposite path: instead of borrowing from an input, it builds and returns a value
+              it owns.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  ML[make_audit_label service, key: &str] -->|builds new value| Owned[returns owned String]\n  Owned --> Free[Output is independent: outlives the inputs]`}
+              caption="make_audit_label returns an owned String that survives on its own. Returning owned data is the deliberate escape from a borrow relationship."
+            />
             <RustCodeEditor
               code={codes.ownership_borrowing_lifetimes}
               onChange={(newCode) => updateCode("ownership_borrowing_lifetimes", newCode)}

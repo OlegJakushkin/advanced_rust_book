@@ -1,40 +1,45 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Users, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
   {
-    title: "Choose the library from the workload, not from fashion",
-    body: "Tokio tasks, Rayon jobs, Crossbeam coordination, and futures combinators solve different scheduling problems. The right first question is what kind of work you have: waiting, CPU saturation, shared-state coordination, or async orchestration.",
+    title: "Pick the executor from the shape of the work, not from habit",
+    body: "The first and most consequential decision is not which API to call but which kind of scheduler the work belongs on. Waiting on sockets, timers, and remote services wants an async runtime that can park thousands of in-flight operations on a handful of threads. Saturating every core with a dense numeric loop wants a work-stealing data-parallel pool. Coordinating a few long-lived threads through channels wants lower-level primitives. Tokio, Rayon, and Crossbeam are not competitors that do the same thing differently; they answer different questions, and reaching for the one you happen to know best is the most expensive mistake in this chapter.",
   },
   {
     title: "A task boundary is still an ownership boundary",
-    body: "Whether the unit runs on a Tokio runtime, a Rayon pool, or a plain thread, owned inputs and explicit outputs keep the design reviewable. Borrowed views are strongest when the work stays local and bounded in lifetime.",
+    body: "Whether the unit runs as a Tokio task, a Rayon job, or a plain thread, the rules from earlier chapters do not relax. A spawned future must be Send if the runtime can move it between worker threads; a closure handed to a thread must own or safely share everything it touches. The calm design is the same one good Rust always pushes toward: hand owned inputs across the boundary at the point of admission, produce an explicit output value, and keep borrowed views for work that stays local and short-lived. When the compiler complains about a spawn, it is usually telling you the ownership story at that boundary is not yet decided.",
   },
   {
-    title: "Backpressure, cancellation, and retries are part of the API",
-    body: "A queue without limits, a task without a stop path, or a retry loop without a budget is not only an implementation detail. It is a production contract that should be visible in the design.",
+    title: "Backpressure, cancellation, and retries are public contracts",
+    body: "An unbounded queue, a task with no stop path, and a retry loop with no budget are not implementation details you can tune later. They are the parts of the design that decide how the system behaves at its worst moment, under overload, during a deploy, when a downstream dependency is slow. Make them visible: the queue capacity in a constructor argument, the shutdown signal in a clearly named channel, the retry budget as a counter another engineer can read. A reviewer should be able to point at the owner, the stop path, the retry limit, and the queue cap without opening six files.",
   },
 ]
 
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Think in terms of explicit executor choice rather than one generic thread abstraction. Tokio is not a thin thread wrapper, Rayon is not an async runtime, and Crossbeam is not only a channel crate. Each one maps to a different operational model.",
+    body: "You are used to choosing a concrete threading mechanism per problem (std::thread, a thread pool, OpenMP, TBB) and wiring them by hand. The shift is that in Rust the choice is expressed as which library's scheduler owns the work, and the type system enforces the boundary: Send and Sync decide what may cross a spawn, and a future that blocks a Tokio worker is a design error the way a long compute inside an I/O reactor would be. Treat Tokio, Rayon, and Crossbeam as three different execution models, not three flavors of std::thread.",
   },
   {
     title: "C# background",
-    body: "Tokio tasks feel closest to Task-based async orchestration, while Rayon feels closer to CPU-focused parallel loops. Rust makes the distinction sharper because ownership transfer, Send, and blocking boundaries are part of ordinary type and API design.",
+    body: "Tokio tasks map most cleanly onto Task and async orchestration, and Rayon maps onto Parallel.For and PLINQ for CPU-bound loops. The trap is the thread pool you never think about in .NET: there, the runtime quietly grows the pool when work blocks, so a blocking call on an async path usually just costs a thread. In Rust there is no such elasticity, so a blocking call on a Tokio worker stalls unrelated futures, and you move it to spawn_blocking or Rayon deliberately rather than trusting the runtime to absorb it.",
   },
   {
     title: "Go background",
-    body: "Tokio tasks are cheaper than OS threads, but they are still futures scheduled by a runtime, not goroutines with ambient preemption semantics. Rayon covers the CPU-bound side that many Go services leave to worker pools or external jobs.",
+    body: "A goroutine hides the waiting-versus-computing distinction because the scheduler preempts and grows OS threads for you, so one go func handles both. Rust splits that into two tools on purpose: Tokio tasks are cheap futures for the waiting side, but they are cooperatively scheduled and will not preempt a tight CPU loop, and Rayon is the explicit answer for the compute side that a Go service often pushes to a worker pool or an external job. The mental shift is that 'just start a goroutine' becomes 'decide whether this work waits or burns, then choose the matching pool.'",
+  },
+  {
+    title: "Python background",
+    body: "Coming from asyncio you already know that CPU-bound work starves the event loop, and the usual escape is a ProcessPoolExecutor because the GIL blocks real thread parallelism. Rust removes the GIL constraint entirely: Rayon gives you genuine shared-memory parallelism across cores with no separate process and no pickling, while Tokio plays the asyncio role for I/O. The shift is that 'offload CPU work to processes' becomes 'run it in parallel threads in the same address space,' which is faster and simpler but puts ownership and Send back in your hands.",
   },
 ]
 
@@ -42,7 +47,7 @@ const toolCards = [
   {
     title: "Tokio tasks",
     fit: "IO-bound services and async orchestration",
-    body: "Use Tokio when the core problem is waiting on sockets, timers, async clients, or many concurrent in-flight operations. Spawn tasks for concurrency, and move blocking or CPU-heavy work off the runtime workers explicitly.",
+    body: "Reach for Tokio when the core problem is waiting: sockets, timers, database and HTTP clients, or many concurrent in-flight operations whose cost is latency rather than computation. A spawned task is a future the runtime drives on a small pool of worker threads, so ten thousand idle connections cost ten thousand parked state machines, not ten thousand OS threads. The discipline that keeps this fast is to keep the worker threads non-blocking and push any CPU-heavy or blocking step off them explicitly.",
     code: `tokio::spawn(async move {
     handle_connection(stream).await
 });`,
@@ -50,7 +55,7 @@ const toolCards = [
   {
     title: "Rayon",
     fit: "CPU-bound data parallelism",
-    body: "Use Rayon when the core problem is splitting one CPU-heavy collection or batch across worker threads. `par_iter`, `par_chunks`, and custom pools make parallel loops easier than hand-rolling many short-lived threads.",
+    body: "Reach for Rayon when the core problem is computation: one heavy collection or batch you want to spread across every core. Turning iter() into par_iter() splits the work over a work-stealing pool, so threads that finish early steal pending chunks from busier ones, which keeps uneven workloads balanced without manual scheduling. It is a parallel-iterator and fork-join engine, not an async runtime, so it has no concept of awaiting and should never sit on a socket.",
     code: `values.par_iter()
     .map(expensive_step)
     .sum::<u64>()`,
@@ -58,13 +63,13 @@ const toolCards = [
   {
     title: "Crossbeam",
     fit: "Thread coordination below async service frameworks",
-    body: "Use Crossbeam when you want scoped threads, bounded channels, selection over channel events, or lower-level concurrent building blocks outside a Tokio runtime. It is excellent glue for thread-based pipelines.",
+    body: "Reach for Crossbeam when you are coordinating a handful of long-lived threads outside an async runtime: scoped threads that can safely borrow stack data, bounded MPMC channels, selection over several channels, and lock-free building blocks. It is the calm answer for a thread-based pipeline where async would add a runtime you do not need, and it pairs well with Rayon when one stage is a parallel compute and the next is a sequential drain.",
     code: `let (tx, rx) = crossbeam::channel::bounded(1024);`,
   },
   {
     title: "The futures crate",
     fit: "Executor-agnostic async composition",
-    body: "Use `FuturesUnordered`, `join_all`, `try_join_all`, and related combinators when you need to orchestrate many futures as data rather than immediately spawning them onto a runtime. Tokio schedules tasks; the futures crate helps compose futures.",
+    body: "Reach for the futures crate when you want to treat a set of futures as data and drive them together without giving each one its own task. FuturesUnordered polls many futures and yields results as they complete; join_all and try_join_all wait for a whole batch. The distinction worth holding onto is that Tokio schedules tasks onto a runtime, while the futures crate composes futures in place, which is often calmer when the work does not need a separate task boundary.",
     code: `let mut pending = FuturesUnordered::new();`,
   },
 ]
@@ -91,11 +96,11 @@ const orchestrationCards = [
 const workloadCards = [
   {
     title: "IO-bound workloads",
-    body: "Network servers, database clients, timers, and fan-out waits want async runtimes and bounded admission. The runtime wins because waiting does not need one OS thread per in-flight unit.",
+    body: "Network servers, database and cache clients, timers, and fan-out waits spend most of their wall-clock time idle, waiting for bytes to arrive. The win from an async runtime is that an idle await costs a parked state machine, not a blocked OS thread, so concurrency scales to tens of thousands of connections on a few workers. The job here is admission control and bounded fan-out, not raw thread count: the threads are rarely the bottleneck, the queues are.",
   },
   {
     title: "CPU-bound workloads",
-    body: "Parsing, compression, search indexing, dense transforms, hashing, and numeric kernels want explicit CPU pools: Rayon, dedicated threads, or `spawn_blocking` when the async shell only needs one blocking escape hatch.",
+    body: "Parsing, compression, hashing, search indexing, image and signal transforms, and numeric kernels keep a core busy for the whole operation. There is no waiting to overlap, so the only lever is real parallelism across cores, which is exactly what a Rayon pool or a set of dedicated threads provides. Use spawn_blocking only as a narrow bridge when an otherwise-async service has one blocking step; if the CPU stage dominates, give it a real pool with its own budget instead of leaning on the bridge.",
   },
 ]
 
@@ -252,6 +257,14 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
               <li>Then choose Tokio, Rayon, Crossbeam, futures utilities, or a combination.</li>
             </ol>
           </div>
+          <p className="mt-4 text-sm text-muted-foreground leading-6">
+            The same decision drawn as a flow: one question about the nature of the work splits almost every case, and a
+            second question about whether you want a runtime-owned task or a locally driven future splits the rest.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  Start[New unit of work] --> Q1{Mostly waiting<br/>or mostly CPU?}\n  Q1 -->|waiting on IO| Q2{Own a task<br/>or drive locally?}\n  Q1 -->|burning CPU| Rayon[Rayon<br/>parallel pool]\n  Q2 -->|own a task| Tokio[tokio spawn<br/>or JoinSet]\n  Q2 -->|drive in place| Futures[FuturesUnordered<br/>or join_all]\n  Q1 -->|threads only| Crossbeam[Crossbeam channels<br/>and scope]`}
+            caption="The workload nature decides the executor family; the ownership question then picks the exact tool within the async branch."
+          />
         </section>
 
         <section className="space-y-4">
@@ -311,6 +324,25 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
                 have futures and only need to drive them together.
               </p>
             </div>
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The two differ in where the work actually runs. A{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">JoinSet</code> hands each future to the
+              runtime as an independent task, so the runtime&apos;s worker threads make progress on them even while you are
+              not awaiting the set. A <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">FuturesUnordered</code>{" "}
+              keeps the futures inside your own task and only advances them while you poll the collection, so it never
+              crosses a task boundary and never requires the futures to be Send.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  J[JoinSet] -->|spawn| T1[runtime task 1]\n  J -->|spawn| T2[runtime task 2]\n  T1 --> RW[runtime worker threads]\n  T2 --> RW`}
+              caption="JoinSet path: each future becomes a separate runtime task that the worker threads advance on their own."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              The local path keeps every future inside one task instead, so nothing crosses a task boundary:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  F[FuturesUnordered] -->|polled in place| FA[future a]\n  F -->|polled in place| FB[future b]\n  FA --> ME[your single task]\n  FB --> ME`}
+              caption="FuturesUnordered path: futures advance inside your own task only while you poll the collection, so they never need to be Send."
+            />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -333,6 +365,16 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Thread pools</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A production service rarely has just one pool. The shape that keeps latency predictable is to route each kind
+              of work to the pool built for it: async tasks on the Tokio worker pool, blocking bridges on the Tokio
+              blocking pool, dense compute on a Rayon pool. The diagram below shows the routing, and the one edge to avoid
+              is a CPU loop landing directly on a Tokio worker, where it stalls every unrelated future on that thread.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Req[Incoming work] --> Async[Async task]\n  Req --> Block[Blocking or<br/>legacy call]\n  Req --> CPU[CPU-heavy batch]\n  Async --> TW[Tokio<br/>worker pool]\n  Block -->|spawn_blocking| TB[Tokio<br/>blocking pool]\n  CPU -->|par_iter or<br/>send to pool| RP[Rayon<br/>work-stealing pool]\n  CPU -.->|wrong, stalls futures| TW`}
+              caption="Async work stays on Tokio workers, blocking calls move to the blocking pool, and CPU batches go to Rayon. The dotted edge is the bug to avoid."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {threadPoolCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -375,9 +417,21 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
             </div>
           </div>
 
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">What changes by background</h3>
+          </div>
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Coming from C++, C#, or Go</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Engineers arriving from other languages tend to carry one habit that misfires here: a single concurrency
+              tool that quietly covered both waiting and computing. Rust splits that into separate executors on purpose, so
+              the useful mental adjustment is less about syntax and more about which assumption from your previous runtime
+              no longer holds.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
               {comparisonCallouts.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="font-medium text-foreground mb-2">{comparison.title}</div>
@@ -453,6 +507,16 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: every job flows through one bounded channel before it ever becomes a task, the tasks live in
+              a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">JoinSet</code> that drains results as
+              they finish, and the retry and shutdown bookkeeping stays in the orchestration shell rather than scattered
+              across handlers. Trace that path in the diagram before reading the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Prod[Producer] -->|send, blocks if full| Ch[(bounded mpsc, cap 2)]\n  Ch --> Adm[Admission loop]\n  Adm -->|spawn task| JS[JoinSet]\n  JS --> W1[task: process job]\n  JS --> W2[task: process job]\n  W1 -->|ok| Done[completed count]\n  W2 -->|transient err| Re[retry within budget]\n  Re --> JS\n  Shut[shutdown flag] -.->|observed at drain| Adm`}
+              caption="Producers push into a bounded channel; the admission loop spawns each job into the JoinSet, accounts retries centrally, and watches one shutdown flag."
+            />
             <RustCodeEditor
               code={codes.task_libraries_tokio_orchestration}
               onChange={(newCode) => updateCode("task_libraries_tokio_orchestration", newCode)}
@@ -511,6 +575,15 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the bounded Crossbeam channel is the only intake, each batch that comes off it is handed to
+              Rayon&apos;s parallel iterator so the work fans across the pool and rejoins into one sum, and the two stages
+              stay separate (admission is sequential, compute is parallel). The diagram shows that split before the code.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Src[Batches] -->|send, bounded| Q[(crossbeam bounded queue)]\n  Q --> Drain[Sequential drain]\n  Drain -->|per batch| PI[par_iter over batch]\n  PI --> T1[pool thread]\n  PI --> T2[pool thread]\n  T1 --> Sum[reduce to scaled total]\n  T2 --> Sum`}
+              caption="Admission is one sequential bounded queue; the per-batch compute fans out across the Rayon pool and reduces back to a single total."
+            />
             <RustCodeEditor
               code={codes.task_libraries_rayon_crossbeam}
               onChange={(newCode) => updateCode("task_libraries_rayon_crossbeam", newCode)}

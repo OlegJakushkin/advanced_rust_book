@@ -7,6 +7,7 @@ import {
   Bug,
   Cpu,
   Gauge,
+  GitCompare,
   Network,
   Shield,
   TriangleAlert,
@@ -17,6 +18,7 @@ import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { simulateRustExecution } from "../rust-simulator"
+import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { Button } from "@/components/ui/button"
 
 const mentalModelPoints = [
@@ -37,15 +39,19 @@ const mentalModelPoints = [
 const comparisonCallouts = [
   {
     title: "C++ background",
-    body: "Do not rebuild this as a pointer-rich connection graph first. Rust is calmer when the swarm owns transport state, behaviours own protocol state, and application logic moves owned events across clear boundaries instead of sharing one big mutable object web.",
+    body: "Your instinct will be to model the network as a graph of connection objects holding pointers to each other and to shared session state. Resist that first move. In Rust the swarm owns transport and connection state, each behaviour owns one protocol's state machine, and the application reacts to owned events that arrive one at a time. The mental shift is from a mutable object web you keep coherent by hand to a single owner you feed owned messages through. The trap is reaching for Arc<Mutex<...>> around shared peer state the moment two parts of the code want to touch it; that usually means the loop boundary was drawn in the wrong place.",
   },
   {
     title: "C# background",
-    body: "Think less in terms of framework-managed hubs or service objects and more in terms of explicit event loops and typed protocol state. Traits help with seams, but the main design decision is still who owns connection, protocol, and application state at each boundary.",
+    body: "SignalR hubs and dependency-injected service objects train you to think of the connection as a managed thing the framework keeps alive while your handlers fire on it. libp2p inverts that: there is no ambient hub, only an event loop you poll and a set of typed protocol enums you match on. Traits give you the seams that interfaces gave you, but they do not supply a runtime that owns lifetime for you. The design question is no longer 'which service handles this event' but 'who owns connection state, protocol state, and domain state, and at which boundary does an owned value cross from one to the next'.",
   },
   {
     title: "Go background",
-    body: "A P2P network is not just goroutines talking over channels. Channels are still useful inside one node, but peer identity, stream security, relay policy, and state convergence all become part of the network contract itself.",
+    body: "A Go peer node is often goroutines plus channels, and that instinct is half right: channels are still the clean way to move commands and events inside one node. But a P2P network is more than concurrent message passing. Peer identity, channel encryption, NAT and relay policy, and state convergence are part of the network contract, not implementation details you bolt on. Rust also removes the ambient trust Go gives you around shared state: the compiler will not let two goroutine-style tasks mutate the same peer map unless you have stated, in types, how that sharing is allowed.",
+  },
+  {
+    title: "Python background",
+    body: "asyncio and Twisted give you a friendly event loop and protocol classes, and libp2p's shape will feel familiar at that level. The difference is that nothing is implicit or dynamically typed at the boundary: every message is a concrete enum with a known size budget, every peer is a typed identity, and there is no GC to paper over who keeps a buffer alive. Where Python lets you stash mutable state on self and trust the loop to be single-threaded, Rust makes you decide whether state is owned by the loop, borrowed for one event, or moved into a task — and it checks that decision before the program runs.",
   },
 ]
 
@@ -293,6 +299,7 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
   const chapter30PageIndex = getPageIndexById("ch30-amqp-and-message-brokers")
   const chapter31PageIndex = getPageIndexById("ch31-distributed-task-execution")
   const chapter38PageIndex = getPageIndexById("ch38-merkle-tree-games-and-challenges")
+  const chapter42PageIndex = getPageIndexById("ch42-testing-advanced-rust-systems")
   const chapter43PageIndex = getPageIndexById("ch43-observability")
   const chapter47PageIndex = getPageIndexById("ch47-grpc-services-with-protobuf-and-service-api-codegen")
   const chapter48PageIndex = getPageIndexById("ch48-websockets-long-lived-connections")
@@ -376,19 +383,41 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
             <h3 className="text-lg font-semibold text-foreground">Opening scenario</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
-            A field-deployed coordination system must continue exchanging state when nodes lose central connectivity or sit
-            behind restrictive networks. The business requirement is to compose identity, transport, secure channels,
-            discovery, relay policy, request-response, pub-sub, and state convergence inside one bounded peer event loop.
+            A field-deployed coordination system must keep exchanging state when nodes lose their link to a central
+            server or sit behind restrictive home and carrier networks. There is no broker to lean on and no single
+            endpoint everyone dials. Each node has to find peers on its own, prove who it is, open an encrypted channel,
+            and then run several conversations at once: discovery, request-response fetches, and pub-sub gossip. The
+            business requirement is to compose identity, transport, secure channels, discovery, relay policy,
+            request-response, pub-sub, and state convergence inside one bounded peer event loop that an on-call engineer
+            can reason about at three in the morning.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            That last phrase is the design constraint that matters. The temptation is to spread network state across
+            many objects and let callbacks mutate it from everywhere. The calmer shape is a single loop: it waits on two
+            sources — commands coming down from your application, and events coming up from the network — and it owns the
+            state both sides touch. Everything below is built around that one picture. Read the diagram first, then the
+            code sketch, which is the same loop written in Rust-shaped pseudocode.
+          </p>
+          <MermaidDiagram
+            chart={`flowchart TD\n  App[Application logic] -->|owned commands| Loop{Peer event loop}\n  Net[(Network / swarm)] -->|owned events| Loop\n  Loop -->|owns| State[(Node state: peers, pending, log)]\n  Loop -->|dial / send| Net\n  Loop -->|results| App`}
+            caption="One loop waits on commands from above and events from below, and it alone owns the node state both sides read and write."
+          />
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="font-medium text-foreground mb-2">libp2p-style architecture sketch</div>
+            <div className="font-medium text-foreground mb-2">The same loop as a Rust sketch</div>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">select!</code> below is the loop in
+              the diagram. The two arms are the two arrows into the loop: one drains application commands, the other
+              drains network events. Both hand their value to a function that takes{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&amp;mut node.state</code>, so there is
+              exactly one owner of the state and no shared-mutable web to keep coherent.
+            </p>
             <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{libp2pSketch}</code>
             </pre>
             <p className="mt-3 text-sm text-muted-foreground leading-6">
-              The exact libp2p Rust APIs evolve over time. The architecture is more stable than the method names: one
-              swarm owns the network edge, behaviours own protocol state, and your application translates owned commands
-              and owned events through that loop.
+              The exact libp2p Rust APIs evolve over time, and crate method names will not match this sketch line for
+              line. The architecture is far more stable than the names: one swarm owns the network edge, behaviours own
+              protocol state, and your application translates owned commands and owned events through that loop.
             </p>
           </div>
         </section>
@@ -398,11 +427,40 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
             <Shield className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Before any code, three corrections clear up most early confusion. The word &ldquo;peer-to-peer&rdquo; suggests
+            a single clever socket that magically connects everyone; it is really a stack of separate protocols you
+            assemble on purpose. The word &ldquo;libp2p&rdquo; suggests one crate you import and call; it is really a way
+            to compose small protocol state machines. And the demo &mdash; two laptops on one Wi-Fi network &mdash; hides
+            the work that actually fills your sprint board, which is connectivity, abuse control, and getting divergent
+            state back into agreement.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
               <div key={point.title} className="rounded-lg border border-border bg-card p-4">
                 <h4 className="font-semibold text-foreground mb-2">{point.title}</h4>
                 <p className="text-sm text-muted-foreground leading-6">{point.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            P2P work pulls hard on instincts you already have, and some of those instincts help while others quietly
+            mislead. The useful question is not which crate maps to which library; it is where each language taught you
+            to put trust, and how that placement has to move in Rust. Read the card for your background before the rest
+            of the chapter, then notice when the text is correcting exactly the habit it names.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
               </div>
             ))}
           </div>
@@ -416,8 +474,17 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Peer-to-peer networking mental model: identities, transports, multiplexing, discovery, and protocols
+              The layers a peer connection is built from
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              A single connection to a peer is not one thing; it is a short stack of concerns, each solving a different
+              problem, layered in a fixed order. You establish who the peer is, you pick a path for the bytes, you
+              upgrade that path to an encrypted channel, and only then do you split it into many logical streams so that
+              discovery, request-response, and gossip can all run over the one connection at once. Discovery sits beside
+              the stack because it answers a prior question &mdash; which peers exist and how to reach them &mdash; that
+              you must answer before there is a connection to build at all. The cards below expand each layer in that
+              order.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {networkingCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -430,8 +497,16 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              libp2p architecture in Rust: swarm, behaviours, events, and protocol composition
+              How a libp2p node is wired in Rust: swarm, behaviours, and events
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The Rust libp2p design has one organising idea worth getting right early. The swarm is the outer machine
+              that owns connections and does the polling; it does not understand your protocols. Each protocol &mdash;
+              identify, discovery, request-response, pub-sub &mdash; lives in its own behaviour, which is a small state
+              machine. The swarm drives every behaviour and bubbles up what they produce as a stream of events. Your job
+              is to turn each event into an owned value and act on it in the application layer, and to push application
+              decisions back down as commands. The cards expand each box in that path.
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {architectureCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -451,8 +526,28 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Designing request-response and publish-subscribe protocols
+              Two protocol shapes: a question to one peer, or news for many
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              Almost every peer interaction is one of two shapes, and they have different contracts. Request-response is
+              a question put to one named peer that expects exactly one bounded answer: fetch a state summary, ask for a
+              chunk, pull one slice of work. Its contract is correlation (matching the reply to the request), a timeout,
+              and a size cap. Publish-subscribe is news emitted to a topic that any number of peers may have subscribed
+              to, where eventual propagation matters more than a precise per-peer reply. Its contract is topic naming,
+              who may publish, fan-out policy, validation cost, and tolerating duplicates. Picture the difference before
+              reading the message types.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  A[Peer A] -->|FetchChunk index=3| B[Peer B]\n  B -->|Chunk index=3 bytes| A`}
+              caption="Request-response: Peer A asks one named peer for one bounded answer, and Peer B returns exactly that reply correlated to the request."
+            />
+            <p className="text-sm text-muted-foreground leading-6">
+              Side by side, the other shape sends one message to many peers at once:
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  P[Publisher] -->|publish heads| T(((topic: heads)))\n  T --> S1[Subscriber 1]\n  T --> S2[Subscriber 2]\n  T --> S3[Subscriber 3]`}
+              caption="Pub-sub: a publisher emits to a topic and every peer subscribed to that topic receives the message, fanning out to all subscribers."
+            />
             <div className="grid gap-4 lg:grid-cols-3">
               {protocolCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -461,19 +556,35 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
                 </div>
               ))}
             </div>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              The request-response message types below are deliberately small. Notice that the request carries only what
+              the peer on the wire needs to act &mdash; a known version, a root hash, an index &mdash; and that{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Reject</code> is a first-class
+              response, not an exception. A transport message should answer only what the remote peer needs; your domain
+              model can stay richer internally, and you map between the two explicitly.
+            </p>
+            <pre className="mt-3 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{protocolSketch}</code>
             </pre>
-            <p className="mt-3 text-sm text-muted-foreground leading-6">
-              A transport message should answer only what the peer on the wire needs. Your domain model can still be
-              richer internally. Map between them explicitly.
-            </p>
           </article>
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Peer discovery, NAT traversal, relays, and connectivity tradeoffs
+              Reaching a peer: discovery, NAT, and the relay fallback ladder
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              On a laptop demo, dialing a peer is one step that always succeeds. On real networks it is a ladder of
+              attempts, because most users sit behind NAT that refuses unsolicited inbound connections. A node first
+              tries to dial the peer directly. If that fails, it can attempt hole punching, where both peers coordinate
+              through a third party to open matching ports at the same instant. If hole punching also fails, traffic
+              falls back to a relay that forwards bytes for both sides &mdash; which works, but adds latency, costs
+              bandwidth, and becomes an abuse target. The diagram is the decision you are really implementing; treat each
+              transition as something you measure, not something that just happens.
+            </p>
+            <MermaidDiagram
+              chart={`stateDiagram-v2\n  [*] --> Direct: dial peer\n  Direct --> Connected: succeeds\n  Direct --> HolePunch: blocked by NAT\n  HolePunch --> Connected: succeeds\n  HolePunch --> Relay: punch fails\n  Relay --> Connected: forwarded via relay\n  Relay --> Failed: no relay reachable\n  Connected --> [*]\n  Failed --> [*]`}
+              caption="Direct dial, then hole punch, then relay. Each rung is a metric: dial success, punch success, and how much traffic falls through to relays."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {connectivityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -486,8 +597,21 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
 
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">
-              Security model: peer identity, signed records, encryption, and abuse controls
+              Security: knowing the peer is not the same as trusting the request
             </h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              In a P2P system the attacker is on the inside: any peer can connect, and a valid cryptographic identity
+              only tells you who is sending bytes, not that the bytes are safe to act on. Identity, signed records, and
+              channel encryption each solve one narrow problem and none of them validate a request. The defensive
+              posture that holds up is to do work in increasing order of cost, rejecting as early as possible. Check the
+              cheap things first &mdash; size, topic, version, rate &mdash; and only allocate buffers or decode heavy
+              payloads once those pass. The pipeline below is the shape of an inbound handler that an adversary cannot
+              easily turn into free compute or memory pressure.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  In[Inbound message] --> Sz{size within cap?}\n  Sz -->|no| Drop[Reject, score peer]\n  Sz -->|yes| Tp{topic / version known?}\n  Tp -->|no| Drop\n  Tp -->|yes| Rt{rate limit ok?}\n  Rt -->|no| Drop\n  Rt -->|yes| Heavy[Allocate + decode payload]\n  Heavy --> Handle[Process request]`}
+              caption="Cheap checks gate expensive work: size, topic, and rate are verified before any buffer is allocated or any payload decoded."
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               {securityCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -588,18 +712,6 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
               </table>
             </div>
           </article>
-
-          <article className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Comparison callout</h4>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {comparisonCallouts.map((comparison) => (
-                <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-                </div>
-              ))}
-            </div>
-          </article>
         </section>
 
         <section className="space-y-4">
@@ -658,11 +770,12 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h4 className="font-semibold text-foreground">
-                  Example 1: libp2p-style swarm loop with owned commands and network events
+                  Example 1: the swarm loop as one owner with two entry points
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  One owner keeps protocol state. Commands and inbound network events are owned enums that can cross async
-                  or channel boundaries honestly.
+                  One owner, <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">SwarmState</code>, keeps
+                  all protocol state. Commands and inbound network events are owned enums that can cross async or channel
+                  boundaries.
                 </p>
               </div>
               {codes.libp2p_swarm_state_machine !== DEFAULT_CODES.libp2p_swarm_state_machine && (
@@ -676,6 +789,23 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at: the state machine has exactly two doors,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">on_command</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">on_event</code>, and both take{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">&amp;mut self</code> &mdash; the same
+              single-owner shape as the loop at the top of the chapter. Follow one request through:{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">SendRequest</code> records the request
+              id in <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pending_requests</code>, and the
+              matching <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Response</code> event is the
+              only thing that removes it. That insert-then-remove pair is why the final{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pending = 0</code>. The sequence below
+              is the exact run in <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">main</code>.
+            </p>
+            <MermaidDiagram
+              chart={`sequenceDiagram\n  participant App\n  participant S as SwarmState\n  App->>S: Dial(peer-b)\n  App->>S: ConnectionEstablished -> connected=1\n  App->>S: SendRequest id=7 -> pending=1\n  App->>S: Response id=7 -> pending=0\n  App->>S: Gossip heads tip=9 -> log\n  Note over S: connected=1, pending=0, last=gossip`}
+              caption="Commands and events arrive in order; pending requests rise on SendRequest and fall on the matching Response, ending at zero."
+            />
             <RustCodeEditor
               code={codes.libp2p_swarm_state_machine}
               onChange={(newCode) => updateCode("libp2p_swarm_state_machine", newCode)}
@@ -714,7 +844,7 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h4 className="font-semibold text-foreground">
-                  Example 2: versioned state merge and conflict handling
+                  Example 2: merging conflicting updates with one deterministic rule
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   This example is intentionally modest: pick the highest version, then break ties deterministically by
@@ -732,6 +862,22 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
                 </Button>
               )}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mb-1">
+              What to look at:{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">merge_peer_updates</code> folds the
+              updates through <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pick_newer</code>, so
+              the whole merge is just that one comparison applied repeatedly. The comparison is the contract every peer
+              must share: higher version wins; on an equal version, the larger author string wins. Trace the inputs
+              &mdash; current is version 3, then two version-4 updates from{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">peer-b</code> and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">peer-c</code>. Both beat version 3,
+              and the tie between them goes to <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">peer-c</code>.
+              The flow below is the body of <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pick_newer</code>.
+            </p>
+            <MermaidDiagram
+              chart={`flowchart TD\n  Start[compare local vs remote] --> V{remote.version > local.version?}\n  V -->|yes| TakeR[keep remote]\n  V -->|no| V2{remote.version < local.version?}\n  V2 -->|yes| TakeL[keep local]\n  V2 -->|no, tie| A{remote.author > local.author?}\n  A -->|yes| TakeR\n  A -->|no| TakeL`}
+              caption="Version decides first; only an exact tie falls through to the author comparison, which makes the merge deterministic across peers."
+            />
             <RustCodeEditor
               code={codes.libp2p_state_sync_conflicts}
               onChange={(newCode) => updateCode("libp2p_state_sync_conflicts", newCode)}
@@ -802,5 +948,3 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
     </div>
   )
 }
-
-const chapter42PageIndex = getPageIndexById("ch42-testing-advanced-rust-systems")
