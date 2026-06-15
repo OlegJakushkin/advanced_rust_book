@@ -39,14 +39,9 @@ fn main() {
     let json = serde_json::to_string(&envelope).unwrap();
     let decoded: EventEnvelope = serde_json::from_str(&json).unwrap();
 
-    let kind = match &decoded.payload {
-        OrderEvent::Created { .. } => "created",
-        OrderEvent::Cancelled { .. } => "cancelled",
-    };
-
-    let total_cents = match decoded.payload {
-        OrderEvent::Created { total_cents, .. } => total_cents,
-        OrderEvent::Cancelled { .. } => 0,
+    let (kind, total_cents) = match decoded.payload {
+        OrderEvent::Created { total_cents, .. } => ("created", total_cents),
+        OrderEvent::Cancelled { .. } => ("cancelled", 0),
     };
 
     println!("schema = {}", decoded.schema_version);
@@ -69,7 +64,7 @@ fn decimal_as_cents<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let text = Cow::<str>::deserialize(deserializer)?;
+    let text = String::deserialize(deserializer)?;
     let (units, cents) = text
         .split_once('.')
         .ok_or_else(|| serde::de::Error::custom("expected decimal amount"))?;

@@ -140,6 +140,7 @@ const reviewQuestions = [
   "What does a lifetime annotation constrain, and what does it not do?",
   "Why can block expressions reduce mutation pressure in production code?",
   "When is `Drop` useful, and what kinds of logic should usually stay out of it?",
+  "In what order do a block's local variables drop, and how does that differ from the drop order of a struct's fields?",
 ]
 
 const workingLoop = [
@@ -167,8 +168,8 @@ export function PageCh02TheRustMentalModelExercises() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Exercises for reasoning about moves, drops, allocation shape, expression-oriented code, and lifetime
-          constraints.
+          These exercises build fluency in the ownership model: predicting moves and drops, mapping storage precisely,
+          refactoring toward expression-oriented Rust, and reasoning about lifetimes.
         </p>
       </div>
 
@@ -183,7 +184,7 @@ export function PageCh02TheRustMentalModelExercises() {
                 treat the objective and acceptance criteria as your spec.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(2)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 02
             </Button>

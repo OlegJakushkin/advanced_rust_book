@@ -50,7 +50,7 @@ const exercises: Exercise[] = [
     kind: "code reading",
     title: "Trace the accept loop's select! race",
     objective: "Read the graceful-shutdown accept loop and predict how a normal accept and a shutdown signal each flow through the same select!.",
-    starterPrompt: "Study Example 2's server task, where each loop turn runs tokio::select! over shutdown_rx.changed() and listener.accept(). Walk through both branches without running the code.",
+    starterPrompt: "Study Example 2's server task. Each loop turn is a single select! with two branches: `changed = shutdown_rx.changed() => { if changed.is_err() || *shutdown_rx.borrow() { break accepted; } }` and `result = listener.accept() => { match result { Ok((stream, _peer)) => { accepted += 1; tokio::spawn(handle(stream)); } Err(_e) => break accepted, } }`. Walk through both branches without running the code.",
     prompts: [
       "Describe what the accept branch does when listener.accept() resolves with Ok((stream, _peer)).",
       "Explain why the shutdown branch checks both changed.is_err() and *shutdown_rx.borrow().",
@@ -77,7 +77,7 @@ const exercises: Exercise[] = [
     prompts: [
       "Create the channel with an explicit capacity of 1 and move tx into the producer task.",
       "Have the producer send two Vec<u32> batches with send().await and unwrap the results.",
-      "In the consumer, drive a time::interval, tick once per received batch, and offload the per-batch sum to spawn_blocking.",
+      "In the consumer, create a time::interval and call tick().await once per received batch, and offload the per-batch sum to spawn_blocking.",
       "Return (batches, total) from the consumer and print buffer, batches, and total.",
     ],
     acceptanceCriteria: [
@@ -129,7 +129,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "The diagnosis states that the inline sum runs on an IO worker with no intervening await, so that worker cannot service other ready tasks until it finishes.",
       "The fix moves the CPU step to spawn_blocking and awaits its result, keeping the async workers free for waiting work.",
-      "The answer explains that tokio::spawn still schedules the CPU work onto the same IO worker pool, so it does not isolate the CPU cost.",
+      "The answer explains that tokio::spawn still schedules the CPU work onto the same IO worker pool, where it runs without an await point and holds its worker for the full duration of the sum, so it does not isolate the CPU cost.",
       "The refactored consumer preserves the original output, computing the same totals as before.",
     ],
     hints: [

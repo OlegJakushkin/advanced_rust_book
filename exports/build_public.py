@@ -157,8 +157,10 @@ def verify(entry):
     markers and handled by the docker toolchain at run time.)"""
     code_path = os.path.join(PUB, entry["path"])
     src = open(code_path, encoding="utf-8").read()
-    if re.search(r"\buse\s+cudarc\b|\bcudarc::", src):
-        # real CUDA — builds and runs via public/cuda/ (GPU Docker), not rustc.
+    nocmt = re.sub(r"//[^\n]*", "", src)  # ignore commented mentions (std models cite ort in comments)
+    if re.search(r"\buse\s+cudarc\b|\bcudarc::|\buse\s+ort\b|\bort::", nocmt):
+        # real GPU example (cudarc kernel / ONNX Runtime CUDA EP) — builds and runs
+        # via public/cuda/ or public/onnx-gpu/ (GPU Docker), not the std rustc runner.
         return entry, "needs-cuda", ""
     if "#[unsafe(" in src or re.search(r"\bunsafe\s+extern\b", src):
         return entry, "needs-edition-2024", ""

@@ -35,6 +35,10 @@ fn prove(statement: Statement, witness: Witness) -> Result<ProofArtifact, &'stat
 }
 
 fn verify(statement: Statement, proof: ProofArtifact) -> bool {
+    // Minimal demo: we only re-check the public fields and that proof bytes
+    // exist. In a real system the proof bytes themselves encode the
+    // total <= limit constraint, so the verifier does not re-run it here.
+    // (The lab adds an explicit total <= limit guard as a belt-and-braces check.)
     statement.public_total == proof.public_total
         && statement.public_limit == proof.public_limit
         && proof.proof_bytes_len > 0
@@ -72,6 +76,9 @@ impl Transcript {
     }
 
     fn challenge(&self) -> u64 {
+        // Toy polynomial accumulator, not FNV-1a (which would XOR before
+        // multiplying); domain separation still holds. Never use this for
+        // real challenge derivation.
         self.bytes.iter().fold(1_469_598_103_934_665_603_u64, |acc, byte| {
             acc.wrapping_mul(1_099_511_628_211).wrapping_add(*byte as u64)
         })

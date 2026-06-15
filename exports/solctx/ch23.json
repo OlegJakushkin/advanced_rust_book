@@ -15,7 +15,8 @@
     "Which case is really a waited-on predicate under one mutex?",
     "Which case is small enough for atomics?",
     "Which case is a phase boundary rather than a state container?",
-    "Which case wants ownership transfer rather than shared mutation?"
+    "Which case wants ownership transfer rather than shared mutation?",
+    "For the start-gun case, how does a barrier's phase-gate semantics differ from a condvar's predicate-wait, and why does that difference matter?"
    ],
    "acceptanceCriteria": [
     "You map each case to a plausible primitive and justify the choice with state shape.",
@@ -145,15 +146,15 @@
   "Why is `RwLock` not automatically better than `Mutex`?",
   "Why should a condvar wait happen in a loop instead of a one-shot `if`?",
   "What does `Release` on a store and `Acquire` on a load actually buy you?",
-  "When is a barrier the right tool, and when is it just the wrong primitive for state propagation?",
-  "Why are lock-free structures hard even for experienced engineers?"
+  "When is a barrier the right tool, and when does it become the wrong primitive for state propagation?",
+  "From the pitfalls section, why are lock-free structures hard even for experienced engineers?"
  ],
  "lab": {
   "title": "Runnable lab · Acquire and Release publication",
   "filename": "acquire_release_lab.rs",
   "runKey": "ch23_ex_acquire_release",
   "expectedOutput": "ready = true\nvalue = 42",
-  "initialCode": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    publish(&value, &ready, 42);\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", try_consume(&value, &ready).unwrap_or(0));\n}"
+  "initialCode": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::thread;\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    // The publisher and consumer run on two threads, so the Relaxed orderings\n    // above are a real bug: upgrade them to Release/Acquire to publish safely.\n    let consumed = thread::scope(|scope| {\n        scope.spawn(|| publish(&value, &ready, 42));\n        scope\n            .spawn(|| loop {\n                if let Some(found) = try_consume(&value, &ready) {\n                    break found;\n                }\n                thread::yield_now();\n            })\n            .join()\n            .unwrap()\n    });\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", consumed);\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 04, 09, and 22",
@@ -213,7 +214,7 @@
  "codeSamples": {
   "synchronization_mutex_condvar_queue": "use std::collections::VecDeque;\nuse std::sync::{Arc, Condvar, Mutex};\nuse std::thread;\n\n#[derive(Debug, Default)]\nstruct QueueState {\n    jobs: VecDeque<&'static str>,\n    closed: bool,\n}\n\n#[derive(Debug)]\nstruct SharedQueue {\n    state: Mutex<QueueState>,\n    ready: Condvar,\n}\n\nfn main() {\n    let shared = Arc::new(SharedQueue {\n        state: Mutex::new(QueueState::default()),\n        ready: Condvar::new(),\n    });\n\n    let worker = {\n        let shared = Arc::clone(&shared);\n        thread::spawn(move || {\n            let mut processed = 0;\n\n            loop {\n                let mut state = shared.state.lock().unwrap();\n\n                while state.jobs.is_empty() && !state.closed {\n                    state = shared.ready.wait(state).unwrap();\n                }\n\n                if state.jobs.is_empty() && state.closed {\n                    break;\n                }\n\n                let _job = state.jobs.pop_front().unwrap();\n                processed += 1;\n            }\n\n            processed\n        })\n    };\n\n    {\n        let mut state = shared.state.lock().unwrap();\n        state.jobs.push_back(\"parse\");\n        state.jobs.push_back(\"flush\");\n        state.closed = true;\n        shared.ready.notify_all();\n    }\n\n    let processed = worker.join().unwrap();\n    let remaining = shared.state.lock().unwrap().jobs.len();\n\n    println!(\"processed = {}\", processed);\n    println!(\"remaining = {}\", remaining);\n}",
   "synchronization_rwlock_barrier": "use std::sync::{Arc, Barrier, RwLock};\nuse std::thread;\n\n#[derive(Debug)]\nstruct Config {\n    version: usize,\n    mode: &'static str,\n}\n\nfn main() {\n    let config = Arc::new(RwLock::new(Config {\n        version: 1,\n        mode: \"steady\",\n    }));\n    let start = Arc::new(Barrier::new(3));\n    let mut handles = Vec::new();\n\n    for _ in 0..2 {\n        let config = Arc::clone(&config);\n        let start = Arc::clone(&start);\n        handles.push(thread::spawn(move || {\n            start.wait();\n            let snapshot = config.read().unwrap();\n            snapshot.version\n        }));\n    }\n\n    {\n        let mut guard = config.write().unwrap();\n        guard.version = 2;\n        guard.mode = \"burst\";\n    }\n\n    start.wait();\n\n    let reader_version_sum: usize = handles\n        .into_iter()\n        .map(|handle| handle.join().unwrap())\n        .sum();\n    let mode = config.read().unwrap().mode;\n\n    println!(\"reader version sum = {}\", reader_version_sum);\n    println!(\"mode = {}\", mode);\n}",
-  "synchronization_atomics_ordering": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::thread;\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    thread::scope(|scope| {\n        scope.spawn(|| {\n            value.store(42, Ordering::Relaxed);\n            ready.store(true, Ordering::Release);\n        });\n\n        scope.spawn(|| {\n            while !ready.load(Ordering::Acquire) {\n                thread::yield_now();\n            }\n\n            println!(\"ready = {}\", true);\n            println!(\"value = {}\", value.load(Ordering::Relaxed));\n        });\n    });\n}"
+  "synchronization_atomics_ordering": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::thread;\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    thread::scope(|scope| {\n        scope.spawn(|| {\n            value.store(42, Ordering::Relaxed);\n            ready.store(true, Ordering::Release);\n        });\n\n        scope.spawn(|| {\n            while !ready.load(Ordering::Acquire) {\n                thread::yield_now();\n            }\n\n            println!(\"ready = {}\", ready.load(Ordering::Acquire));\n            println!(\"value = {}\", value.load(Ordering::Relaxed));\n        });\n    });\n}"
  },
  "labReferenceSolution": null
 }

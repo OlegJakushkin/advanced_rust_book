@@ -84,7 +84,7 @@ const exercises: Exercise[] = [
       "The new field is Option<T> and annotated so a missing key deserializes successfully.",
       "An old-format payload lacking the field round-trips into a value with the field set to None.",
       "A new-format payload sets and recovers the field correctly.",
-      "The answer correctly classifies the change as additive and compatible in both directions.",
+      "The answer correctly classifies the change as additive and compatible in both directions (forward: old readers survive new writers; backward: new readers survive old writers).",
     ],
     hints: [
       "#[serde(default)] supplies Option::default(), which is None, when the key is absent.",
@@ -119,7 +119,7 @@ const exercises: Exercise[] = [
     kind: "debugging or refactoring",
     title: "Fix a borrowed field that escapes its buffer",
     objective: "Diagnose and repair a zero-copy deserialization design where a borrowed view is held past the lifetime of its input bytes.",
-    starterPrompt: "The chapter's rule is to borrow while parsing if it reduces copying locally, but own the data once the message crosses a wider subsystem boundary, because a borrowed &str or Cow<'de, str> cannot outlive the buffer it points into. A struct like BorrowedAudit<'a> is being returned from a function whose input buffer is dropped on return.",
+    starterPrompt: "The chapter's rule is to borrow while parsing if it reduces copying locally, but own the data once the message crosses a wider subsystem boundary, because a borrowed &str or Cow<'de, str> cannot outlive the buffer it points into. Start from this broken function that parses a local buffer and tries to return the borrowing struct:\n\n    fn parse(bytes: &[u8]) -> BorrowedAudit<'_> {\n        let text = String::from_utf8(bytes.to_vec()).unwrap(); // local buffer\n        serde_json::from_str(&text).unwrap() // borrows `text`, dropped on return\n    }\n\nThis does not compile: the returned struct borrows `text`, which is dropped when the function returns.",
     prompts: [
       "Explain the compiler error that arises when a function parses a local buffer and returns the borrowing struct.",
       "Decide which fields genuinely need zero-copy borrowing on the hot path and which should own.",
@@ -168,6 +168,7 @@ const reviewQuestions = [
   "Why must a borrowed &str or Cow<'de, str> field not outlive the input buffer it was parsed from?",
   "Why is split-on-dot money parsing a correctness trap, and what validation prevents silently losing cents?",
   "Why is a compatibility break a deployment coordination problem rather than only a code change?",
+  "Why must you never let Rust's in-memory struct layout serve as an FFI contract by default, and what are the two safe alternatives?",
 ]
 
 const workingLoop = [
@@ -210,7 +211,7 @@ fn decode(bytes: &[u8]) -> Record {
     let mut schema_version = 0u16;
     let mut order_id = String::new();
     let mut total_cents = 0u64;
-    let currency = String::from("USD");
+    let mut currency = String::from("USD");
 
     for field in text.split(';') {
         let (key, _value) = match field.split_once('=') {

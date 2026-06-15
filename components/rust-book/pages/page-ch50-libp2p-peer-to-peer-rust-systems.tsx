@@ -193,8 +193,9 @@ const observabilityCards = [
 ]
 
 const libp2pSketch = `// libp2p-style architecture sketch; exact crate APIs evolve over time.
+// Type names are illustrative and may not all come from one import.
 struct Node {
-    swarm: /* Swarm<CompositeBehaviour> */,
+    swarm: Swarm<CompositeBehaviour>,
     app_rx: mpsc::Receiver<LocalCommand>,
     state: NodeState,
 }
@@ -339,13 +340,14 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
           <div className="flex items-start justify-between gap-4 flex-col lg:flex-row">
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">
-                Builds on Chapters 25, 30, 31, 38, 43, 47, 48, and 49
+                Builds on Chapters 25, 30, 31, 38, 42, 43, 47, 48, and 49
               </h3>
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 25 covered Tokio task boundaries. Chapter 30 covered brokered delivery and replay. Chapter 31
-                covered distributed task execution. Chapter 38 covered Merkle-based verification. Chapter 43 covered
-                observability. Chapter 47 covered gRPC transport contracts. Chapter 48 covered long-lived connections.
-                Chapter 49 covered secure boundaries and TLS. Peer-to-peer systems sit across all of them.
+                covered distributed task execution. Chapter 38 covered Merkle-based verification. Chapter 42 covered
+                testing and simulation. Chapter 43 covered observability. Chapter 47 covered gRPC transport contracts.
+                Chapter 48 covered long-lived connections. Chapter 49 covered secure boundaries and TLS. Peer-to-peer
+                systems sit across all of them.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
@@ -360,6 +362,9 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
               </Button>
               <Button variant="outline" onClick={() => setCurrentPage(chapter38PageIndex)}>
                 Chapter 38
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter42PageIndex)}>
+                Chapter 42
               </Button>
               <Button variant="outline" onClick={() => setCurrentPage(chapter43PageIndex)}>
                 Chapter 43
@@ -469,7 +474,7 @@ export function PageCh50Libp2pPeerToPeerRustSystems() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Protocol layers and swarm architecture</h3>
           </div>
 
           <article className="rounded-xl border border-border bg-card p-5">

@@ -50,9 +50,15 @@ if [ ! -f "$abs" ]; then
 fi
 
 # Real CUDA (cudarc) needs a GPU + the NVIDIA toolchain — use the public/cuda project.
-if grep -Eq '^[[:space:]]*use[[:space:]]+cudarc\b' "$abs" || grep -Eq '\bcudarc::' "$abs"; then
+if grep -Eq '^[[:space:]]*use[[:space:]]+cudarc\b' "$abs"; then
   echo ">> '$f' is real CUDA from Rust (cudarc). Build and run it on a GPU with the" >&2
   echo ">> project in public/cuda/:  cd public/cuda && docker compose run --rm cuda" >&2
+  exit 3
+fi
+# Real ONNX-on-GPU (ort + CUDA EP) needs a GPU — use the public/onnx-gpu project.
+if grep -Eq '^[[:space:]]*use[[:space:]]+ort\b' "$abs"; then
+  echo ">> '$f' is real ONNX inference on the GPU (ort + CUDA EP). Build and run it" >&2
+  echo ">> with the project in public/onnx-gpu/:  cd public/onnx-gpu && docker compose run --rm onnx" >&2
   exit 3
 fi
 

@@ -56,7 +56,7 @@ const exercises: Exercise[] = [
       "What redesign would be calmer: own the data, keep the view local, or attach explicit metadata?",
     ],
     acceptanceCriteria: [
-      "You explain that `Any` is usually for `'static` concrete types, not arbitrary borrowed views with wider lifetime claims.",
+      "You explain that `Any` requires `T: 'static`, so a type containing a borrowed reference with any named lifetime cannot implement `Any` at all.",
       "You explain that `Any` supports type recovery, not field walking or method discovery.",
       "You propose one ownership repair and one metadata repair.",
     ],
@@ -76,12 +76,14 @@ const exercises: Exercise[] = [
       "Use `TypeId::of::<T>()` as the key.",
       "Store values as `Box<dyn Any>`.",
       "Recover with `downcast_ref::<T>()`.",
+      "Add a `get_mut<T>` that recovers a mutable handle with `downcast_mut::<T>()`.",
       "Do not use string keys for type identity.",
     ],
     acceptanceCriteria: [
       "The typemap stores heterogeneous values behind one erased owner.",
       "Lookup is keyed by `TypeId`, not by type name string.",
       "Recovery uses `downcast_ref::<T>()` safely.",
+      "A `get_mut<T>` demonstrates the by-mut form with `downcast_mut::<T>()`, updating one stored value in place.",
       "The runnable lab prints the expected port, label, and missing-type check.",
     ],
     hints: [
@@ -132,6 +134,7 @@ const exercises: Exercise[] = [
     hints: [
       "If operators need the fact, make it a normal API.",
       "A plugin registry is easier to operate when the metadata is boring and explicit.",
+      "The chapter's production patterns become tests directly: logging metadata at startup turns into a registration test that asserts unique names, and a config-schema check per format becomes a load-time validation that fails fast.",
     ],
   },
   {

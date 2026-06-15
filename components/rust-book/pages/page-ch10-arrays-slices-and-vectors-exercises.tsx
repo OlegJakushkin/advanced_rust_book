@@ -95,7 +95,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 4,
-    kind: "debugging or refactoring",
+    kind: "measurement",
     title: "Benchmark preallocation versus push-only growth honestly",
     objective: "Measure whether capacity planning changes your workload enough to matter.",
     starterPrompt:
@@ -119,7 +119,7 @@ const exercises: Exercise[] = [
   {
     number: 5,
     kind: "debugging or refactoring",
-    title: "Repair a structural-mutation bug without changing the API lie",
+    title: "Repair a slice borrow that outlives its backing vector's mutation",
     objective: "Fix code that keeps a borrowed slice alive while reshaping the underlying vector.",
     starterPrompt:
       "A helper takes `let hot = &buffer[..4];`, then `buffer.push(99);`, then still reads from `hot`. Refactor the flow without pretending the original borrow should survive structural mutation.",
@@ -127,15 +127,18 @@ const exercises: Exercise[] = [
       "Can the borrowed work happen earlier?",
       "Should the code copy a tiny fixed header into an array before the push if it truly needs that data later?",
       "Would two phases make the buffer and borrow lifetime easier to review?",
+      "If the algorithm needs to read one region while writing another, can `split_at_mut` give you two disjoint mutable parts without a borrow conflict?",
     ],
     acceptanceCriteria: [
       "Your repair ends the active borrow before structural mutation, or copies the tiny truly-needed subset into independent storage deliberately.",
       "You explain the failure in terms of borrowing a view into storage that may change, not in terms of compiler stubbornness.",
       "You do not keep the old slice alive across the vector growth path.",
+      "If you need to read one region while writing another, you reach for `split_at_mut` to obtain two disjoint mutable parts instead of fighting the borrow checker.",
     ],
     hints: [
       "A slice is a view into existing storage, not a durable reservation of future layout.",
       "If later code really needs a tiny fixed piece, a small copied array may be the honest repair.",
+      "`split_at_mut` returns two mutable slices that do not overlap, so you can write to both halves at once.",
     ],
   },
   {
@@ -170,6 +173,8 @@ const reviewQuestions = [
   "What is the practical difference between `len()` and `capacity()`?",
   "Why should production code avoid depending on a specific vector growth factor?",
   "What workload characteristics make contiguous storage especially attractive?",
+  "When would you choose `iter_mut()` over `into_iter()` on a `Vec<T>`?",
+  "When does `split_at_mut` let you write to two parts of a slice at the same time?",
 ]
 
 const workingLoop = [
@@ -222,7 +227,7 @@ export function PageCh10ArraysSlicesAndVectorsExercises() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Suggested working loop</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">Working checklist</h3>
           <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
             {workingLoop.map((step) => (
               <li key={step}>{step}</li>
@@ -326,7 +331,7 @@ export function PageCh10ArraysSlicesAndVectorsExercises() {
         </section>
 
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <p className="text-sm text-muted-foreground leading-6">
             By the end of this page, you should be able to choose among arrays, slices, vectors, and inline-first storage
             from workload shape, write slice-first functions without narrowing callers unnecessarily, and discuss vector

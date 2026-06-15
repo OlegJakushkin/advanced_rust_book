@@ -338,7 +338,7 @@ export function PageCh32MpiAndHighPerformanceComputing() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">MPI building blocks</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -463,7 +463,7 @@ let size = world.size();`}</code>
               row range maps to a cell range by multiplying both ends by <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cols</code>.
             </p>
             <pre className="mt-2 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{`// row-major dense buffer
+              <code className="font-mono text-foreground">{`// notation (not Rust): row-major dense buffer
 offset = row * cols + col
 
 // rank-local contiguous row chunk
@@ -781,18 +781,18 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
               the load question in rows (10 rows over 3 ranks becomes 4, 3, 3). Then{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">displacements_in_cells</code> walks those
               counts once, multiplying by <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">cols</code> to
-              produce the per-rank starting offset a real scatter would consume. The final allreduce is a separate fan-in
-              that hands every rank the same total. The diagram traces those two tables and the reduction.
+              produce the per-rank starting offset a real scatter would consume. Each slice is then summed into one partial,
+              and the allreduce folds those partials into the same total on every rank. The diagram traces those two tables,
+              the per-slice partials, and the reduction.
             </p>
             <MermaidDiagram
               chart={`flowchart TD
   RC["row_counts: 4, 3, 3"] --> D["displacements_in_cells (x cols)"]
   D --> DI["offsets: 0, 16, 28"]
-  DI --> SC["scatter slices to ranks"]
-  SC --> LC["each rank computes a partial"]
+  DI --> LC["each slice summed into a partial"]
   LC --> AR["allreduce sum"]
   AR --> ALL["same total on every rank"]`}
-              caption="Counts in rows, displacements in cells, then a scatter feeds local work that an allreduce folds back together."
+              caption="Counts in rows, displacements in cells, then each rank's slice is summed into a partial that an allreduce folds back together."
             />
             <RustCodeEditor
               code={codes.mpi_collective_counts_and_allreduce}
@@ -801,7 +801,7 @@ inter-rank exchange  -> MPI send/recv or collectives`}</code>
               output={outputs.mpi_collective_counts_and_allreduce ?? null}
               isRunning={isRunning === "mpi_collective_counts_and_allreduce"}
               filename="mpi_collective_counts_and_allreduce.rs"
-              expectedOutput={"counts = [4, 3, 3]\ndispls = [0, 16, 28]\nsend cells = 12\nallreduce = 21"}
+              expectedOutput={"counts = [4, 3, 3]\ndispls = [0, 16, 28]\nsend cells = 12\nallreduce = 820.0"}
               showResultComparison={true}
               originalCode={DEFAULT_CODES.mpi_collective_counts_and_allreduce}
               onRevert={() => resetCode("mpi_collective_counts_and_allreduce")}

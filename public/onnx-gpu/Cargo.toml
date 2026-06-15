@@ -10,8 +10,12 @@ description = "Chapter 54 — real ONNX inference from Rust on the GPU (CUDA) vs
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "cuda", "load-dynamic"] }
 
 [[bin]]
-name = "onnx_infer"
-path = "src/main.rs"
+name = "onnx_solution"
+path = "src/bin/onnx_solution.rs"
+
+[[bin]]
+name = "onnx_challenge"
+path = "src/bin/onnx_challenge.rs"
 
 [profile.release]
 opt-level = 3

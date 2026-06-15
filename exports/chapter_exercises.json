@@ -27,7 +27,7 @@
 "kind": "code reading",
 "title": "Find the zero-cost part and the real runtime cost",
 "objective": "Identify which parts of a Rust abstraction are compile-time structure and which parts still do real work at runtime.",
-"starterPrompt": "Study an iterator-based function that filters high-priority jobs from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
+"starterPrompt": "Study the `critical_count` iterator function from the main chapter (Example 1), which filters high-priority readings from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
 "prompts": [
 "Call out which parts are likely monomorphized or optimized as abstraction structure.",
 "List the runtime work that still exists: iteration, branching, cache behavior, and any downstream materialization cost.",
@@ -259,7 +259,8 @@
 "Where do `Vec<T>` metadata and `Vec<T>` elements usually live?",
 "What does a lifetime annotation constrain, and what does it not do?",
 "Why can block expressions reduce mutation pressure in production code?",
-"When is `Drop` useful, and what kinds of logic should usually stay out of it?"
+"When is `Drop` useful, and what kinds of logic should usually stay out of it?",
+"In what order do a block's local variables drop, and how does that differ from the drop order of a struct's fields?"
 ],
 "workingLoop": [
 "Name the owner first, then describe the borrow or move.",
@@ -386,7 +387,7 @@
 },
 {
 "number": 6,
-"kind": "design or production scenario",
+"kind": "tooling and CI scenario",
 "title": "Write the CI command pack for the chapter examples",
 "objective": "Define the baseline commands a serious Rust workspace should run for formatting, linting, testing, and benchmarking.",
 "starterPrompt": "Pretend the chapter examples live inside a real Cargo workspace. Write the command sequence you would put into CI and explain what each command protects against.",
@@ -412,7 +413,8 @@
 "When should you create a new crate instead of a new module?",
 "Why is `pub(crate)` often a better default than `pub`?",
 "What kinds of choices belong in Cargo features, and what kinds usually belong in runtime configuration?",
-"Why should benchmarking be explicit rather than assumed?"
+"Why should benchmarking be explicit rather than assumed?",
+"When should `Cargo.lock` be committed, and what does `workspace.dependencies` centralize?"
 ],
 "workingLoop": [],
 "diagnosticRubric": [],
@@ -452,7 +454,7 @@
 "kind": "code reading",
 "title": "Find the unnecessary clone",
 "objective": "Identify where cloning papers over an ownership design that could be simpler.",
-"starterPrompt": "Review a helper that clones a request path into `path_copy`, prints it, then still uses the original path immediately after. Decide whether the clone is required and explain the cleaner alternative.",
+"starterPrompt": "Review this helper. It clones the request path into `path_copy`, prints it, then still uses the original path immediately after. Decide whether the clone is required and explain the cleaner alternative.\n\nfn log_path_bad(path: String) {\n    let path_copy = path.clone();\n    println!(\"handling {}\", path_copy);\n    route(&path);\n}\n\nfn route(_path: &str) {}",
 "prompts": [
 "Can a shared borrow do the same work?",
 "Would returning ownership from a helper be more appropriate than cloning?",
@@ -494,7 +496,7 @@
 "kind": "debugging or refactoring",
 "title": "Annotate lifetimes only where required",
 "objective": "Separate cases that need explicit lifetime relationships from cases handled by elision.",
-"starterPrompt": "Decide which signatures need explicit lifetimes and write the corrected form: `fn first_word(s: &str) -> &str` and `fn pick_longer(left: &str, right: &str) -> &str`.",
+"starterPrompt": "Decide which signatures need explicit lifetimes and write the corrected form: `fn first_word(s: &str) -> &str` and `fn pick_longer(left: &str, right: &str) -> &str`. (Here we use the standard `first_word` pattern rather than the chapter's `first_segment` to keep the example self-contained; both illustrate the same single-input elision.)",
 "prompts": [
 "Which function has only one input borrow?",
 "Which function returns one of several input borrows?",
@@ -524,7 +526,7 @@
 "acceptanceCriteria": [
 "Your repair ends the borrow before the mutable operation, or deliberately converts to owned data for a justified reason.",
 "You do not default to cloning without explaining why independent ownership is needed.",
-"You explain the conflict as overlapping borrow duration, not as ownership or borrowing rule involved."
+"You explain the conflict as overlapping borrow duration, not as a borrowing rule being violated in principle."
 ],
 "hints": [
 "Ask when the immutable borrow is last used.",
@@ -560,7 +562,8 @@
 "What is the operational difference between `&T` and `&mut T`?",
 "What does a lifetime annotation describe, and what does it never do?",
 "When is returning `String` cleaner than returning `&str`?",
-"Why do queue, cache, and async boundaries often push you toward owned data?"
+"Why do queue, cache, and async boundaries often push you toward owned data?",
+"Name one aliasing or mutation habit from your prior language (C++, C#, Go, or Python) that Rust's borrow checker makes explicit and enforced."
 ],
 "workingLoop": [
 "State the current owner before you write or change any code.",
@@ -647,7 +650,7 @@
 "kind": "debugging or refactoring",
 "title": "Refactor a self-referential design into stable indices",
 "objective": "Replace an invalid self-borrowing layout with a representation Rust can move and reason about safely.",
-"starterPrompt": "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }`. Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
+"starterPrompt": "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }` (this layout cannot be constructed in safe Rust — see why in the chapter, then refactor it away entirely). Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
 "prompts": [
 "Will you store a byte range, a start/end offset pair, or a typed token ID?",
 "How will the accessor recover `&str` from `&self`?",
@@ -666,7 +669,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "design or production scenario",
 "title": "Choose Box, Rc, or Arc intentionally",
 "objective": "Practice mapping pointer types to actual ownership semantics instead of treating them as interchangeable heap wrappers.",
 "starterPrompt": "Choose a field type for each case: a recursive AST node owned by one parent, a read-mostly UI template shared inside one thread, and a schema object shared across worker threads.",
@@ -728,7 +731,7 @@
 "filename": "audit_line_lab.rs",
 "runKey": "ch05_ex_audit_line",
 "expectedOutput": "level = WARN\nraw = WARN: cache miss",
-"initialCode": "struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(),\n        }\n    }\n\n    fn level(&self) -> &str {\n        \"UNKNOWN\"\n    }\n}\n\nfn main() {\n    let line = AuditLine::new(\"WARN: cache miss\");\n    println!(\"level = {}\", line.level());\n    println!(\"raw = {}\", line.raw);\n}"
+"initialCode": "struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(), // intentional stub - fix me: store the raw argument\n        }\n    }\n\n    fn level(&self) -> &str {\n        \"UNKNOWN\" // intentional stub - fix me: derive the level from self.raw\n    }\n}\n\nfn main() {\n    let line = AuditLine::new(\"WARN: cache miss\");\n    println!(\"level = {}\", line.level());\n    println!(\"raw = {}\", line.raw);\n}"
 }
 },
 "ch06": {
@@ -746,7 +749,7 @@
 ],
 "acceptanceCriteria": [
 "You explain that the reference points into the vector's current buffer.",
-"You state that growth may relocate the buffer and therefore invalidate the old address story.",
+"You state that growth may relocate the buffer and therefore invalidate the old address the reference held.",
 "You propose at least one valid repair such as using an index, ending the borrow sooner, or changing representation."
 ],
 "hints": [
@@ -759,7 +762,7 @@
 "kind": "code reading",
 "title": "Find the hidden shape change",
 "objective": "Read a small loop and identify which operation changes vector shape or element positions.",
-"starterPrompt": "Review a loop that stores `&sessions[i]` in a temporary, then calls either `reserve`, `insert`, `remove`, or `sort_by_key` later in the same flow. Identify which operations threaten reference validity and why.",
+"starterPrompt": "Read this snippet and identify which operations threaten the validity of `first` and why:\n\n```\nfn audit(sessions: &mut Vec<Session>) {\n    let first = &sessions[0];        // borrow into the current buffer\n    sessions.reserve(64);            // (a)\n    sessions.insert(0, Session::default()); // (b)\n    sessions.remove(3);              // (c)\n    sessions.sort_by_key(|s| s.score);      // (d)\n    println!(\"{}\", first.score);     // uses the old borrow\n}\n```\n\nClassify (a)-(d) as relocation hazards, position-shift hazards, or both, and say which handle would stay meaningful after each.",
 "prompts": [
 "Which operations may relocate storage?",
 "Which operations may keep the same buffer but still shift positions?",
@@ -867,7 +870,8 @@
 "Why are index handles often the default durable handle for `Vec<T>`?",
 "What is the difference between stable logical identity and stable memory address?",
 "When is `Vec<Box<T>>` a better fit than plain `Vec<T>`?",
-"Why do two-phase loops often produce the clearest vector mutation code?"
+"Why do two-phase loops often produce the clearest vector mutation code?",
+"When is `split_at_mut` preferable to collecting indices for a two-phase pass?"
 ],
 "workingLoop": [
 "Ask whether the vector's shape may change while the handle is alive.",
@@ -958,20 +962,22 @@
 "kind": "debugging or refactoring",
 "title": "Remove unnecessary clones from a read-only API",
 "objective": "Repair an API that clones owned strings where borrowing would express the contract more accurately.",
-"starterPrompt": "A helper `fn route_label(route: String) -> String` is called only to log and compare route text. Refactor the API so callers stop cloning route strings just to satisfy the signature.",
+"starterPrompt": "A helper `fn route_label(route: String) -> String` returns the route unchanged when it already starts with `/`, and otherwise returns a corrected copy with a leading `/` added. Callers that still need their route afterward currently write `route_label(route.clone())` just to satisfy the owned parameter. Refactor the API so callers stop cloning route strings.",
 "prompts": [
-"What should the parameter type become if the helper only reads?",
-"Should the return type stay owned or become borrowed?",
+"What should the parameter type become if the helper only reads its input?",
+"Since the function usually returns the input unchanged and only sometimes rewrites it, could `Cow<'_, str>` as the return type avoid a mandatory allocation on the common path?",
 "Which call sites can lose `.clone()` after the change?"
 ],
 "acceptanceCriteria": [
-"Your refactor changes the signature to borrow when read-only access is enough.",
+"Your refactor changes the parameter to borrow with `&str` when read-only access is enough.",
+"Your return type avoids allocating on the unchanged-input path, for example by returning `Cow<'_, str>` that only allocates on the rewrite branch.",
 "You remove at least one unnecessary clone from the caller side.",
 "You explain why borrowing communicates the contract more clearly than taking ownership here."
 ],
 "hints": [
 "If the helper only inspects text, start with `&str`.",
-"A better signature usually fixes more than one clone at once."
+"A better signature usually fixes more than one clone at once.",
+"`Cow<'_, str>` lets the unchanged branch return `Cow::Borrowed` with no allocation and the rewrite branch return `Cow::Owned`."
 ]
 },
 {
@@ -979,15 +985,16 @@
 "kind": "design or production scenario",
 "title": "Decide whether a type should implement Copy",
 "objective": "Practice the conservative rule set for implementing `Copy` safely.",
-"starterPrompt": "Evaluate whether each type should implement `Copy`: `RequestId(u64)`, `Span { start: usize, end: usize }`, `SessionKey(String)`, `SharedSchema(Arc<str>)`, and `SocketOwner(TcpStream)`.",
+"starterPrompt": "Evaluate whether each type should implement `Copy`: `RequestId(u64)`, `Span { start: usize, end: usize }`, `SessionToken(u64)`, `SharedSchema(Arc<str>)`, and `SocketOwner(TcpStream)`.",
 "prompts": [
-"Which ones satisfy Rust's mechanical rules for `Copy`?",
-"Which ones would still be a semantic mistake even if the shape looked small?",
+"Which ones cannot be `Copy` because the compiler would reject the derive outright?",
+"Which ones could mechanically be `Copy` but would still be a semantic mistake?",
 "Where is explicit `Clone` or no duplication trait the better signal?"
 ],
 "acceptanceCriteria": [
 "You approve `Copy` only for types where implicit duplication is trivial and unsurprising.",
-"You reject `Copy` for heap-owning or resource-owning types.",
+"You separate the two gates: `SharedSchema` and `SocketOwner` fail the mechanical rule outright, while `SessionToken(u64)` passes it yet is a semantic mistake to copy.",
+"You reject `Copy` for `SessionToken(u64)` even though every field is `Copy`, because implicitly duplicating a credential hides which copy is authoritative.",
 "You explain why `Arc<T>` being cheap to clone does not make the wrapper automatically a good `Copy` candidate."
 ],
 "hints": [
@@ -1069,7 +1076,7 @@
 "kind": "code reading",
 "title": "Find the UB risks in a raw-pointer copy helper",
 "objective": "Practice spotting the real missing proof obligations in a pointer-based routine.",
-"starterPrompt": "Review a function that takes `dst: *mut u8`, `src: *const u8`, and `len: usize`, loops with pointer arithmetic, and is exposed as a safe public function with no checks.",
+"starterPrompt": "Review a function that takes `dst: *mut u8`, `src: *const u8`, and `len: usize`, loops with pointer arithmetic, and is exposed as a safe public function that performs no validation of its raw-pointer arguments before use.",
 "prompts": [
 "Which caller obligations are currently undocumented?",
 "Should the function stay safe, become `unsafe fn`, or be redesigned around slices?",
@@ -1099,7 +1106,8 @@
 "acceptanceCriteria": [
 "Short buffers return `Err(\"buffer too small\")` exactly.",
 "Long enough buffers return `Ok(())` and contain the marker `RST!`.",
-"The unsafe region stays small and depends on an explicit length check."
+"The unsafe region stays small and depends on an explicit length check.",
+"Your unsafe block is preceded by a `// SAFETY:` comment that names the precondition the length check established."
 ],
 "hints": [
 "The unsafe block should begin only after the precondition is already true.",
@@ -1111,7 +1119,7 @@
 "kind": "debugging or refactoring",
 "title": "Move `assume_init` to the only valid place",
 "objective": "Repair a `MaybeUninit` design that treats uninitialized storage as a finished value too early.",
-"starterPrompt": "You inherit code that creates `MaybeUninit<[u32; 4]>`, calls `assume_init()` immediately, and then writes only some elements afterward. Refactor the flow so initialization becomes explicit and ordered correctly.",
+"starterPrompt": "You inherit code that creates `MaybeUninit<[u32; 4]>`, calls `assume_init()` immediately after declaring the storage (or casts the result to a mutable pointer to write through it), leaving some elements uninitialized. Refactor the flow so initialization becomes explicit and ordered correctly. Note: this exercise uses `[u32; 4]` rather than the `[u8; 4]` from the chapter example; the discipline is identical, only the element type and stride change.",
 "prompts": [
 "Where should writes occur relative to `assume_init`?",
 "What must be true before the final array exists as a real `[u32; 4]`?",
@@ -1246,7 +1254,7 @@
 "kind": "implementation",
 "title": "Build a single-thread cache with Rc plus interior mutability",
 "objective": "Compose shared ownership with the smallest sufficient interior-mutability tool instead of reaching for RefCell by reflex.",
-"starterPrompt": "Implement a single-thread counter cache shared by several handles: a struct Stats holding hits: Cell<u32> and a label: String, wrapped as Rc<Stats>. Provide fn record_hit(stats: &Rc<Stats>) that increments the count and fn snapshot(stats: &Rc<Stats>) -> u32 that reads it.",
+"starterPrompt": "Implement a single-thread counter cache shared by several handles: a struct Stats holding count: Cell<u32> and a label: String, wrapped as Rc<Stats>. Provide fn record_hit(stats: &Rc<Stats>) that increments the count and fn snapshot(stats: &Rc<Stats>) -> u32 that reads it.",
 "prompts": [
 "Choose Cell<u32> rather than RefCell<u32> and justify the choice in one sentence.",
 "Implement record_hit using get and set (or a single update of the copied value), without handing out an interior reference.",
@@ -1273,7 +1281,7 @@
 "prompts": [
 "Give poll the exact signature fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>.",
 "Recover a mutable reference to the fields with self.get_mut() and explain why that is permitted here.",
-"Build a no-op Waker and Context, pin the future with Box::pin, and poll via Future::poll(task.as_mut(), &mut cx).",
+"Build a no-op Waker and Context, pin the future with Box::pin, and poll via Future::poll(task.as_mut(), &mut cx). (Note: Wake::wake takes Arc<Self>, so std::sync::Arc is needed even in this single-thread exercise.)",
 "Count how many Pending results precede the single Ready for remaining = 3."
 ],
 "acceptanceCriteria": [
@@ -1315,7 +1323,7 @@
 "kind": "design or production scenario",
 "title": "Choose pointer types for a mixed-ownership service",
 "objective": "Translate a service's ownership, threading, and mutation requirements into concrete composite pointer types.",
-"starterPrompt": "Design the storage types for the service in the opening scenario: recursive parser state with a single owner, planning data shared on one thread, a schema shared read-only across worker threads, retry coordination mutated by several threads, and a future stored to be polled later.",
+"starterPrompt": "A service has five storage concerns: recursive parser state with a single owner, planning data shared on one thread, a schema shared read-only across worker threads, retry coordination mutated by several threads, and a future stored to be polled later. (These come from the chapter's opening scenario.) Design the storage type for each concern.",
 "prompts": [
 "Assign a pointer type to each of the five concerns and justify owner count and thread boundary for each.",
 "For each shared-and-mutable concern, name the enforcement model and read the composite type literally (for example, what Arc<Mutex<T>> means).",
@@ -1426,7 +1434,7 @@
 },
 {
 "number": 4,
-"kind": "debugging or refactoring",
+"kind": "measurement",
 "title": "Benchmark preallocation versus push-only growth honestly",
 "objective": "Measure whether capacity planning changes your workload enough to matter.",
 "starterPrompt": "Build a small benchmark harness that pushes the same number of elements into two vectors: one created with `Vec::new()` and one created with `Vec::with_capacity(n)`.",
@@ -1449,22 +1457,25 @@
 {
 "number": 5,
 "kind": "debugging or refactoring",
-"title": "Repair a structural-mutation bug without changing the API lie",
+"title": "Repair a slice borrow that outlives its backing vector's mutation",
 "objective": "Fix code that keeps a borrowed slice alive while reshaping the underlying vector.",
 "starterPrompt": "A helper takes `let hot = &buffer[..4];`, then `buffer.push(99);`, then still reads from `hot`. Refactor the flow without pretending the original borrow should survive structural mutation.",
 "prompts": [
 "Can the borrowed work happen earlier?",
 "Should the code copy a tiny fixed header into an array before the push if it truly needs that data later?",
-"Would two phases make the buffer and borrow lifetime easier to review?"
+"Would two phases make the buffer and borrow lifetime easier to review?",
+"If the algorithm needs to read one region while writing another, can `split_at_mut` give you two disjoint mutable parts without a borrow conflict?"
 ],
 "acceptanceCriteria": [
 "Your repair ends the active borrow before structural mutation, or copies the tiny truly-needed subset into independent storage deliberately.",
 "You explain the failure in terms of borrowing a view into storage that may change, not in terms of compiler stubbornness.",
-"You do not keep the old slice alive across the vector growth path."
+"You do not keep the old slice alive across the vector growth path.",
+"If you need to read one region while writing another, you reach for `split_at_mut` to obtain two disjoint mutable parts instead of fighting the borrow checker."
 ],
 "hints": [
 "A slice is a view into existing storage, not a durable reservation of future layout.",
-"If later code really needs a tiny fixed piece, a small copied array may be the honest repair."
+"If later code really needs a tiny fixed piece, a small copied array may be the honest repair.",
+"`split_at_mut` returns two mutable slices that do not overlap, so you can write to both halves at once."
 ]
 },
 {
@@ -1496,7 +1507,9 @@
 "Why is `&[T]` usually a better function parameter than `&Vec<T>`?",
 "What is the practical difference between `len()` and `capacity()`?",
 "Why should production code avoid depending on a specific vector growth factor?",
-"What workload characteristics make contiguous storage especially attractive?"
+"What workload characteristics make contiguous storage especially attractive?",
+"When would you choose `iter_mut()` over `into_iter()` on a `Vec<T>`?",
+"When does `split_at_mut` let you write to two parts of a slice at the same time?"
 ],
 "workingLoop": [
 "State whether the algorithm needs fixed shape, borrowed access, or owned growth.",
@@ -1520,7 +1533,7 @@
 "kind": "warm-up comprehension",
 "title": "Choose map, set, or tree from the contract",
 "objective": "Practice choosing `HashMap`, `HashSet`, `BTreeMap`, or `BTreeSet` from semantics rather than familiarity.",
-"starterPrompt": "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports range-like prefix reviews.",
+"starterPrompt": "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports prefix range queries.",
 "prompts": [
 "Which workload is really key-value association?",
 "Which workload is only membership and deduplication?",
@@ -1543,7 +1556,7 @@
 "kind": "code reading",
 "title": "Remove duplicate lookups with Entry API",
 "objective": "Read a read-modify-write path and replace repeated lookup logic with a single-entry update path.",
-"starterPrompt": "You inherit a counter update that does `contains_key`, then `get_mut`, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
+"starterPrompt": "You inherit a counter update that does `contains_key`, then indexes with `counts[&route]` to read the old value, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
 "prompts": [
 "What duplicate work is the original shape doing?",
 "Which `entry` helper best fits: `or_insert`, `or_default`, or `and_modify`?",
@@ -1739,7 +1752,7 @@
 },
 {
 "number": 4,
-"kind": "debugging or refactoring",
+"kind": "design",
 "title": "Design a matrix view without copying data",
 "objective": "Replace a clone-heavy submatrix helper with a borrowed view that carries enough metadata to interpret the same storage.",
 "starterPrompt": "A helper currently builds a fresh `Vec<T>` for every 2D window extracted from a larger flat buffer. Redesign it as a borrowed view.",
@@ -1761,7 +1774,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "design",
 "title": "Choose between const generics and runtime dimensions honestly",
 "objective": "Separate fixed-invariant shapes from merely common shapes.",
 "starterPrompt": "Review three cases: a 3x3 image kernel, a 4x4 transform matrix in a graphics or simulation path, and a batch-sized score matrix whose dimensions come from request input.",
@@ -1776,7 +1789,7 @@
 "You explain at least one tradeoff involving API specificity, monomorphization, or call-site simplicity."
 ],
 "hints": [
-"“Often 4x4” and “must be 4x4” are not the same statement.",
+"\"Often 4x4\" and \"must be 4x4\" are not the same statement.",
 "Fixed shape in the type is strongest when the invariant is truly global to the API."
 ]
 },
@@ -1823,8 +1836,8 @@
 "title": "Runnable lab · Row-major `Matrix<T>` wrapper",
 "filename": "row_major_matrix_lab.rs",
 "runKey": "ch12_ex_row_major_matrix",
-"expectedOutput": "a01 = 7\nrow1 sum = 11\ncells = 4",
-"initialCode": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 2, 0_i32);\n    m.set(0, 0, 5);\n    m.set(0, 1, 7);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}"
+"expectedOutput": "a01 = 7\nrow1 sum = 16\ncells = 6",
+"initialCode": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 3, 0_i32);\n    m.set(0, 0, 10);\n    m.set(0, 1, 7);\n    m.set(0, 2, 30);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n    m.set(1, 2, 5);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}"
 }
 },
 "ch13": {
@@ -1868,7 +1881,7 @@
 "The answer maps two->0, three->1, four->2, sum->3, root->4 as the issued ExprId values.",
 "The trace shows eval(root) = eval(sum) * eval(four) = (2 + 3) * 4 = 20.",
 "The answer reports value = 20 and nodes = 5 as printed output.",
-"The answer explains that ExprId is logical identity into one owning vector, not shared ownership, so edges are indices rather than owners."
+"The answer explains that ExprId is logical identity into one owning vector, not shared ownership, so edges are indices rather than owners, and states that switching Add to Box<Expr> would make each node own its children exclusively, preventing sub-expression sharing and giving a tree-only (not DAG) structure."
 ],
 "hints": [
 "Allocation order is the slot order, because alloc pushes onto nodes and returns its length as the id.",
@@ -1895,7 +1908,7 @@
 ],
 "hints": [
 "This is the same one-cursor idea as reset, but to an arbitrary saved position instead of zero.",
-"rewind is only sound forward to backward; guard or document the case where mark exceeds the live cursor."
+"rewind is only valid when the saved mark is less than or equal to the current used cursor; guard or document the case where mark exceeds the live cursor."
 ]
 },
 {
@@ -1926,7 +1939,7 @@
 "kind": "debugging or refactoring",
 "title": "Remove the reference cycle from an Rc graph",
 "objective": "Convert an Rc-based node graph with a leaking back-edge into an arena-and-index graph.",
-"starterPrompt": "You are given a small graph of Rc<RefCell<Node>> where edges are Rc<Node> owners and a back-edge from D to A forms a cycle that never drops to zero. Refactor it so one arena owns all nodes and every edge is a NodeId index.",
+"starterPrompt": "You are given a small graph of Rc<RefCell<Node>> where edges are Rc<RefCell<Node>> owners and a back-edge from D to A forms a cycle that never drops to zero. Refactor it so one arena owns all nodes and every edge is a NodeId index.",
 "prompts": [
 "Identify why the back-edge in the Rc version leaks and which counts never reach zero.",
 "Introduce an arena that owns all nodes in one vector and hands out NodeId handles.",
@@ -1973,7 +1986,8 @@
 "Why does an arena-and-index AST avoid the reference-cycle problem that an Rc<RefCell<Node>> graph can hit?",
 "What is the difference between what a reference arena and an index arena hand back across a boundary, and which one the borrow checker ties to the arena's lifetime?",
 "What problem does a generation counter on an arena handle solve that a plain usize index does not?",
-"When is the arena model the wrong fit, given that its cheap operation is whole-region reset rather than per-object free?"
+"The arena's only cheap teardown operation is whole-region reset, not per-object free. When does that make it the wrong fit?",
+"Given the chapter's three-question framework, which crate family fits a build-once AST and which fits a deleting registry that needs stale-handle protection?"
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -2026,13 +2040,15 @@
 "State what value type Self::Decision resolves to for FixedLimit and where that is declared.",
 "Explain what the where-clause P: RetryPolicy<Decision = bool> lets evaluate assume about decide's return.",
 "Identify which method evaluate calls that FixedLimit overrides and which it inherits unchanged.",
-"Predict the two printed lines for FixedLimit { max: 3 } and evaluate(&policy, 2)."
+"Predict the two printed lines for FixedLimit { max: 3 } and evaluate(&policy, 2).",
+"Explain why Decision is an associated type rather than a generic parameter on the trait, and what would change at call sites if type Decision were replaced with a trait-level <D>."
 ],
 "acceptanceCriteria": [
 "The answer says Self::Decision is bool because the impl declares type Decision = bool.",
 "It explains the where-clause guarantees decide returns bool so format! can use it directly with no turbofish or conversion.",
 "It notes label is overridden by FixedLimit while should_log is inherited from the default method.",
-"It predicts the output lines 'fixed-limit => true' and 'log = true'."
+"It predicts the output lines 'fixed-limit => true' and 'log = true'.",
+"It explains Decision is an associated type because each policy has one natural output, and that a trait-level generic <D> would force callers to disambiguate the instantiation with turbofish or extra annotations."
 ],
 "hints": [
 "decide(2) for max 3 evaluates 2 < 3.",
@@ -2044,7 +2060,7 @@
 "kind": "implementation",
 "title": "Add a second RetryPolicy with a default override",
 "objective": "Implement a new RetryPolicy that still satisfies the Decision = bool bound while customizing a default method.",
-"starterPrompt": "Add a struct AlwaysRetry that implements RetryPolicy with Decision = bool, returns true from decide regardless of attempts, labels itself 'always', and overrides should_log to return false.",
+"starterPrompt": "Add a unit struct AlwaysRetry (no fields, written without braces) that implements RetryPolicy with Decision = bool, returns true from decide regardless of attempts, labels itself 'always', and overrides should_log to return false.",
 "prompts": [
 "Set type Decision = bool so AlwaysRetry can be passed to evaluate unchanged.",
 "Implement decide to ignore attempts and return true.",
@@ -2055,7 +2071,7 @@
 "AlwaysRetry sets type Decision = bool and compiles against fn evaluate without changing evaluate.",
 "decide returns true for any attempts value, ignoring the argument.",
 "label returns 'always' and should_log returns false, overriding the default.",
-"evaluate(&AlwaysRetry, 99) yields 'always => true' and AlwaysRetry.should_log() yields false."
+"evaluate(&AlwaysRetry, 99) yields 'always => true' and AlwaysRetry.should_log() yields false (AlwaysRetry is a unit struct, so it is spelled without braces)."
 ],
 "hints": [
 "Because Decision is bool, no change to evaluate's signature is needed.",
@@ -2130,6 +2146,29 @@
 "Configuration assembling a heterogeneous list at runtime is the canonical trait-object case.",
 "Object safety is cheap to preserve up front and a breaking change to add back later."
 ]
+},
+{
+"number": 7,
+"kind": "code reading",
+"title": "Use a newtype to satisfy the orphan rule",
+"objective": "Explain why a bare foreign-trait-for-foreign-type impl is rejected and how a newtype wrapper makes it legal.",
+"starterPrompt": "You want to give Vec<String> a custom Display that joins the items with commas. Writing impl Display for Vec<String> directly is rejected by the orphan rule because both Display and Vec are foreign to your crate. Wrap the value in a local newtype struct Lines(Vec<String>) and implement Display for that instead.",
+"prompts": [
+"State the orphan rule: an impl is allowed only when the trait, the type, or both are local to your crate.",
+"Explain why impl Display for Vec<String> violates it, since neither Display nor Vec belongs to your crate.",
+"Define a local newtype struct Lines(Vec<String>) and write impl Display for Lines, since Lines is now local.",
+"Note that you reach the inner value through self.0 inside the impl."
+],
+"acceptanceCriteria": [
+"The answer states the orphan rule: at least one of the trait or the type must be local to the crate.",
+"It explains the bare impl Display for Vec<String> is rejected because both Display and Vec are foreign.",
+"It introduces a local newtype struct Lines(Vec<String>) and implements Display for Lines, which is now allowed.",
+"The Display body reads the wrapped value through self.0."
+],
+"hints": [
+"The newtype is local to your crate, so the impl now has a local type even though Display is foreign.",
+"A tuple struct's single field is reached with self.0."
+]
 }
 ],
 "reviewQuestions": [
@@ -2137,7 +2176,8 @@
 "How does a generic bound's dispatch differ from a trait object's dispatch, and what runtime cost does each carry?",
 "When should a trait use an associated type instead of a generic type parameter, and what symptom appears at call sites if you choose wrong?",
 "What does object safety require of a trait's methods, and why does each rule exist for a single indirect call through a vtable?",
-"Why is deciding up front whether a trait must work behind dyn important, given that adding a generic method or a by-value Self return later is a breaking change?"
+"Why is deciding up front whether a trait must work behind dyn important, given that adding a generic method or a by-value Self return later is a breaking change?",
+"What does a supertrait such as trait Audit: Identify require of every implementer, and what does it let Audit's default methods assume?"
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -2147,12 +2187,12 @@
 ],
 "diagnosticRubric": [],
 "lab": {
-"title": "Runnable lab · object-safe stage pipeline with a default method",
+"title": "Runnable lab · object-safe stage list with a default method",
 "filename": "stage_pipeline_lab.rs",
 "runKey": "ch14_ex_stage",
 "expectedOutput": "trim => hi\nwrap => [b]  hi  [/b]\nstages = 2",
-"helperText": "Two unrelated structs implement one object-safe Stage trait and live together in a Vec<Box<dyn Stage>>. The trait's default describe method drives every stage through the vtable; fill in the two run methods so the pipeline prints correctly.",
-"initialCode": "trait Stage {\n    fn name(&self) -> &'static str;\n    fn run(&self, input: &str) -> String;\n\n    // Default method: reuse name() and run() so every stage prints the same way.\n    fn describe(&self, input: &str) -> String {\n        format!(\"{} => {}\", self.name(), self.run(input))\n    }\n}\n\nstruct Trim;\nstruct Wrap {\n    tag: &'static str,\n}\n\nimpl Stage for Trim {\n    fn name(&self) -> &'static str {\n        \"trim\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: return the input with leading and trailing whitespace removed.\n        input.to_string()\n    }\n}\n\nimpl Stage for Wrap {\n    fn name(&self) -> &'static str {\n        \"wrap\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: wrap input as [tag]input[/tag] using self.tag.\n        input.to_string()\n    }\n}\n\nfn run_pipeline(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {\n    stages.iter().map(|s| s.describe(input)).collect()\n}\n\nfn main() {\n    let stages: Vec<Box<dyn Stage>> = vec![\n        Box::new(Trim),\n        Box::new(Wrap { tag: \"b\" }),\n    ];\n\n    for line in run_pipeline(&stages, \"  hi  \") {\n        println!(\"{}\", line);\n    }\n    println!(\"stages = {}\", stages.len());\n}\n"
+"helperText": "Two unrelated structs implement one object-safe Stage trait and live together in a Vec<Box<dyn Stage>>. Each stage receives the same raw input independently; the stages are not chained, so Wrap sees the untrimmed \"  hi  \", not Trim's output. The trait's default describe method drives every stage through the vtable; fill in the two run methods so the output prints correctly.",
+"initialCode": "trait Stage {\n    fn name(&self) -> &'static str;\n    fn run(&self, input: &str) -> String;\n\n    // Default method: reuse name() and run() so every stage prints the same way.\n    fn describe(&self, input: &str) -> String {\n        format!(\"{} => {}\", self.name(), self.run(input))\n    }\n}\n\nstruct Trim;\nstruct Wrap {\n    tag: &'static str,\n}\n\nimpl Stage for Trim {\n    fn name(&self) -> &'static str {\n        \"trim\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: return the input with leading and trailing whitespace removed.\n        input.to_string()\n    }\n}\n\nimpl Stage for Wrap {\n    fn name(&self) -> &'static str {\n        \"wrap\"\n    }\n    fn run(&self, input: &str) -> String {\n        // TODO: wrap input as [tag]input[/tag] using self.tag.\n        input.to_string()\n    }\n}\n\n// Each stage receives the same raw input independently; this is a fan-out,\n// not a chain, so the output of one stage is never fed into the next.\nfn run_stages(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {\n    stages.iter().map(|s| s.describe(input)).collect()\n}\n\nfn main() {\n    let stages: Vec<Box<dyn Stage>> = vec![\n        Box::new(Trim),\n        Box::new(Wrap { tag: \"b\" }),\n    ];\n\n    for line in run_stages(&stages, \"  hi  \") {\n        println!(\"{}\", line);\n    }\n    println!(\"stages = {}\", stages.len());\n}\n"
 }
 },
 "ch15": {
@@ -2245,7 +2285,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "state modeling",
 "title": "Refactor a state machine into Rust-native transitions",
 "objective": "Replace flag-based or inheritance-heavy state transitions with an enum or typestate model.",
 "starterPrompt": "You inherit `status: String` plus booleans like `approved` and `published`. Redesign the model so invalid combinations stop existing.",
@@ -2355,7 +2395,7 @@
 ],
 "hints": [
 "Draft permits add_line; Submitted rejects it. submit is the only transition.",
-"total_cents folds qty.get() as u64 times unit_price.get() across the lines."
+"total_cents folds qty.get() as u64 times the unit price across the lines. In the chapter's ddd_order_aggregate listing unit_price is a MoneyCents value object, so the price is unit_price.get(); in the lab the price is already a plain u64 field, so multiply qty.get() as u64 * unit_price_cents directly."
 ]
 },
 {
@@ -2469,9 +2509,9 @@
 "title": "Runnable lab · aggregate invariants on an order",
 "filename": "order_aggregate_lab.rs",
 "runKey": "ch16_ex_order_aggregate",
-"expectedOutput": "lines = 2\ntotal cents = 4200\nstate = submitted\nsubmit ok = true\nlocked after submit = true\nzero qty rejected = true",
-"helperText": "Complete Order::submit so it refuses an empty order and otherwise moves to Submitted, and Order::total_cents so it folds quantity times unit price across the lines. The Quantity value object already rejects zero at construction.",
-"initialCode": "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct Quantity(u32);\n\nimpl Quantity {\n    fn new(value: u32) -> Result<Self, DomainError> {\n        if value == 0 {\n            return Err(DomainError::InvalidQuantity);\n        }\n        Ok(Self(value))\n    }\n\n    fn get(self) -> u32 {\n        self.0\n    }\n}\n\n#[derive(Debug)]\nenum DomainError {\n    InvalidQuantity,\n    EmptyOrder,\n    CannotModifySubmittedOrder,\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nenum OrderStatus {\n    Draft,\n    Submitted,\n}\n\n#[derive(Debug)]\nstruct Order {\n    status: OrderStatus,\n    lines: Vec<(Quantity, u64)>,\n}\n\nimpl Order {\n    fn new() -> Self {\n        Self { status: OrderStatus::Draft, lines: Vec::new() }\n    }\n\n    fn add_line(&mut self, qty: Quantity, unit_price_cents: u64) -> Result<(), DomainError> {\n        if self.status == OrderStatus::Submitted {\n            return Err(DomainError::CannotModifySubmittedOrder);\n        }\n        self.lines.push((qty, unit_price_cents));\n        Ok(())\n    }\n\n    fn submit(&mut self) -> Result<(), DomainError> {\n        // TODO: reject an empty order with DomainError::EmptyOrder,\n        // otherwise move the status to Submitted and return Ok(()).\n        self.status = OrderStatus::Submitted;\n        Ok(())\n    }\n\n    fn total_cents(&self) -> u64 {\n        // TODO: sum qty.get() as u64 * unit_price_cents over every line.\n        0\n    }\n\n    fn status(&self) -> &'static str {\n        match self.status {\n            OrderStatus::Draft => \"draft\",\n            OrderStatus::Submitted => \"submitted\",\n        }\n    }\n}\n\nfn main() {\n    let mut order = Order::new();\n    order.add_line(Quantity::new(2).unwrap(), 1500).unwrap();\n    order.add_line(Quantity::new(3).unwrap(), 400).unwrap();\n\n    let submitted = order.submit().is_ok();\n    let blocked = order.add_line(Quantity::new(1).unwrap(), 100).is_err();\n    let zero_qty = Quantity::new(0).is_err();\n\n    println!(\"lines = {}\", order.lines.len());\n    println!(\"total cents = {}\", order.total_cents());\n    println!(\"state = {}\", order.status());\n    println!(\"submit ok = {}\", submitted);\n    println!(\"locked after submit = {}\", blocked);\n    println!(\"zero qty rejected = {}\", zero_qty);\n}"
+"expectedOutput": "lines = 2\ntotal cents = 4200\nstate = submitted\nsubmit ok = true\nlocked after submit = true\nzero qty rejected = true\nempty rejected = true",
+"helperText": "Complete Order::submit so it refuses an empty order and otherwise moves to Submitted, and Order::total_cents so it folds quantity times unit price across the lines. The Quantity value object already rejects zero at construction. The empty rejected = true line only turns true once submit guards the empty-order case, so it fails until you implement that guard.",
+"initialCode": "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nstruct Quantity(u32);\n\nimpl Quantity {\n    fn new(value: u32) -> Result<Self, DomainError> {\n        if value == 0 {\n            return Err(DomainError::InvalidQuantity);\n        }\n        Ok(Self(value))\n    }\n\n    fn get(self) -> u32 {\n        self.0\n    }\n}\n\n#[derive(Debug)]\nenum DomainError {\n    InvalidQuantity,\n    EmptyOrder,\n    CannotModifySubmittedOrder,\n}\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\nenum OrderStatus {\n    Draft,\n    Submitted,\n}\n\n#[derive(Debug)]\nstruct Order {\n    status: OrderStatus,\n    lines: Vec<(Quantity, u64)>,\n}\n\nimpl Order {\n    fn new() -> Self {\n        Self { status: OrderStatus::Draft, lines: Vec::new() }\n    }\n\n    fn add_line(&mut self, qty: Quantity, unit_price_cents: u64) -> Result<(), DomainError> {\n        if self.status == OrderStatus::Submitted {\n            return Err(DomainError::CannotModifySubmittedOrder);\n        }\n        self.lines.push((qty, unit_price_cents));\n        Ok(())\n    }\n\n    fn submit(&mut self) -> Result<(), DomainError> {\n        // TODO: reject an empty order with DomainError::EmptyOrder,\n        // otherwise move the status to Submitted and return Ok(()).\n        self.status = OrderStatus::Submitted;\n        Ok(())\n    }\n\n    fn total_cents(&self) -> u64 {\n        // TODO: sum qty.get() as u64 * unit_price_cents over every line.\n        0\n    }\n\n    fn status(&self) -> &'static str {\n        match self.status {\n            OrderStatus::Draft => \"draft\",\n            OrderStatus::Submitted => \"submitted\",\n        }\n    }\n}\n\nfn main() {\n    let mut order = Order::new();\n    order.add_line(Quantity::new(2).unwrap(), 1500).unwrap();\n    order.add_line(Quantity::new(3).unwrap(), 400).unwrap();\n\n    let submitted = order.submit().is_ok();\n    let blocked = order.add_line(Quantity::new(1).unwrap(), 100).is_err();\n    let zero_qty = Quantity::new(0).is_err();\n    let empty_rejected = Order::new().submit().is_err();\n\n    println!(\"lines = {}\", order.lines.len());\n    println!(\"total cents = {}\", order.total_cents());\n    println!(\"state = {}\", order.status());\n    println!(\"submit ok = {}\", submitted);\n    println!(\"locked after submit = {}\", blocked);\n    println!(\"zero qty rejected = {}\", zero_qty);\n    println!(\"empty rejected = {}\", empty_rejected);\n}"
 }
 },
 "ch17": {
@@ -2501,12 +2541,13 @@
 "number": 2,
 "kind": "code reading",
 "title": "Name the smell by source language instinct",
-"objective": "Read a mixed-style module and classify which parts are C++-style, Go-style, or C#-style carryovers.",
+"objective": "Read a mixed-style module and classify which parts are C++-style, Go-style, C#-style, or Python-style carryovers.",
 "starterPrompt": "A single file contains `panic!` on bad input, `BaseHandler`-shaped traits with data spread across several structs, clone-heavy read paths, and long explicit lifetimes on every helper.",
 "prompts": [
 "Which parts look like Go-style error handling that Rust should express as `Result`?",
 "Which parts look like C#-style hierarchy pressure that Rust should split into traits, enums, and composition?",
-"Which parts look like C++-style identity or pointer pressure that Rust could replace with value returns or clearer ownership?"
+"Which parts look like C++-style identity or pointer pressure that Rust could replace with value returns or clearer ownership?",
+"Which parts look like Python-style easy mutation that Rust should model with an explicit ownership decision?"
 ],
 "acceptanceCriteria": [
 "You classify at least one smell under each relevant background where appropriate.",
@@ -2565,7 +2606,7 @@
 "kind": "debugging or refactoring",
 "title": "Remove unnecessary clones and narrow unsafe code",
 "objective": "Practice two common production cleanups in one review: borrow on read paths and wrap unsafe code behind a checked safe API.",
-"starterPrompt": "A helper clones routes only to log them, and another helper exposes a safe raw-pointer write API without documenting the real preconditions. Repair both.",
+"starterPrompt": "A helper clones routes only to log them, and another helper exposes a safe raw-pointer write API without documenting the real preconditions. Repair both. These two cleanups are grouped because they share one defect: each hides an implicit contract that the refactor must make explicit, the clone hiding that the caller only needs read access and the unsafe block hiding the precondition that makes the raw write sound.",
 "prompts": [
 "Which signature should borrow instead of taking ownership?",
 "Where should the unsafe precondition checks move relative to the raw operation?",
@@ -2591,7 +2632,8 @@
 "Which steps should remain synchronous because they are pure or CPU-local?",
 "Which boundaries should become async because they perform IO or scheduling?",
 "Which values should become owned before an `await` or a spawned task boundary?",
-"Which seams should be traits or generics so tests can provide clocks, repositories, or notifiers?"
+"Which seams should be traits or generics so tests can provide clocks, repositories, or notifiers?",
+"Which parts of this pipeline are closed sets that should be enums (a fixed delivery mode) versus open behavior that should be traits (the notifier or repository)?"
 ],
 "acceptanceCriteria": [
 "You keep pure parsing or validation synchronous where possible.",
@@ -2611,7 +2653,8 @@
 "When does returning owned data simplify lifetime-heavy APIs?",
 "How do enums and traits divide closed and open polymorphism during a refactor?",
 "Why should async refactors usually return owned values across `await` boundaries?",
-"What makes a refactor more testable instead of only more abstract?"
+"What makes a refactor more testable instead of only more abstract?",
+"What should you measure after a refactor to confirm the ownership and error changes actually improved operational behavior?"
 ],
 "workingLoop": [
 "Pass 1: fix ownership and failure modeling first.",
@@ -2696,7 +2739,7 @@
 ],
 "hints": [
 "The chapter's rule is to generalize only after a second real case proves the abstraction.",
-"An iterator over the slice plus map(|i| i.key()).max() is one expression."
+"An iterator over the slice plus map(|i| i.key()).max() is one expression. Since u64 implements Ord, .max() returns Option<u64> directly without an extra bound on T."
 ]
 },
 {
@@ -2704,7 +2747,7 @@
 "kind": "implementation",
 "title": "Replace a type parameter with an associated type",
 "objective": "Move a trait's natural related type from a free parameter into an associated type so callers stop spelling it out.",
-"starterPrompt": "Start from a trait Encoder<O> { fn encode(&self, input: &[u8]) -> O; } where every implementor really has exactly one output type. Rewrite it as the chapter's Encoder with type Output, and reimplement HexPair so its Output is [u8; 2].",
+"starterPrompt": "Start from a trait Encoder<O> { fn encode(&self, input: &[u8]) -> O; } where every implementor really has exactly one output type. Rewrite it as the chapter's Encoder with type Output (see Example 2 in the chapter), and reimplement HexPair so its Output is [u8; 2].",
 "prompts": [
 "Change the trait so the result type is type Output rather than a generic parameter O.",
 "Implement Encoder for HexPair with type Output = [u8; 2] and the two-nibble encode body.",
@@ -2856,7 +2899,7 @@
 "The new field is Option<T> and annotated so a missing key deserializes successfully.",
 "An old-format payload lacking the field round-trips into a value with the field set to None.",
 "A new-format payload sets and recovers the field correctly.",
-"The answer correctly classifies the change as additive and compatible in both directions."
+"The answer correctly classifies the change as additive and compatible in both directions (forward: old readers survive new writers; backward: new readers survive old writers)."
 ],
 "hints": [
 "#[serde(default)] supplies Option::default(), which is None, when the key is absent.",
@@ -2891,7 +2934,7 @@
 "kind": "debugging or refactoring",
 "title": "Fix a borrowed field that escapes its buffer",
 "objective": "Diagnose and repair a zero-copy deserialization design where a borrowed view is held past the lifetime of its input bytes.",
-"starterPrompt": "The chapter's rule is to borrow while parsing if it reduces copying locally, but own the data once the message crosses a wider subsystem boundary, because a borrowed &str or Cow<'de, str> cannot outlive the buffer it points into. A struct like BorrowedAudit<'a> is being returned from a function whose input buffer is dropped on return.",
+"starterPrompt": "The chapter's rule is to borrow while parsing if it reduces copying locally, but own the data once the message crosses a wider subsystem boundary, because a borrowed &str or Cow<'de, str> cannot outlive the buffer it points into. Start from this broken function that parses a local buffer and tries to return the borrowing struct:\n\n    fn parse(bytes: &[u8]) -> BorrowedAudit<'_> {\n        let text = String::from_utf8(bytes.to_vec()).unwrap(); // local buffer\n        serde_json::from_str(&text).unwrap() // borrows `text`, dropped on return\n    }\n\nThis does not compile: the returned struct borrows `text`, which is dropped when the function returns.",
 "prompts": [
 "Explain the compiler error that arises when a function parses a local buffer and returns the borrowing struct.",
 "Decide which fields genuinely need zero-copy borrowing on the hot path and which should own.",
@@ -2938,7 +2981,8 @@
 "What does internal enum tagging (#[serde(tag = \"kind\")]) give a reader that field-shape inference does not?",
 "Why must a borrowed &str or Cow<'de, str> field not outlive the input buffer it was parsed from?",
 "Why is split-on-dot money parsing a correctness trap, and what validation prevents silently losing cents?",
-"Why is a compatibility break a deployment coordination problem rather than only a code change?"
+"Why is a compatibility break a deployment coordination problem rather than only a code change?",
+"Why must you never let Rust's in-memory struct layout serve as an FFI contract by default, and what are the two safe alternatives?"
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -2953,7 +2997,7 @@
 "runKey": "ch19_ex_versioned",
 "expectedOutput": "v2 currency = EUR\nv2 round trip ok = true\nv1 schema = 1\nv1 currency = USD\nv1 total cents = 999",
 "helperText": "Models forward/backward-compatible decoding in plain std Rust: a tagged key=value payload where a v2 reader defaults the added currency field for v1 input and silently ignores fields it does not recognize. Fill in the decode match arm.",
-"initialCode": "//! Forward/backward-compatible decoding of a versioned record.\n\n#[derive(Debug, PartialEq)]\nstruct Record {\n    schema_version: u16,\n    order_id: String,\n    total_cents: u64,\n    // Added in schema version 2. Old (v1) writers do not emit it.\n    currency: String,\n}\n\n/// Encode a record as a tagged, line-oriented byte payload.\nfn encode(rec: &Record) -> Vec<u8> {\n    let body = format!(\n        \"v={};order_id={};total_cents={};currency={}\",\n        rec.schema_version, rec.order_id, rec.total_cents, rec.currency\n    );\n    body.into_bytes()\n}\n\n/// Decode a payload tolerantly: unknown fields are skipped, and a missing\n/// `currency` field defaults so a v2 reader can still consume a v1 payload.\nfn decode(bytes: &[u8]) -> Record {\n    let text = String::from_utf8(bytes.to_vec()).unwrap();\n    let mut schema_version = 0u16;\n    let mut order_id = String::new();\n    let mut total_cents = 0u64;\n    let currency = String::from(\"USD\");\n\n    for field in text.split(';') {\n        let (key, _value) = match field.split_once('=') {\n            Some(pair) => pair,\n            None => continue,\n        };\n        match key {\n            // TODO: match each known key and assign its parsed value.\n            // Leave currency at its default when the field is absent, and\n            // ignore any key the reader does not recognize.\n            _ => {}\n        }\n    }\n\n    Record { schema_version, order_id, total_cents, currency }\n}\n\nfn main() {\n    let v2 = Record {\n        schema_version: 2,\n        order_id: String::from(\"ord-7\"),\n        total_cents: 4200,\n        currency: String::from(\"EUR\"),\n    };\n    let round_trip = decode(&encode(&v2));\n    println!(\"v2 currency = {}\", round_trip.currency);\n    println!(\"v2 round trip ok = {}\", round_trip == v2);\n\n    // A v1 producer omits `currency` and adds a field the reader has not seen.\n    let v1_payload = b\"v=1;order_id=ord-3;total_cents=999;region=eu\";\n    let upgraded = decode(v1_payload);\n    println!(\"v1 schema = {}\", upgraded.schema_version);\n    println!(\"v1 currency = {}\", upgraded.currency);\n    println!(\"v1 total cents = {}\", upgraded.total_cents);\n}\n"
+"initialCode": "//! Forward/backward-compatible decoding of a versioned record.\n\n#[derive(Debug, PartialEq)]\nstruct Record {\n    schema_version: u16,\n    order_id: String,\n    total_cents: u64,\n    // Added in schema version 2. Old (v1) writers do not emit it.\n    currency: String,\n}\n\n/// Encode a record as a tagged, line-oriented byte payload.\nfn encode(rec: &Record) -> Vec<u8> {\n    let body = format!(\n        \"v={};order_id={};total_cents={};currency={}\",\n        rec.schema_version, rec.order_id, rec.total_cents, rec.currency\n    );\n    body.into_bytes()\n}\n\n/// Decode a payload tolerantly: unknown fields are skipped, and a missing\n/// `currency` field defaults so a v2 reader can still consume a v1 payload.\nfn decode(bytes: &[u8]) -> Record {\n    let text = String::from_utf8(bytes.to_vec()).unwrap();\n    let mut schema_version = 0u16;\n    let mut order_id = String::new();\n    let mut total_cents = 0u64;\n    let mut currency = String::from(\"USD\");\n\n    for field in text.split(';') {\n        let (key, _value) = match field.split_once('=') {\n            Some(pair) => pair,\n            None => continue,\n        };\n        match key {\n            // TODO: match each known key and assign its parsed value.\n            // Leave currency at its default when the field is absent, and\n            // ignore any key the reader does not recognize.\n            _ => {}\n        }\n    }\n\n    Record { schema_version, order_id, total_cents, currency }\n}\n\nfn main() {\n    let v2 = Record {\n        schema_version: 2,\n        order_id: String::from(\"ord-7\"),\n        total_cents: 4200,\n        currency: String::from(\"EUR\"),\n    };\n    let round_trip = decode(&encode(&v2));\n    println!(\"v2 currency = {}\", round_trip.currency);\n    println!(\"v2 round trip ok = {}\", round_trip == v2);\n\n    // A v1 producer omits `currency` and adds a field the reader has not seen.\n    let v1_payload = b\"v=1;order_id=ord-3;total_cents=999;region=eu\";\n    let upgraded = decode(v1_payload);\n    println!(\"v1 schema = {}\", upgraded.schema_version);\n    println!(\"v1 currency = {}\", upgraded.currency);\n    println!(\"v1 total cents = {}\", upgraded.total_cents);\n}\n"
 }
 },
 "ch20": {
@@ -2986,7 +3030,7 @@
 "kind": "code reading",
 "title": "Explain repetition and hygiene in a `macro_rules!` helper",
 "objective": "Read a declarative macro and describe what repetition removes and why local identifiers do not collide with caller names.",
-"starterPrompt": "Review a `macro_rules!` helper that expands a repeated list of service checks and introduces a local accumulator named `passed` inside the macro.",
+"starterPrompt": "Review the chapter's `sum_values!` macro (Example 1 on the main chapter page), which expands a repeated list of values and introduces a local accumulator named `total` in its expansion body.",
 "prompts": [
 "Where is the repeated syntax pattern in the macro arm?",
 "Why does the macro's local accumulator not casually overwrite a caller variable with the same spelling?",
@@ -3016,7 +3060,7 @@
 "acceptanceCriteria": [
 "The macro accepts repeated `name => bool` pairs.",
 "The expansion counts the true cases correctly.",
-"The runnable lab prints the expected passed and total counts.",
+"The runnable lab prints the passing count computed by the macro and the total count, which is a fixed call-site argument in this starter rather than a macro-computed value.",
 "The call site remains easier to read than the repeated code it replaced."
 ],
 "hints": [
@@ -3150,7 +3194,7 @@
 "What redesign would be calmer: own the data, keep the view local, or attach explicit metadata?"
 ],
 "acceptanceCriteria": [
-"You explain that `Any` is usually for `'static` concrete types, not arbitrary borrowed views with wider lifetime claims.",
+"You explain that `Any` requires `T: 'static`, so a type containing a borrowed reference with any named lifetime cannot implement `Any` at all.",
 "You explain that `Any` supports type recovery, not field walking or method discovery.",
 "You propose one ownership repair and one metadata repair."
 ],
@@ -3169,12 +3213,14 @@
 "Use `TypeId::of::<T>()` as the key.",
 "Store values as `Box<dyn Any>`.",
 "Recover with `downcast_ref::<T>()`.",
+"Add a `get_mut<T>` that recovers a mutable handle with `downcast_mut::<T>()`.",
 "Do not use string keys for type identity."
 ],
 "acceptanceCriteria": [
 "The typemap stores heterogeneous values behind one erased owner.",
 "Lookup is keyed by `TypeId`, not by type name string.",
 "Recovery uses `downcast_ref::<T>()` safely.",
+"A `get_mut<T>` demonstrates the by-mut form with `downcast_mut::<T>()`, updating one stored value in place.",
 "The runnable lab prints the expected port, label, and missing-type check."
 ],
 "hints": [
@@ -3222,7 +3268,8 @@
 ],
 "hints": [
 "If operators need the fact, make it a normal API.",
-"A plugin registry is easier to operate when the metadata is boring and explicit."
+"A plugin registry is easier to operate when the metadata is boring and explicit.",
+"The chapter's production patterns become tests directly: logging metadata at startup turns into a registration test that asserts unique names, and a config-schema check per format becomes a load-time validation that fails fast."
 ]
 },
 {
@@ -3372,7 +3419,7 @@
 "starterPrompt": "You are designing `accept request -> parse -> schedule work -> update metrics -> publish completion` for a CPU-heavy service with a few hot counters and one central retry table.",
 "prompts": [
 "Which parts want owned messages over channels?",
-"Which parts truly want shared immutable state through `Arc<T>` only?",
+"Which parts are satisfied by shared immutable state through `Arc<T>` alone, without a lock?",
 "Which parts, if any, justify `Arc<Mutex<T>>` or another synchronized shared-state tool?",
 "What backpressure or contention signal would you monitor in production?"
 ],
@@ -3417,7 +3464,8 @@
 "When is `thread::scope` a better answer than cloning or heap-sharing more data?",
 "What is the difference between message passing and shared-state locking as an ownership design?",
 "Why is work stealing a scheduler strategy rather than a synonym for threads?",
-"Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?"
+"Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?",
+"When would you use `thread::Builder` instead of `thread::spawn` directly?"
 ],
 "workingLoop": [
 "Name the execution model first: OS thread, scoped OS thread, async task, work-stealing data parallelism, or distributed worker.",
@@ -3448,7 +3496,8 @@
 "Which case is really a waited-on predicate under one mutex?",
 "Which case is small enough for atomics?",
 "Which case is a phase boundary rather than a state container?",
-"Which case wants ownership transfer rather than shared mutation?"
+"Which case wants ownership transfer rather than shared mutation?",
+"For the start-gun case, how does a barrier's phase-gate semantics differ from a condvar's predicate-wait, and why does that difference matter?"
 ],
 "acceptanceCriteria": [
 "You map each case to a plausible primitive and justify the choice with state shape.",
@@ -3578,8 +3627,8 @@
 "Why is `RwLock` not automatically better than `Mutex`?",
 "Why should a condvar wait happen in a loop instead of a one-shot `if`?",
 "What does `Release` on a store and `Acquire` on a load actually buy you?",
-"When is a barrier the right tool, and when is it just the wrong primitive for state propagation?",
-"Why are lock-free structures hard even for experienced engineers?"
+"When is a barrier the right tool, and when does it become the wrong primitive for state propagation?",
+"From the pitfalls section, why are lock-free structures hard even for experienced engineers?"
 ],
 "workingLoop": [
 "Name the state invariant before naming the primitive.",
@@ -3594,7 +3643,7 @@
 "filename": "acquire_release_lab.rs",
 "runKey": "ch23_ex_acquire_release",
 "expectedOutput": "ready = true\nvalue = 42",
-"initialCode": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    publish(&value, &ready, 42);\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", try_consume(&value, &ready).unwrap_or(0));\n}"
+"initialCode": "use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::thread;\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    // The publisher and consumer run on two threads, so the Relaxed orderings\n    // above are a real bug: upgrade them to Release/Acquire to publish safely.\n    let consumed = thread::scope(|scope| {\n        scope.spawn(|| publish(&value, &ready, 42));\n        scope\n            .spawn(|| loop {\n                if let Some(found) = try_consume(&value, &ready) {\n                    break found;\n                }\n                thread::yield_now();\n            })\n            .join()\n            .unwrap()\n    });\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", consumed);\n}"
 }
 },
 "ch24": {
@@ -3696,7 +3745,7 @@
 "kind": "debugging or refactoring",
 "title": "Fix a manual future that never yields",
 "objective": "Diagnose and repair a poll implementation whose state transitions are wrong so the executor spins or completes too early.",
-"starterPrompt": "A colleague's Handshake-style future returns Poll::Ready on its very first poll even though it should pass through a Waiting stage first, and a second variant accidentally returns Pending forever. Repair the match arms so it yields Pending a bounded number of times and then completes.",
+"starterPrompt": "Repair this colleague's Handshake-style future. Its poll body is: match self.stage { Stage::Start => Poll::Ready(\"connected\"), Stage::Waiting => Poll::Pending, Stage::Done => Poll::Ready(\"connected\") }. The Start arm returns Poll::Ready on the very first poll even though it should pass through a Waiting stage first, and the Waiting arm returns Pending forever without changing any state. Fix the match arms so the future yields Pending a bounded number of times and then completes.",
 "prompts": [
 "Identify the arm that returns Ready before any Pending and explain why that defeats the point of the future.",
 "Identify the arm that never advances the Stage and would make block_on loop forever.",
@@ -3736,6 +3785,29 @@
 "The chapter's rule: cancel usually means drop the future, and the ownership rule stays the same across runtimes.",
 "Structured concurrency makes the parent own the whole fan-out and wait for or drop every child."
 ]
+},
+{
+"number": 7,
+"kind": "debugging or refactoring",
+"title": "Repair a future that fails the Send bound at a spawn boundary",
+"objective": "Diagnose why a future captured into a spawn-style boundary is rejected as not Send, and fix it by owning thread-safe data instead of an Rc.",
+"starterPrompt": "A spawn-style function require_send_spawn<F>(future: F) where F: Future<Output = String> + Send + 'static accepts a future from async fn render(config: Rc<String>). The compiler reports that the future is not Send. Explain the error and convert render so its future satisfies Send + 'static.",
+"prompts": [
+"Read the compiler error and name the exact captured value that makes the future non-Send.",
+"Explain why the Send bound applies to the whole future rather than only to data held across an .await.",
+"Change Rc<String> to a thread-safe owned type so the future becomes Send + 'static.",
+"Confirm the corrected future is accepted by require_send_spawn and can be driven to its String result."
+],
+"acceptanceCriteria": [
+"The diagnosis names Rc<String> as the captured value that is not Send, which is why the whole future is rejected.",
+"The answer explains that a spawn boundary needs the entire future to be Send + 'static, because the runtime may move it across worker threads.",
+"render is changed to take Arc<String> (or another Send + 'static owned type) so the generated future is Send.",
+"The corrected future passes require_send_spawn and produces \"rendered with prod-config\" when driven to completion."
+],
+"hints": [
+"Rc<T> is not Send; Arc<T> is the thread-safe shared owner with the same clone-on-share shape.",
+"The future stores its captured argument as a field, so a non-Send argument makes the whole future non-Send even with no .await between captures."
+]
 }
 ],
 "reviewQuestions": [
@@ -3743,7 +3815,8 @@
 "What does the compiler build from an async function, and what determines which locals become fields of that state machine?",
 "Why does Future::poll take a Pin<&mut Self> receiver rather than a plain &mut Self?",
 "What are the two cooperating parts of an async runtime, and what does each one do?",
-"In async Rust, what does cancelling a future mean operationally, and what is the future author still responsible for?"
+"In async Rust, what does cancelling a future mean operationally, and what is the future author still responsible for?",
+"Why does a future fail the Send bound at a spawn boundary, and how do async fn in traits force the same Send question back into the design?"
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -3758,7 +3831,7 @@
 "runKey": "ch24_ex_handshake",
 "expectedOutput": "poll = pending\npoll = pending\nresult = session-open\npending count = 2",
 "helperText": "Implement the poll state machine so the Handshake future advances one Stage per poll and yields Poll::Pending until it reaches Ready. The driver block_on counts how many times it had to poll while pending.",
-"initialCode": "use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\n#[derive(Debug, Clone, Copy, PartialEq)]\nenum Stage {\n    Connect,\n    Authenticate,\n    Ready,\n}\n\nstruct Handshake {\n    stage: Stage,\n    polls: u32,\n}\n\nimpl Future for Handshake {\n    type Output = &'static str;\n\n    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        self.polls += 1;\n        // TODO: advance `self.stage` one step per poll:\n        //   Connect      -> Authenticate, return Poll::Pending\n        //   Authenticate -> Ready,        return Poll::Pending\n        //   Ready        -> return Poll::Ready(\"session-open\")\n        // The placeholder below completes immediately and never yields.\n        Poll::Ready(\"not-implemented\")\n    }\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn block_on<F: Future>(future: F) -> (F::Output, u32) {\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut future = Box::pin(future);\n    let mut pending = 0u32;\n    loop {\n        match future.as_mut().poll(&mut cx) {\n            Poll::Ready(value) => return (value, pending),\n            Poll::Pending => {\n                pending += 1;\n                println!(\"poll = pending\");\n            }\n        }\n    }\n}\n\nfn main() {\n    let handshake = Handshake {\n        stage: Stage::Connect,\n        polls: 0,\n    };\n    let (result, pending_count) = block_on(handshake);\n    println!(\"result = {}\", result);\n    println!(\"pending count = {}\", pending_count);\n}\n"
+"initialCode": "use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\n#[derive(Debug, Clone, Copy, PartialEq)]\nenum Stage {\n    Connect,\n    Authenticate,\n    Ready,\n}\n\nstruct Handshake {\n    stage: Stage,\n    // Optional internal counter for your own debugging. It is never printed,\n    // so it does not affect the expected output; remove it if you prefer.\n    polls: u32,\n}\n\nimpl Future for Handshake {\n    type Output = &'static str;\n\n    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        self.polls += 1;\n        // TODO: advance `self.stage` one step per poll:\n        //   Connect      -> Authenticate, return Poll::Pending\n        //   Authenticate -> Ready,        return Poll::Pending\n        //   Ready        -> return Poll::Ready(\"session-open\")\n        // The placeholder below completes immediately and never yields.\n        Poll::Ready(\"not-implemented\")\n    }\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn block_on<F: Future>(future: F) -> (F::Output, u32) {\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut future = Box::pin(future);\n    let mut pending = 0u32;\n    loop {\n        match future.as_mut().poll(&mut cx) {\n            Poll::Ready(value) => return (value, pending),\n            Poll::Pending => {\n                pending += 1;\n                println!(\"poll = pending\");\n            }\n        }\n    }\n}\n\nfn main() {\n    let handshake = Handshake {\n        stage: Stage::Connect,\n        polls: 0,\n    };\n    let (result, pending_count) = block_on(handshake);\n    println!(\"result = {}\", result);\n    println!(\"pending count = {}\", pending_count);\n}\n"
 }
 },
 "ch25": {
@@ -3791,7 +3864,7 @@
 "kind": "code reading",
 "title": "Trace the accept loop's select! race",
 "objective": "Read the graceful-shutdown accept loop and predict how a normal accept and a shutdown signal each flow through the same select!.",
-"starterPrompt": "Study Example 2's server task, where each loop turn runs tokio::select! over shutdown_rx.changed() and listener.accept(). Walk through both branches without running the code.",
+"starterPrompt": "Study Example 2's server task. Each loop turn is a single select! with two branches: `changed = shutdown_rx.changed() => { if changed.is_err() || *shutdown_rx.borrow() { break accepted; } }` and `result = listener.accept() => { match result { Ok((stream, _peer)) => { accepted += 1; tokio::spawn(handle(stream)); } Err(_e) => break accepted, } }`. Walk through both branches without running the code.",
 "prompts": [
 "Describe what the accept branch does when listener.accept() resolves with Ok((stream, _peer)).",
 "Explain why the shutdown branch checks both changed.is_err() and *shutdown_rx.borrow().",
@@ -3818,7 +3891,7 @@
 "prompts": [
 "Create the channel with an explicit capacity of 1 and move tx into the producer task.",
 "Have the producer send two Vec<u32> batches with send().await and unwrap the results.",
-"In the consumer, drive a time::interval, tick once per received batch, and offload the per-batch sum to spawn_blocking.",
+"In the consumer, create a time::interval and call tick().await once per received batch, and offload the per-batch sum to spawn_blocking.",
 "Return (batches, total) from the consumer and print buffer, batches, and total."
 ],
 "acceptanceCriteria": [
@@ -3870,7 +3943,7 @@
 "acceptanceCriteria": [
 "The diagnosis states that the inline sum runs on an IO worker with no intervening await, so that worker cannot service other ready tasks until it finishes.",
 "The fix moves the CPU step to spawn_blocking and awaits its result, keeping the async workers free for waiting work.",
-"The answer explains that tokio::spawn still schedules the CPU work onto the same IO worker pool, so it does not isolate the CPU cost.",
+"The answer explains that tokio::spawn still schedules the CPU work onto the same IO worker pool, where it runs without an await point and holds its worker for the full duration of the sum, so it does not isolate the CPU cost.",
 "The refactored consumer preserves the original output, computing the same totals as before."
 ],
 "hints": [
@@ -3937,7 +4010,8 @@
 "Which case wants Tokio tasks because waiting is the dominant cost?",
 "Which case wants Rayon because CPU saturation over one data set is the real job?",
 "Which case wants Crossbeam because thread-based coordination and bounded queues are the model?",
-"Which case wants `FuturesUnordered` because the futures themselves are the unit of composition?"
+"Which case wants `FuturesUnordered` because the futures themselves are the unit of composition?",
+"For that last case, contrast a `FuturesUnordered` drained with `next().await` against the same work spawned into a `JoinSet`: which keeps the futures local and non-Send, and which hands each unit to the runtime to make progress on its own?"
 ],
 "acceptanceCriteria": [
 "You assign each workload to a plausible primary tool and justify it with scheduling shape.",
@@ -4012,7 +4086,8 @@
 ],
 "hints": [
 "A retry loop hidden inside the task body is often harder to cap and harder to observe.",
-"Cancellation is easier to reason about when admission, draining, and timeouts are one visible control flow."
+"Cancellation is easier to reason about when admission, draining, and timeouts are one visible control flow.",
+"Match the stop primitive to its shape: `oneshot` suits a single-fire shutdown to one consumer, while `watch` suits a broadcast stop flag many tasks observe."
 ]
 },
 {
@@ -4080,7 +4155,7 @@
 "filename": "bounded_queue_retry_lab.rs",
 "runKey": "ch26_ex_bounded_queue_retry",
 "expectedOutput": "capacity = 2\naccepted = 2\nretried = 1\ncancelled = true",
-"initialCode": "fn main() {\n    let (tx, rx) = crossbeam::channel::bounded::<&'static str>(2);\n\n    let worker = std::thread::spawn(move || {\n        let mut accepted = 0;\n        let mut retried = 0;\n        let mut cancelled = false;\n\n        while let Ok(job) = rx.recv() {\n            if job == \"retry\" {\n                retried += 0;\n            } else {\n                accepted += 1;\n            }\n        }\n\n        (accepted, retried, cancelled)\n    });\n\n    tx.send(\"parse\").unwrap();\n    tx.send(\"retry\").unwrap();\n    tx.send(\"flush\").unwrap();\n    drop(tx);\n\n    let (accepted, retried, cancelled) = worker.join().unwrap();\n\n    println!(\"capacity = {}\", 2);\n    println!(\"accepted = {}\", accepted);\n    println!(\"retried = {}\", retried);\n    println!(\"cancelled = {}\", cancelled);\n}"
+"initialCode": "fn main() {\n    // This starter has two deliberate bugs to fix (both marked below).\n    let (tx, rx) = crossbeam::channel::bounded::<&'static str>(2);\n\n    let worker = std::thread::spawn(move || {\n        let mut accepted = 0;\n        let mut retried = 0;\n        let mut cancelled = false; // bug 2: this is never set to true below\n\n        while let Ok(job) = rx.recv() {\n            if job == \"retry\" {\n                retried += 0; // bug 1: should count the retry (+= 1)\n            } else {\n                accepted += 1;\n            }\n        }\n        // bug 2 fix goes here: set cancelled = true once the queue is closed\n\n        (accepted, retried, cancelled)\n    });\n\n    tx.send(\"parse\").unwrap();\n    tx.send(\"retry\").unwrap();\n    tx.send(\"flush\").unwrap();\n    drop(tx);\n\n    let (accepted, retried, cancelled) = worker.join().unwrap();\n\n    println!(\"capacity = {}\", 2);\n    println!(\"accepted = {}\", accepted);\n    println!(\"retried = {}\", retried);\n    println!(\"cancelled = {}\", cancelled);\n}"
 }
 },
 "ch27": {
@@ -4115,7 +4190,7 @@
 "prompts": [
 "Where is the double-close or use-after-close risk hiding?",
 "Which path should move the handle instead of borrowing or rebuilding ownership from a raw integer?",
-"When would `try_clone` be the honest design, and what semantic cost would it introduce?"
+"When would `try_clone` be the right design, and what semantic cost would it introduce?"
 ],
 "acceptanceCriteria": [
 "You explain the single-owner close invariant concretely.",
@@ -4155,7 +4230,7 @@
 "kind": "debugging or refactoring",
 "title": "Repair a scatter/gather write path that assumes too much",
 "objective": "Fix a vectored write design that assumes one syscall always transmits the whole logical response.",
-"starterPrompt": "A handler builds two `IoSlice` values, calls `write_vectored` once, and assumes the entire header and body are gone forever.",
+"starterPrompt": "You have a handler that builds two `IoSlice` values, calls `write_vectored` once, and assumes the entire header and body are gone forever.",
 "prompts": [
 "Why is one successful vectored write call still not a full-response guarantee?",
 "Would you loop until the logical message is complete, or switch to a different buffering strategy?",
@@ -4174,7 +4249,7 @@
 {
 "number": 5,
 "kind": "design or production scenario",
-"title": "Choose memory mapping, buffered reads, or owned copies honestly",
+"title": "Choose memory mapping, buffered reads, or owned copies deliberately",
 "objective": "Map three different file workloads to the right boundary tool instead of reaching for mmap by reflex.",
 "starterPrompt": "You are designing a search service with a large read-only term index, a one-pass log replayer, and a retry queue that stores small file-derived records for later async work.",
 "prompts": [
@@ -4220,6 +4295,7 @@
 "When is moving a handle calmer than duplicating it?",
 "Why can one vectored write still be only a partial logical response?",
 "What signals tell you a queue needs a bound or a smaller bound?",
+"When does a blocking read in a dedicated worker thread outperform an async task, and how would you measure the difference?",
 "Why should mmap, async rewrites, and socket tuning all be justified by measured behavior rather than by taste?"
 ],
 "workingLoop": [
@@ -4234,7 +4310,7 @@
 "filename": "buffered_pipeline_lab.rs",
 "runKey": "ch27_ex_buffered_pipeline",
 "expectedOutput": "capacity = 1\nreceived = 3\nbatches = 2\nbytes = 15",
-"initialCode": "use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Write};\nuse std::sync::mpsc;\nuse std::thread;\n\nfn main() -> io::Result<()> {\n    let input = Cursor::new(\"red\\\nblue\\\ngreen\\\n\".as_bytes());\n    let mut reader = BufReader::new(input);\n    let (tx, rx) = mpsc::channel::<String>();\n\n    let producer = thread::spawn(move || {\n        let mut line = String::new();\n        while reader.read_line(&mut line).unwrap() != 0 {\n            let owned = line.trim_end().to_string();\n            tx.send(owned).unwrap();\n            line.clear();\n        }\n    });\n\n    let mut out = Vec::new();\n    let mut writer = BufWriter::new(&mut out);\n    let mut received = 0usize;\n    let mut batches = 0usize;\n    let mut pending = Vec::new();\n\n    while let Ok(line) = rx.recv() {\n        pending.push(line);\n\n        if pending.len() == 0 {\n            for item in pending.drain(..) {\n                writeln!(writer, \"{}\", item)?;\n            }\n            batches += 1;\n        }\n\n        received += 1;\n    }\n\n    producer.join().unwrap();\n    writer.flush()?;\n\n    println!(\"capacity = {}\", 1);\n    println!(\"received = {}\", received);\n    println!(\"batches = {}\", batches);\n    println!(\"bytes = {}\", out.len());\n    Ok(())\n}"
+"initialCode": "use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Write};\nuse std::sync::mpsc;\nuse std::thread;\n\nfn main() -> io::Result<()> {\n    const CAPACITY: usize = 1;\n\n    let input = Cursor::new(\"red\\\nblue\\\ngreen\\\n\".as_bytes());\n    let mut reader = BufReader::new(input);\n    let (tx, rx) = mpsc::channel::<String>();\n\n    let producer = thread::spawn(move || {\n        let mut line = String::new();\n        while reader.read_line(&mut line).unwrap() != 0 {\n            let owned = line.trim_end().to_string();\n            tx.send(owned).unwrap();\n            line.clear();\n        }\n    });\n\n    let mut out = Vec::new();\n    let mut writer = BufWriter::new(&mut out);\n    let mut received = 0usize;\n    let mut batches = 0usize;\n    let mut pending = Vec::new();\n\n    while let Ok(line) = rx.recv() {\n        pending.push(line);\n\n        if pending.len() == 0 {\n            for item in pending.drain(..) {\n                writeln!(writer, \"{}\", item)?;\n            }\n            batches += 1;\n        }\n\n        received += 1;\n    }\n\n    producer.join().unwrap();\n    writer.flush()?;\n\n    println!(\"capacity = {}\", CAPACITY);\n    println!(\"received = {}\", received);\n    println!(\"batches = {}\", batches);\n    println!(\"bytes = {}\", out.len());\n    Ok(())\n}"
 }
 },
 "ch28": {
@@ -4275,7 +4351,7 @@
 "Explain what would go wrong at the boundary if the body used abs instead of wrapping_abs on i32::MIN."
 ],
 "acceptanceCriteria": [
-"The answer identifies the foreign declaration, the unsafe wrapper safe_abs, and the safe main, with only safe_abs holding unsafe.",
+"The answer identifies the foreign unsafe extern \"C\" declaration, the unsafe { } call site inside safe_abs, and the safe main, noting that the only unsafe block executing the actual call is inside safe_abs.",
 "It states that the declaration asserts the symbol and signature exist elsewhere but the compiler cannot check the foreign side honors them.",
 "It explains the seam is plain i32 -> i32, so nothing is allocated or freed across it.",
 "It explains that abs on i32::MIN panics, and a panic unwinding across a C ABI boundary is undefined behavior, which wrapping_abs avoids."
@@ -4336,7 +4412,7 @@
 "kind": "debugging or refactoring",
 "title": "Stop an unwind from crossing the boundary",
 "objective": "Find and fix an exported function that can let a Rust panic unwind across a C ABI boundary.",
-"starterPrompt": "An exported extern \"C\" function parses a caller buffer with code that can panic (an indexing operation and an unwrap on a parse), then returns the parsed value. Reviewers flagged that a panic here is undefined behavior because it would unwind through the foreign caller's frames.",
+"starterPrompt": "Imagine an exported extern \"C\" function that parses a caller buffer with code that can panic (an indexing operation and an unwrap on a parse), then returns the parsed value. Write that function yourself as the starting point, keeping in mind that a panic here is undefined behavior because it would unwind through the foreign caller's frames.",
 "prompts": [
 "Identify every operation in the body that can panic and explain why each is a boundary hazard.",
 "Refactor the panicking operations into checked forms that return a status instead of panicking.",
@@ -4383,7 +4459,9 @@
 "Why must a Rust Result<T, E> be re-expressed as an integer status plus out parameters before crossing a C ABI boundary?",
 "What does no_mangle and the extern \"C\" calling convention each contribute when exporting a Rust function to C or C++?",
 "Why is an in-flight unwind, a Rust panic or a C++ exception, more dangerous to let cross the seam than a bad value?",
-"Which two questions drive the choice between a hand-written C shim, bindgen, cxx, and autocxx?"
+"Which two questions drive the choice between a hand-written C shim, bindgen, cxx, and autocxx?",
+"When must a struct shared across an FFI boundary carry #[repr(C)], and what can go wrong if it does not?",
+"Name three classes of hostile inputs every exported FFI function should be tested against."
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -4397,7 +4475,7 @@
 "filename": "cpp_integration_status_seam_lab.rs",
 "runKey": "ch28_ex_status_seam",
 "expectedOutput": "status = 0\ntotal = 12\nnull input status = 2\nnull out status = 1",
-"helperText": "Model the exported sum_i32s seam from Example 2 in plain std Rust: the caller owns the input buffer and the output slot, you only borrow both, and every failure is reported as a distinct integer status rather than a Result.",
+"helperText": "Model the exported sum_i32s seam from Example 2 in plain std Rust: the caller owns the input buffer and the output slot, you only borrow both, and every failure is reported as a distinct integer status rather than a Result. Run this only after implementing the function body; the expected output shown is the target, so the unmodified stub will not match it.",
 "initialCode": "// Status codes mirror the C ABI seam from the chapter: 0 = success,\n// nonzero = a distinct failure the caller can branch on without a Result.\nconst STATUS_OK: i32 = 0;\nconst STATUS_NULL_OUT: i32 = 1;\nconst STATUS_NULL_INPUT: i32 = 2;\n\n// Models the exported `sum_i32s` seam: the caller owns both the input buffer\n// and the output storage; this function only borrows them for the call.\n// Option<&...> stands in for a possibly-null pointer; &mut i64 is the out slot.\nfn sum_i32s(input: Option<&[i32]>, out_total: Option<&mut i64>) -> i32 {\n    // TODO: implement the guard sequence and the sum.\n    // 1. If out_total is None, return STATUS_NULL_OUT.\n    // 2. If input is None, return STATUS_NULL_INPUT.\n    // 3. Otherwise widen each i32 to i64, sum them, write the total\n    //    through the out parameter, and return STATUS_OK.\n    let _ = (&input, &out_total);\n    STATUS_OK\n}\n\nfn main() {\n    let values = [3_i32, 4, 5];\n\n    let mut total = -1_i64;\n    let status = sum_i32s(Some(&values), Some(&mut total));\n    println!(\"status = {}\", status);\n    println!(\"total = {}\", total);\n\n    let mut ignored = 0_i64;\n    println!(\"null input status = {}\", sum_i32s(None, Some(&mut ignored)));\n    println!(\"null out status = {}\", sum_i32s(Some(&values), None));\n}\n"
 }
 },
@@ -4465,7 +4543,7 @@
 "The signature is exactly fn mask_bytes(bytes: &[u8], key: u8) -> Vec<u8>.",
 "Each output byte equals the corresponding input byte XORed with key.",
 "The input slice is read but never mutated, and no ownership of the caller's buffer is taken.",
-"For input [1, 2, 3, 4] with key 1 the function returns [0, 3, 2, 5]."
+"For input [1, 2, 3, 4] with key 1 the function returns [0, 3, 2, 5] (1^1=0, 2^1=3, 3^1=2, 4^1=5)."
 ],
 "hints": [
 "bytes.iter().map(...).collect() builds the owned Vec in one expression.",
@@ -4491,7 +4569,7 @@
 "The answer states the batch makes one crossing instead of one per route."
 ],
 "hints": [
-"routes.iter().map(|r| route_score(r)).collect() keeps the batch in one expression.",
+"routes.iter().map(|r| route_score(*r)).collect() keeps the batch in one expression; r is a &&str, so *r dereferences it to the &str route_score expects.",
 "The cost you are removing is the per-call boundary overhead, not the arithmetic."
 ]
 },
@@ -4547,7 +4625,8 @@
 "What role does wasm-bindgen play after a browser-facing crate is compiled as a cdylib?",
 "On the cost ladder of boundary representations, how do a number, a byte array, a serialized struct, and a resident handle differ in per-crossing cost?",
 "How do the outer Rust-to-JavaScript seam and the inner Rust-to-C-shim seam differ in how data and safety are managed?",
-"Why is the WebAssembly performance discussion almost always about the boundary rather than the arithmetic inside the module?"
+"Why is the WebAssembly performance discussion almost always about the boundary rather than the arithmetic inside the module?",
+"What does WASI provide that the browser sandbox does not, and why does the same module behave differently under each?"
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
@@ -4591,7 +4670,7 @@
 {
 "number": 2,
 "kind": "code reading",
-"title": "Trace the idempotent consumer's decision machine",
+"title": "Trace the idempotent consumer's state transitions",
 "objective": "Predict the processed, duplicate, retried, and dead-letter counts by reading the on_delivery state transitions.",
 "starterPrompt": "Read the Consumer type from Example 2, whose on_delivery first checks processed_ids, then routes a delivery for order ord-fail through a bounded retry, and finally records successful unique work. Hand-trace the four messages that main feeds it, including the retry-queue drain loop.",
 "prompts": [
@@ -4614,7 +4693,7 @@
 "kind": "implementation",
 "title": "Add a wildcard topic match to the exchange",
 "objective": "Extend the routing lookup so a single binding pattern can match a family of routing keys.",
-"starterPrompt": "Starting from DirectExchange in Example 1, add a method that supports a single trailing wildcard segment, so binding orders.* reaches a queue for both orders.created and orders.cancelled. Keep the exact-match route method working unchanged.",
+"starterPrompt": "Starting from the DirectExchange struct in the main chapter's Example 1 (no unrouted counter, &self on route), add a method that supports a single trailing wildcard segment, so binding orders.* reaches a queue for both orders.created and orders.cancelled. Keep the exact-match route method working unchanged.",
 "prompts": [
 "Decide how to store wildcard bindings so an exact lookup is still cheap.",
 "Implement matching by splitting the routing key on '.' and comparing segments, treating '*' as matching exactly one segment.",
@@ -4659,7 +4738,7 @@
 "kind": "debugging or refactoring",
 "title": "Fix an ack-before-commit consumer",
 "objective": "Diagnose and correct a consumer that loses work by acknowledging before its side effect is durable.",
-"starterPrompt": "A consumer acks the broker first and then performs the durable write, and it also retries malformed payloads forever. Identify both defects against the chapter's guidance and refactor the handler.",
+"starterPrompt": "Start from this broken consumer, which acks before it commits and requeues every failure forever:\n\n    fn handle(&mut self, id: &str, payload: &str) {\n        self.ack(id);                 // BUG: acks before the durable write\n        if let Err(_) = self.commit(id, payload) {\n            self.requeue(id);         // BUG: unbounded retry, even for malformed payloads\n        }\n    }\n\nIdentify both defects against the chapter's guidance and refactor the handler.",
 "prompts": [
 "Explain the data-loss window created when ack happens before the durable commit.",
 "Reorder the steps so the durable effect is committed before the ack.",
@@ -4698,6 +4777,29 @@
 "hints": [
 "A message often outlives the code that produced it, so the version belongs in the envelope, not in tribal knowledge.",
 "A broker is a place work can pile up invisibly; depth, age, retry rate, and DLQ count are what reveal it."
+]
+},
+{
+"number": 7,
+"kind": "implementation",
+"title": "Bound the local worker budget, not just broker prefetch",
+"objective": "Show that a broker prefetch cap without a bounded in-process worker queue just moves the overload into the process.",
+"starterPrompt": "Model a consumer with two separate limits: a broker prefetch cap (how many unacked messages it will hold) and a bounded local worker queue (how much in-process work those messages can spawn). Feed it a burst larger than the local queue and demonstrate that the local cap, not prefetch, is what protects the process from unbounded growth.",
+"prompts": [
+"Give the consumer a prefetch field and a separate bounded local queue with its own capacity.",
+"When the broker offers a message, honor prefetch first, then refuse to enqueue past the local capacity, counting the shed work instead of letting the buffer grow.",
+"Set prefetch generously (say 8) but the local capacity small (say 2), feed a burst of 5, and report how many were buffered, how many were rejected, and how many were eventually worked.",
+"Explain in one sentence why setting prefetch alone, without the local cap, would only move the overload from the broker into the process heap."
+],
+"acceptanceCriteria": [
+"The consumer carries a broker prefetch cap and a bounded local worker queue as two independent limits.",
+"A message offered past the local capacity is shed and counted rather than appended to an unbounded buffer.",
+"With prefetch 8, local capacity 2, and a burst of 5, the output is buffered = 2, rejected = 3, done = 2.",
+"The answer states that prefetch without a local cap relocates the overload into the process rather than removing it."
+],
+"hints": [
+"Prefetch and local capacity are two layers of backpressure; setting one without the other only moves where the work piles up.",
+"Check the local queue length before pushing; if it is at capacity, increment a rejected counter instead of growing the buffer."
 ]
 }
 ],
@@ -4777,7 +4879,7 @@
 "objective": "Implement the core mechanics of redelivery after timeout and duplicate-safe completion recording.",
 "starterPrompt": "Complete a tiny in-memory queue so timed-out work returns to visibility and a second completion attempt becomes a harmless duplicate.",
 "prompts": [
-"Requeue the task only when the current time is past the deadline.",
+"Requeue the task only when the current time is past the deadline. The starter contains a reversed condition, so your first task is to find and flip it.",
 "Record completion in a set keyed by task ID.",
 "Return a boolean from completion so the caller can tell whether this was the first successful application or a duplicate.",
 "Keep the queue owner as one struct instead of scattering state globally."
@@ -4816,7 +4918,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "design or analysis",
 "title": "Trace a distributed task graph end to end",
 "objective": "Make one task graph observable enough that queue wait, handler work, and fan-in are all attributable.",
 "starterPrompt": "A DAG pipeline runs `fetch -> parse -> { enrich, store } -> notify`, but traces only show the inner handler spans and not the time spent waiting in queues.",
@@ -4847,13 +4949,15 @@
 "Where should leases be renewed instead of just lengthened?",
 "How will final aggregation decide when the whole graph is complete?",
 "Which tracing fields, queue metrics, and duplicate metrics would you require before rollout?",
-"Where would you isolate slow GPU retries so they do not stall the rest of the platform?"
+"Where would you isolate slow GPU retries so they do not stall the rest of the platform?",
+"Which two metrics would tell you whether a slow run is bottlenecked at the GPU transcode step or at the aggregation reducer?"
 ],
 "acceptanceCriteria": [
 "You choose at least one queue or shard split deliberately.",
 "You define a lease or renewal policy for the long-running step.",
 "You describe one result-aggregation rule and one failure-isolation rule.",
-"You mention at least three observability hooks such as queue age, redelivery rate, reducer lag, trace lineage, or duplicate suppression hits."
+"You mention at least three observability hooks such as queue age, redelivery rate, reducer lag, trace lineage, or duplicate suppression hits.",
+"You name two metrics that distinguish a GPU-step bottleneck from an aggregation-reducer bottleneck, such as per-stage handler time versus reducer lag at the join."
 ],
 "hints": [
 "The cleanest answer gives every expensive stage a visible budget and a visible failure policy.",
@@ -4975,7 +5079,7 @@
 "number": 5,
 "kind": "debugging or refactoring",
 "title": "Profile communication-heavy HPC work conceptually before rewriting it",
-"objective": "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic.",
+"objective": "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic. This is a diagnostic task: you are measuring an existing run before changing anything, not planning a new deployment.",
 "starterPrompt": "A solver slowed down after a mesh change. Every rank still finishes the same kernel code path, but total runtime rose sharply.",
 "prompts": [
 "Which timers would you place around local compute, halo exchange, and collective convergence steps?",
@@ -4996,7 +5100,7 @@
 "number": 6,
 "kind": "design or production scenario",
 "title": "Choose hybrid MPI plus threads and cluster deployment policy deliberately",
-"objective": "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload.",
+"objective": "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload. This is a design task: you are planning a deployment before launch, not measuring a run that already exists.",
 "starterPrompt": "You are designing `load block -> local compute -> allreduce convergence -> write checkpoint`, with CPU-heavy kernels, one read-mostly lookup table per rank, and a cluster policy that limits cores per node tightly.",
 "prompts": [
 "Would you run more ranks per node, more threads per rank, or a balanced mix?",
@@ -5035,7 +5139,7 @@
 "filename": "mpi_block_partition_lab.rs",
 "runKey": "ch32_ex_block_partition",
 "expectedOutput": "rank 0 = 0..3\nrank 1 = 3..6\nrank 2 = 6..9\nrank 3 = 9..11\ncells rank2 = 15",
-"initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Partition {\n    start_row: usize,\n    end_row: usize,\n}\n\nfn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {\n    let rows_per_rank = rows / ranks;\n    let start = rank * rows_per_rank;\n    let end = start + rows_per_rank;\n\n    Partition {\n        start_row: start,\n        end_row: end,\n    }\n}\n\nfn main() {\n    let rows = 11_usize;\n    let ranks = 4_usize;\n    let cols = 5_usize;\n\n    for rank in 0..ranks {\n        let part = block_range(rows, ranks, rank);\n        println!(\"rank {} = {}..{}\", rank, part.start_row, part.end_row);\n    }\n\n    let part = block_range(rows, ranks, 2);\n    println!(\"cells rank2 = {}\", (part.end_row - part.start_row) * cols);\n}"
+"initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Partition {\n    start_row: usize,\n    end_row: usize,\n}\n\nfn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {\n    let rows_per_rank = rows / ranks;\n    let start = rank * rows_per_rank;\n    let end = start + rows_per_rank;\n\n    Partition {\n        start_row: start,\n        end_row: end,\n    }\n}\n\nfn main() {\n    let rows = 11_usize;\n    let ranks = 4_usize;\n\n    for rank in 0..ranks {\n        let part = block_range(rows, ranks, rank);\n        println!(\"rank {} = {}..{}\", rank, part.start_row, part.end_row);\n    }\n\n    let cols = 5_usize;\n    let part = block_range(rows, ranks, 2);\n    println!(\"cells rank2 = {}\", (part.end_row - part.start_row) * cols);\n}"
 }
 },
 "ch33": {
@@ -5132,7 +5236,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "analysis or methodology",
 "title": "Compare iterator and loop implementations responsibly",
 "objective": "Avoid folklore by designing a fair comparison between two equivalent hot loops.",
 "starterPrompt": "You have one implementation written as an iterator chain and one as an explicit `for` loop over the same slice.",
@@ -5163,13 +5267,15 @@
 "Which release-build command should every performance run use?",
 "Which profile settings would you consider, and what tradeoff does each one carry?",
 "When might `panic = \"abort\"` be acceptable, and when would it be the wrong contract?",
-"Which live signals would you require before trusting the optimized build in production?"
+"Which live signals would you require before trusting the optimized build in production?",
+"Where would synchronization cost (lock scope, queue depth, or batch size at an IO boundary) show up, and how would you keep it from becoming the next regression?"
 ],
 "acceptanceCriteria": [
 "You name release mode explicitly for measurement.",
 "You justify at least two profile settings or profile decisions with tradeoffs.",
 "You explain `panic = \"abort\"` as a binary contract choice rather than a free speed flag.",
-"You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate."
+"You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate.",
+"You name at least one synchronization-cost decision (lock hold duration, queue depth, or batch size) as part of the design, not an afterthought."
 ],
 "hints": [
 "Compiler flags are workload tools, not trophies.",
@@ -5182,7 +5288,8 @@
 "What is the practical difference between reducing allocations and reducing branch misses?",
 "Why are slice-based and chunk-based loops often easier to optimize than index-heavy loops?",
 "When is a clone economically justified even in performance-sensitive code?",
-"What does release mode change, and what questions does it still not answer by itself?"
+"What does release mode change, and what questions does it still not answer by itself?",
+"What question does a distributed trace answer that a microbenchmark cannot, and what question does production observability answer that a trace alone cannot?"
 ],
 "workingLoop": [
 "State the workload and the metric first.",
@@ -5209,6 +5316,7 @@
 "starterPrompt": "Classify four symptoms: rising RSS after a burst, stable RSS but rising task count, flat heap snapshots with a high allocation rate, and a graph of `Rc` nodes that never seems to disappear.",
 "prompts": [
 "Which symptom points first toward fragmentation or allocator retention?",
+"Which measurement confirms fragmentation: where does live bytes diverge from RSS, and which one stays high?",
 "Which symptom points first toward async backlog rather than a leak?",
 "Which symptom points first toward churn rather than retained memory?",
 "Which symptom points first toward logical reachability and cycle inspection?"
@@ -5225,7 +5333,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "code analysis",
 "title": "Find clone pressure in a sample workload",
 "objective": "Read a request path and identify where deep clones, not Arc clones, are driving memory growth.",
 "starterPrompt": "A route filter clones owned strings into an output list, then later formats another owned label per selected item before queueing work.",
@@ -5319,6 +5427,7 @@
 "starterPrompt": "Create a checklist for a service that accepts requests, parses them, queues owned work, fans out to async tasks, uses an arena during parsing, and keeps a read-mostly cache.",
 "prompts": [
 "Which numbers belong in the first page of the investigation: RSS, live bytes, queue depth, task count, clone count, or all of them?",
+"Inside the arena-using parsing phase, what is the first number to measure: peak region size and reset cadence, or current live bytes?",
 "Which leak candidates should be named explicitly: Rc or Arc cycles, unbounded queues, non-evicting caches, oversized arenas?",
 "Which OS-specific tools would you choose on Linux, macOS, and Windows?",
 "Which acceptance condition tells you the incident is actually resolved instead of merely masked?"
@@ -5424,7 +5533,8 @@
 ],
 "hints": [
 "180 * 100 / 840 truncates to 21; doing the divide first would collapse it to 0.",
-"A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec."
+"A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec.",
+"Shares truncated to integers may not sum to exactly 100 (here 21 + 73 + 4 = 98); that is expected, so do not assert the shares add up to 100."
 ]
 },
 {
@@ -5466,7 +5576,7 @@
 "Hold time and wait time are stored and reported as two separate fields rather than one combined number.",
 "classify returns \"contention\" for (hold_us=5, wait_us=900) and \"hold\" for (hold_us=900, wait_us=5).",
 "The explanation ties high wait_us with low hold_us to a frequently-acquired short critical section.",
-"The answer names narrowing shared state, shortening critical sections, or giving a subsystem its own owner before going lock-free."
+"The answer names narrowing shared state, shortening critical sections, sharding, or giving a subsystem its own owner (read-mostly redesign included) before going lock-free."
 ],
 "hints": [
 "The two halves fail in opposite ways, so a single averaged number erases exactly the signal you need.",
@@ -5517,7 +5627,7 @@
 "runKey": "ch35_ex_dominant",
 "expectedOutput": "dominant = cpu\nwall us = 800\ndominant share = 51",
 "helperText": "Mirror the chapter's pipeline decomposition: sum the per-layer micros into wall time, find the layer that owns the most time, and report its integer percentage share. Fill in the dominant-layer reduction where marked.",
-"initialCode": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    // TODO: return the (name, micros) of the layer that owns the most time.\n    // Scan layers(stats) and pick the entry with the largest micros value.\n    (\"none\", 0)\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
+"initialCode": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).into_iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    // TODO: return the (name, micros) of the layer that owns the most time.\n    // Scan layers(stats) and pick the entry with the largest micros value.\n    (\"none\", 0)\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
 }
 },
 "ch36": {
@@ -5525,7 +5635,7 @@
 {
 "number": 1,
 "kind": "warm-up comprehension",
-"title": "Design metrics for worker saturation on purpose",
+"title": "Design metrics for worker saturation",
 "objective": "Choose a small metric set that distinguishes healthy throughput from hidden backlog and retry amplification.",
 "starterPrompt": "You run three worker pools: fast CPU tasks, slow GPU tasks, and a reducer pool. Decide which counters, gauges, and histograms each pool should expose.",
 "prompts": [
@@ -5546,7 +5656,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "incident reconstruction",
 "title": "Trace a tail-latency incident across logs, metrics, and traces",
 "objective": "Practice reconstructing one slow path when mean handler time still looks calm.",
 "starterPrompt": "Metrics show queue age rising. Handler p50 is flat. A trace shows one task waited 900 ms before claim and only 70 ms in the handler. Logs show the same task retried twice before success.",
@@ -5581,7 +5691,7 @@
 "acceptanceCriteria": [
 "The helper computes saturation and retry rate correctly.",
 "The storm rule is visible in code rather than hidden in prose.",
-"The runnable lab prints the expected saturation, retry rate, and storm flag."
+"When you implement the three helpers, running the program prints saturation = 0.90, retry rate = 0.40, and storm = true."
 ],
 "hints": [
 "This is a metric and policy drill, not a transport drill.",
@@ -5612,7 +5722,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "design",
 "title": "Profile a task graph by critical path instead of average stage time",
 "objective": "Replace stage-local averages with graph-aware signals that reveal reducer lag and join bottlenecks.",
 "starterPrompt": "A DAG pipeline shows acceptable mean time in every worker stage, yet end-to-end time keeps growing as fan-out width increases.",
@@ -5705,7 +5815,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "estimation",
 "title": "Estimate transfer cost before discussing the kernel",
 "objective": "Translate one matrix job into bytes on the bus before you start tuning arithmetic.",
 "starterPrompt": "A service offloads one `f32` matrix multiply with A, B, and C each sized 4096 by 4096, transferring A and B to the device and C back once.",
@@ -5818,7 +5928,8 @@
 "Why is a safe Rust wrapper around a kernel launch mostly an ownership and invariant story?",
 "What is the practical difference between host memory ownership and device memory ownership?",
 "Why are queue wait and launch count often more useful than one isolated kernel timing?",
-"When is CUDA the wrong choice even when a kernel itself is efficient?"
+"When is CUDA the wrong choice even when a kernel itself is efficient?",
+"Why should device memory be modeled as an explicit owner handle rather than a borrowed pointer into host memory?"
 ],
 "workingLoop": [
 "Count bytes, launches, and sync points before tuning arithmetic.",
@@ -5828,12 +5939,11 @@
 ],
 "diagnosticRubric": [],
 "lab": {
-"title": "Runnable lab · Real CUDA matmul from Rust — measure the GPU speedup",
-"filename": "matmul_challenge.rs",
-"runKey": "ch37_ex_cuda_matmul",
-"expectedOutput": "device     = NVIDIA GeForce RTX 3080 Laptop GPU\nmatrix     = 1024 x 1024 (f32)\ncpu        = 116.3 ms\ngpu kernel = 2.35 ms\ngpu total  = 12.7 ms  (incl. host<->device copies)\nspeedup    = 49.4x kernel, 9.1x end-to-end\ncorrect    = true",
-"helperText": "Real CUDA from Rust via cudarc + NVRTC — a GPU matrix-multiply timed against a fair CPU baseline. Build and run it with the GPU Docker project in `public/cuda/`: `docker compose run --rm cuda matmul_challenge`. The harness (device setup, CPU baseline, timing, correctness check) is complete; your job is the kernel's inner dot product. Until you write it the kernel returns zeros and `correct` prints false. Exact times vary by GPU; the speedup and the kernel-vs-end-to-end gap are the point.",
-"initialCode": "//! Chapter 37 — real CUDA from Rust (CHALLENGE / starter).\n//!\n//! The whole harness is here — device setup, the CPU baseline, timing, and the\n//! correctness check. Two things are left for you:\n//!   1. Fill in the kernel's inner dot product (marked TODO below).\n//!   2. (optional) Confirm the launch grid covers every output element.\n//!\n//! As shipped, the kernel writes zeros, so `correct` prints `false`. Implement\n//! the dot product and it flips to `true` — and you get the speedup for free.\n//!\n//! Run:  cargo run --release --bin matmul_challenge [N]      (default N = 1024)\n\nuse cudarc::driver::{CudaDevice, LaunchAsync, LaunchConfig};\nuse cudarc::nvrtc::compile_ptx;\nuse std::time::Instant;\n\nconst KERNEL: &str = r#\"\nextern \"C\" __global__ void matmul(const float* A, const float* B, float* C, int N) {\n    int row = blockIdx.y * blockDim.y + threadIdx.y;\n    int col = blockIdx.x * blockDim.x + threadIdx.x;\n    if (row < N && col < N) {\n        // TODO: accumulate the dot product of row `row` of A with column `col`\n        // of B over k = 0..N, then store it in C[row * N + col].\n        // Remember A and B are row-major: A[row][k] = A[row*N + k],\n        // B[k][col] = B[k*N + col].\n        C[row * N + col] = 0.0f;\n    }\n}\n\"#;\n\nfn cpu_matmul(a: &[f32], b: &[f32], n: usize) -> Vec<f32> {\n    let mut c = vec![0.0f32; n * n];\n    for i in 0..n {\n        for k in 0..n {\n            let aik = a[i * n + k];\n            let brow = &b[k * n..k * n + n];\n            let crow = &mut c[i * n..i * n + n];\n            for j in 0..n {\n                crow[j] += aik * brow[j];\n            }\n        }\n    }\n    c\n}\n\nfn main() -> Result<(), Box<dyn std::error::Error>> {\n    let n: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(1024);\n    let a: Vec<f32> = (0..n * n).map(|i| ((i % 13) as f32) * 0.5).collect();\n    let b: Vec<f32> = (0..n * n).map(|i| ((i % 7) as f32) * 0.25).collect();\n\n    let t = Instant::now();\n    let c_cpu = cpu_matmul(&a, &b, n);\n    let cpu_ms = t.elapsed().as_secs_f64() * 1e3;\n\n    let dev = CudaDevice::new(0)?;\n    dev.load_ptx(compile_ptx(KERNEL)?, \"matmul_mod\", &[\"matmul\"])?;\n    let func = dev.get_func(\"matmul_mod\", \"matmul\").unwrap();\n\n    let block = 16u32;\n    let grid = (n as u32).div_ceil(block);\n    let cfg = LaunchConfig {\n        grid_dim: (grid, grid, 1),\n        block_dim: (block, block, 1),\n        shared_mem_bytes: 0,\n    };\n\n    let t_total = Instant::now();\n    let a_d = dev.htod_copy(a)?;\n    let b_d = dev.htod_copy(b)?;\n    let mut c_d = dev.alloc_zeros::<f32>(n * n)?;\n    dev.synchronize()?;\n\n    let t_kernel = Instant::now();\n    unsafe { func.launch(cfg, (&a_d, &b_d, &mut c_d, n as i32))?; }\n    dev.synchronize()?;\n    let kernel_ms = t_kernel.elapsed().as_secs_f64() * 1e3;\n\n    let c_gpu = dev.dtoh_sync_copy(&c_d)?;\n    let total_ms = t_total.elapsed().as_secs_f64() * 1e3;\n\n    let (mut max_abs, mut max_val) = (0.0f32, 1.0f32);\n    for (x, y) in c_cpu.iter().zip(c_gpu.iter()) {\n        max_abs = max_abs.max((x - y).abs());\n        max_val = max_val.max(x.abs());\n    }\n    let correct = (max_abs / max_val) < 1e-3;\n\n    println!(\"device     = {}\", dev.name()?);\n    println!(\"matrix     = {n} x {n} (f32)\");\n    println!(\"cpu        = {cpu_ms:.1} ms\");\n    println!(\"gpu kernel = {kernel_ms:.2} ms\");\n    println!(\"gpu total  = {total_ms:.1} ms  (incl. host<->device copies)\");\n    println!(\"speedup    = {:.1}x kernel, {:.1}x end-to-end\", cpu_ms / kernel_ms, cpu_ms / total_ms);\n    println!(\"correct    = {correct}\");\n    if !correct {\n        println!(\"note       = kernel still returns zeros — implement the TODO dot product\");\n    }\n    Ok(())\n}"
+"title": "Runnable lab · Safe launch wrapper",
+"filename": "safe_launch_wrapper_lab.rs",
+"runKey": "ch37_ex_safe_kernel_wrapper",
+"expectedOutput": "blocks = 8\nthreads = 128\nlaunch ok = true",
+"initialCode": "#[derive(Debug, Clone, Copy)]\nstruct LaunchConfig {\n    threads_per_block: u32,\n    blocks: u32,\n}\n\nfn validate_buffers(a_len: usize, b_len: usize, out_len: usize) -> Result<(), &'static str> {\n    // TODO: reject zero-length buffers and mismatched lengths before any launch.\n    Err(\"not implemented\")\n}\n\nfn build_config(a_len: usize, threads_per_block: u32) -> LaunchConfig {\n    // TODO: derive the block count from a_len with ceiling division.\n    LaunchConfig {\n        threads_per_block,\n        blocks: 0,\n    }\n}\n\nunsafe fn raw_launch(_config: LaunchConfig, _len: usize) {\n    // SAFETY: callers reach this only after validate_buffers confirmed equal,\n    // nonzero lengths and build_config produced a nonzero launch config.\n}\n\nfn main() {\n    let len = 1_024_usize;\n    let threads_per_block = 128_u32;\n\n    let config = build_config(len, threads_per_block);\n    let launch_ok = match validate_buffers(len, len, len) {\n        Ok(()) => {\n            unsafe { raw_launch(config, len); }\n            true\n        }\n        Err(_) => false,\n    };\n\n    println!(\"blocks = {}\", config.blocks);\n    println!(\"threads = {}\", config.threads_per_block);\n    println!(\"launch ok = {}\", launch_ok);\n}"
 }
 },
 "ch38": {
@@ -5929,7 +6039,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "design",
 "title": "Parallelize the wide levels, not the whole idea blindly",
 "objective": "Choose where parallelism helps and where it only adds scheduler cost.",
 "starterPrompt": "You want faster tree construction for large batches. Sketch a level-wise parallel build with Rayon or another worker strategy, then decide when the build should fall back to serial work near the root.",
@@ -5953,7 +6063,7 @@
 {
 "number": 6,
 "kind": "design or production scenario",
-"title": "Choose challenge tracks for content-addressed storage, game integrity, and distributed verification",
+"title": "Design three Merkle-backed production systems",
 "objective": "Turn the chapter topics into three production-shaped challenge designs with explicit budgets and replay policy.",
 "starterPrompt": "Design three systems: a chunk store keyed by hash, a tamper-evident game checkpoint feed, and a verifier service that checks remote proofs before downloading full payloads.",
 "prompts": [
@@ -5979,7 +6089,8 @@
 "Why are flat levels usually calmer than pointer trees for Merkle workloads?",
 "What makes sibling orientation part of the proof itself?",
 "When is level-wise parallelism worth the overhead, and when should it stop?",
-"Why should a proof envelope carry more than only the sibling hashes?"
+"Why should a proof envelope carry more than only the sibling hashes?",
+"When would a copy-on-write path update be preferable to rebuilding all levels, and what ownership primitive makes that safe in Rust?"
 ],
 "workingLoop": [
 "Write the commitment policy before you write the tree builder.",
@@ -6132,6 +6243,28 @@
 "Distributed graph search is partly an algorithm problem and partly a control-plane problem.",
 "Frontier size and duplicate rate are often more useful than raw CPU usage at first."
 ]
+},
+{
+"number": 7,
+"kind": "implementation",
+"title": "Implement Dijkstra and A* and verify they agree on the sample graph",
+"objective": "Build weighted shortest-path search two ways and confirm a consistent heuristic does not change the optimal cost.",
+"starterPrompt": "Reuse the weighted graph from the chapter's Example 2 (nodes A, B, C, D, Goal with the same coordinates and edge costs). Implement `dijkstra_cost` and `a_star_cost` over a `BinaryHeap` frontier, then run both from A to Goal.",
+"prompts": [
+"Order the frontier with a `State` whose `Ord` is inverted so the max-heap pops the lowest priority first.",
+"Use cost-so-far as the Dijkstra priority and cost-so-far plus the Manhattan heuristic as the A* priority.",
+"Skip stale heap entries by comparing the popped cost against the best recorded cost for that node.",
+"Print both results and confirm `dijkstra cost = 7` and `a_star cost = 7` on the sample graph."
+],
+"acceptanceCriteria": [
+"Both methods share one `BinaryHeap`-backed frontier with an inverted `Ord` so the smallest priority pops first.",
+"Dijkstra orders by cost only; A* adds the Manhattan heuristic to the goal.",
+"Both return the same optimal cost (7) on the sample graph, and you explain why the consistent heuristic preserves that answer."
+],
+"hints": [
+"The heuristic must never overestimate the remaining cost, or A* can return a non-optimal answer.",
+"A stale-entry guard (`if cost > best[node.0] { continue }`) is simpler than trying to update entries already in the heap."
+]
 }
 ],
 "reviewQuestions": [
@@ -6191,7 +6324,7 @@
 "State what graph.nnz() and graph.dense_bytes() report and what that contrast is meant to show."
 ],
 "acceptanceCriteria": [
-"Row 0 expands over indptr[0]..indptr[2] reaching columns 1 and 2; row 2 expands over indptr[2]..indptr[4] reaching columns 3 and 4.",
+"Row 0 expands over indptr[0]..indptr[1] (= 0..2) reaching columns 1 and 2; row 2 expands over indptr[2]..indptr[3] (= 3..5) reaching columns 3 and 4.",
 "The resulting next frontier is 0,1,1,1,1 and rows 1, 3, 4 are skipped because their frontier value is 0.0.",
 "nnz is 6 (the length of data) and dense_bytes is rows * cols * 4 = 100, illustrating the metadata-versus-density tradeoff."
 ],
@@ -6213,7 +6346,7 @@
 ],
 "acceptanceCriteria": [
 "The loop nest is ordered i, k, j with j innermost, and a.get(i, k) is read once per (i, k) rather than once per (i, j, k).",
-"The innermost loop indexes b.get(k, j), so it strides one element at a time along a row of B rather than jumping across rows.",
+"The innermost loop indexes b.get(k, j), so it reads consecutive memory addresses along a row of B rather than jumping across rows.",
 "matmul_ikj returns a matrix that approx_eq reports equal to matmul_naive for the same operands."
 ],
 "hints": [
@@ -6386,6 +6519,7 @@
 "Where should you add context before the spawn boundary and after the await?",
 "Why is `JoinHandle<Result<T, E>>` a two-layer error surface instead of one?",
 "Which fields belong in the context message: job ID, queue name, attempt, resource name?",
+"Which failures in this path are retryable, and where would you record that policy so callers do not infer it from message text?",
 "When should cancellation be modeled distinctly from ordinary inner failure?"
 ],
 "acceptanceCriteria": [
@@ -6474,7 +6608,7 @@
 "kind": "warm-up comprehension",
 "title": "Choose unit, integration, property, fuzz, snapshot, or benchmark from the claim",
 "objective": "Practice selecting the cheapest test layer that can prove the real behavior instead of defaulting to one broad test shape.",
-"starterPrompt": "Classify five needs: a state-machine invariant, a public HTTP contract, a hostile binary parser input space, a large human-reviewable error report, and a latency budget for one hot batch encoder.",
+"starterPrompt": "Classify five needs, each to its cheapest test layer: (1) a state-machine invariant, (2) a public HTTP contract, (3) a hostile binary parser input space, (4) a large human-reviewable error report, and (5) a latency budget for one hot batch encoder.",
 "prompts": [
 "Which need is best served by a unit test first?",
 "Which need wants a true integration test against a public boundary?",
@@ -6575,6 +6709,7 @@
 "You include at least one deterministic time-control technique.",
 "You define one idempotency or duplicate-suppression assertion at the durable boundary.",
 "You separate task-join behavior from inner operation behavior.",
+"You describe what happens to in-flight work under cancellation.",
 "You mention at least one request, task, or message identity field in the assertions."
 ],
 "hints": [
@@ -6722,7 +6857,7 @@
 },
 {
 "number": 5,
-"kind": "design or production scenario",
+"kind": "incident reconstruction",
 "title": "Connect logs, metrics, and traces in one incident narrative",
 "objective": "Practice telling one coherent production story from three signal types instead of reading each one in isolation.",
 "starterPrompt": "Metrics show oldest visible age rising from 200 ms to 4 s. One trace shows a task waited 3.6 s before claim and then only 80 ms in the handler. Structured logs show the same task retried twice because a downstream store timed out.",
@@ -6844,7 +6979,7 @@
 "prompts": [
 "Keep the target set explicit with an enum.",
 "Name the native output with a target triple suffix.",
-"Name the container output like a registry tag.",
+"Name the container output like a registry tag, using the format `ghcr.io/acme/<app>:<version>`.",
 "Name the wasm output like a wasm artifact rather than a native binary."
 ],
 "acceptanceCriteria": [
@@ -6859,7 +6994,7 @@
 },
 {
 "number": 4,
-"kind": "debugging or refactoring",
+"kind": "design or analysis",
 "title": "Design a feature-gated release workflow",
 "objective": "Replace one catch-all default build with an explicit feature policy that matches real deployment shapes.",
 "starterPrompt": "You inherit a crate where the default feature set includes metrics, admin endpoints, optional native bindings, and browser support, even though most service deployments only need the core server.",
@@ -6972,7 +7107,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "scenario analysis",
 "title": "Review a flawed capstone delivery path",
 "objective": "Spot the production mistakes that appear when a distributed design compiles but its ownership and failure model are still wrong.",
 "starterPrompt": "You inherit an API handler that borrows request data into spawned work, publishes to one shared queue for all workloads, acks broker delivery before durable result storage, and records no trace or dedupe key in the envelope.",
@@ -7042,7 +7177,7 @@
 "kind": "design or production scenario",
 "title": "Profile and refactor the capstone from evidence",
 "objective": "Turn one latency incident into a measurement-first refactoring plan instead of a guess-driven rewrite.",
-"starterPrompt": "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 0.25, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
+"starterPrompt": "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 25% of deliveries, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
 "prompts": [
 "Which layer is the dominant bottleneck right now?",
 "Which metric should have paged first, and which trace should you inspect next?",
@@ -7167,7 +7302,7 @@
 "The handler translates request DTO into a separate command type.",
 "The service boundary does not accept HTTP request DTOs directly.",
 "The handler performs at least one authorization or edge validation check before the service call.",
-"The runnable lab prints the expected created status, invoice ID, and tenant."
+"The handler returns a deterministic `(u16, String, String)` tuple the caller can assert."
 ],
 "hints": [
 "A create handler should be boring: authorize, map, call, translate.",
@@ -7176,7 +7311,7 @@
 },
 {
 "number": 4,
-"kind": "debugging or refactoring",
+"kind": "design or workflow decision",
 "title": "Choose code-first, spec-first, or mixed OpenAPI workflow honestly",
 "objective": "Pick the workflow that matches team boundaries and generated-code obligations instead of choosing by fashion.",
 "starterPrompt": "You have one Rust server, one TypeScript client, and one partner team that wants the contract reviewed before implementation lands.",
@@ -7250,7 +7385,8 @@
 "Why are typed extractors and typed state a better long-term seam than passing one raw request object around?",
 "When is code-first OpenAPI the calm default, and when does spec-first become more honest?",
 "Why should generated clients stay in the transport layer rather than in the domain layer?",
-"What CI checks keep Swagger UI and generated SDKs from silently drifting away from handler behavior?"
+"What CI checks keep Swagger UI and generated SDKs from silently drifting away from handler behavior?",
+"Why are transport validation at the edge and domain invariants in the service complementary rather than interchangeable?"
 ],
 "workingLoop": [
 "State the public API contract first: route, version, request DTO, response DTO, and caller-visible errors.",
@@ -7359,7 +7495,7 @@
 },
 {
 "number": 5,
-"kind": "debugging or refactoring",
+"kind": "testing or ci design",
 "title": "Test generated APIs and prevent breaking protobuf changes",
 "objective": "Design the CI and test surface that catches schema drift before partner teams regenerate or deploy stale code.",
 "starterPrompt": "You added one field, removed another, and changed one method shape from unary to streaming. Now several languages regenerate from the same .proto.",
@@ -7452,7 +7588,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "design comparison",
 "title": "Review explicit read/write ownership in one connection loop",
 "objective": "Read two async designs and explain why one writer-task boundary is calmer than several unrelated tasks writing directly through one shared sink.",
 "starterPrompt": "Compare a design with one reader task, one application loop, and one writer task against a design that stores the write half behind `Arc<Mutex<...>>` and lets many tasks write whenever they want.",
@@ -7570,7 +7706,8 @@
 "What makes queue age or pending depth more actionable than active connection count alone?",
 "Why are reconnect and resume protocol decisions separate from ping or pong liveness?",
 "When is SSE a better answer than WebSockets even if the product still wants live updates?",
-"Why should graceful shutdown for long-lived sockets stop admission before closing active connections?"
+"Why should graceful shutdown for long-lived sockets stop admission before closing active connections?",
+"Why does Rust's ownership model force you to name the channel bound and payload type that Go or Python would leave implicit?"
 ],
 "workingLoop": [
 "Choose the transport from the actual traffic pattern first.",
@@ -7585,7 +7722,7 @@
 "filename": "bounded_fanout_lab.rs",
 "runKey": "ch48_ex_bounded_fanout",
 "expectedOutput": "active = 1\nevicted = beta,gamma\ndelivered = 3",
-"initialCode": "use std::collections::{HashMap, VecDeque};\n\n#[derive(Debug, Default)]\nstruct Client {\n    pending: VecDeque<String>,\n}\n\n#[derive(Debug)]\nstruct Hub {\n    clients: HashMap<&'static str, Client>,\n    max_pending: usize,\n    delivered: usize,\n    evicted: Vec<&'static str>,\n}\n\nimpl Hub {\n    fn new(max_pending: usize) -> Self {\n        Self {\n            clients: HashMap::new(),\n            max_pending,\n            delivered: 0,\n            evicted: Vec::new(),\n        }\n    }\n\n    fn add_client(&mut self, id: &'static str, pending: usize) {\n        let mut queue = VecDeque::new();\n        for _ in 0..pending {\n            queue.push_back(String::from(\"old\"));\n        }\n\n        self.clients.insert(id, Client { pending: queue });\n    }\n\n    fn broadcast(&mut self, payload: &str) {\n        let ids: Vec<_> = self.clients.keys().copied().collect();\n\n        for id in ids {\n            if let Some(client) = self.clients.get_mut(id) {\n                client.pending.push_back(payload.to_string());\n                self.delivered += 1;\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut hub = Hub::new(2);\n    hub.add_client(\"alpha\", 0);\n    hub.add_client(\"beta\", 2);\n    hub.add_client(\"gamma\", 1);\n\n    hub.broadcast(\"first\");\n    hub.broadcast(\"second\");\n\n    println!(\"active = {}\", hub.clients.len());\n    println!(\"evicted = {}\", if hub.evicted.is_empty() { \"none\".to_string() } else { hub.evicted.join(\",\") });\n    println!(\"delivered = {}\", hub.delivered);\n}"
+"initialCode": "use std::collections::{HashMap, VecDeque};\n\n#[derive(Debug, Default)]\nstruct Client {\n    pending: VecDeque<String>,\n}\n\n#[derive(Debug)]\nstruct Hub {\n    clients: HashMap<&'static str, Client>,\n    max_pending: usize,\n    delivered: usize,\n    evicted: Vec<&'static str>,\n}\n\nimpl Hub {\n    fn new(max_pending: usize) -> Self {\n        Self {\n            clients: HashMap::new(),\n            max_pending,\n            delivered: 0,\n            evicted: Vec::new(),\n        }\n    }\n\n    fn add_client(&mut self, id: &'static str, pending: usize) {\n        let mut queue = VecDeque::new();\n        for _ in 0..pending {\n            queue.push_back(String::from(\"old\"));\n        }\n\n        self.clients.insert(id, Client { pending: queue });\n    }\n\n    fn broadcast(&mut self, payload: &str) {\n        // Iterate over a sorted snapshot of ids so eviction order is deterministic\n        // regardless of HashMap iteration order (which is randomized per process).\n        let mut ids: Vec<_> = self.clients.keys().copied().collect();\n        ids.sort_unstable();\n\n        for id in ids {\n            if let Some(client) = self.clients.get_mut(id) {\n                client.pending.push_back(payload.to_string());\n                self.delivered += 1;\n            }\n        }\n    }\n}\n\nfn main() {\n    let mut hub = Hub::new(2);\n    hub.add_client(\"alpha\", 0);\n    hub.add_client(\"beta\", 2);\n    hub.add_client(\"gamma\", 1);\n\n    hub.broadcast(\"first\");\n    hub.broadcast(\"second\");\n\n    println!(\"active = {}\", hub.clients.len());\n    println!(\"evicted = {}\", if hub.evicted.is_empty() { \"none\".to_string() } else { hub.evicted.join(\",\") });\n    println!(\"delivered = {}\", hub.delivered);\n}"
 }
 },
 "ch49": {
@@ -7605,7 +7742,7 @@
 "acceptanceCriteria": [
 "You choose at least two different termination strategies across the four cases.",
 "You justify one choice with trust-header policy and one with certificate ownership or packaging policy.",
-"You avoid pretending one termination strategy is always correct for every service."
+"Your choices vary by deployment shape and you explain why each one differs."
 ],
 "hints": [
 "Ask who owns public certificates, who trusts proxy headers, and who needs the peer identity directly.",
@@ -7705,7 +7842,7 @@
 },
 {
 "number": 6,
-"kind": "design or production scenario",
+"kind": "testing plan",
 "title": "Test HTTPS locally and in CI with realistic trust behavior",
 "objective": "Build a local and CI test plan that exercises real TLS policy without teaching the team insecure shortcuts.",
 "starterPrompt": "You need browser-facing HTTPS tests, one service-to-service mTLS test, and one CI lane that verifies secure cookies, redirects, and HSTS.",
@@ -7732,7 +7869,8 @@
 "Why should proxy-header trust be tied to a known network boundary instead of accepted from arbitrary callers?",
 "When is HSTS a safe default, and when is it premature?",
 "Why are local CA and CI trust bundles safer than skip-verification flags for HTTPS testing?",
-"What makes certificate rotation a deployment problem as much as a cryptography problem?"
+"What makes certificate rotation a deployment problem as much as a cryptography problem?",
+"When would you reach for a Rust-native TLS stack over the platform's native stack, and why is that a topology decision before it is an API decision?"
 ],
 "workingLoop": [
 "Name the TLS termination owner first.",
@@ -7747,7 +7885,7 @@
 "filename": "harden_edge_policy_lab.rs",
 "runKey": "ch49_ex_harden_api_defaults",
 "expectedOutput": "redirect = true\ncookie hardened = true\ncors = locked-down\nhsts = true",
-"initialCode": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"session\",\n        secure: false,\n        http_only: false,\n        same_site: \"None\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: false,\n        hsts_max_age_secs: 0,\n        allowed_origin: \"*\",\n    };\n\n    println!(\"redirect = {}\", policy.redirect_http);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    println!(\"hsts = {}\", policy.redirect_http && policy.hsts_max_age_secs > 0);\n}"
+"initialCode": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"session\",\n        secure: false,\n        http_only: false,\n        same_site: \"None\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: false,\n        hsts_max_age_secs: 0,\n        allowed_origin: \"*\",\n    };\n\n    println!(\"redirect = {}\", policy.redirect_http);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    // HSTS validity depends only on a non-zero max-age. We check it together\n    // with redirect here because a secure edge wants BOTH to be true; the line\n    // asserts the pair, not that HSTS requires this process to do the redirect.\n    println!(\"hsts = {}\", policy.redirect_http && policy.hsts_max_age_secs > 0);\n}"
 }
 },
 "ch50": {
@@ -7762,17 +7900,20 @@
 "Which events belong to the network edge and which commands belong to local application logic?",
 "Which peer or request IDs must be carried through the state machine?",
 "Which state transitions add pending work and which clear it?",
+"When two peers report different values for the same state key, write the deterministic merge rule that decides the winner (for example: higher version wins, then break a version tie by author), and trace a version-tie case by hand.",
 "What should the node record so another engineer can replay the same sequence in a deterministic test?"
 ],
 "acceptanceCriteria": [
 "You separate local commands from inbound network events clearly.",
 "You include at least one pending-request or connected-peer state transition.",
 "You identify at least one stable correlation field such as peer ID or request ID.",
+"You state a deterministic merge rule for conflicting updates and name one case where a scalar version plus tie-break is too weak.",
 "You explain the design in terms of owned events rather than shared mutable transport access."
 ],
 "hints": [
 "A protocol loop is usually easier to test when every event is a plain value.",
-"If the state change is important in production, it should have a name in the model."
+"If the state change is important in production, it should have a name in the model.",
+"See Chapter 42 for the deterministic event-loop test patterns that replay a fixed sequence of owned events."
 ]
 },
 {
@@ -7801,17 +7942,19 @@
 "number": 3,
 "kind": "implementation",
 "title": "Build a small libp2p-style swarm loop over owned enums",
-"objective": "Implement one small event loop that records connected peers, tracks one pending request map, and clears state on response.",
-"starterPrompt": "Create `PeerId`, `Event`, and `SwarmState`, then handle a connect, request, and response sequence with no real networking required.",
+"objective": "Implement one small event loop that records connected peers, tracks one pending request map, clears state on response, and also handles an inbound gossip arm so the loop spans both protocol shapes.",
+"starterPrompt": "Create `PeerId`, `Event`, and `SwarmState`, then handle a connect, request, response, and gossip sequence with no real networking required.",
 "prompts": [
 "Keep the owner as one plain Rust struct.",
 "Use one map keyed by request ID for pending work.",
 "Use one small log or event queue for observability.",
+"Add a Gossip arm so the loop covers pub-sub news, not only request-response: it records a log line but adds no pending state.",
 "Do not use `Rc`, `RefCell`, or raw pointers for the main design."
 ],
 "acceptanceCriteria": [
 "The event loop keeps one central owner for protocol state.",
 "Requests create pending entries and responses clear them.",
+"A Gossip event appends a log line and leaves the pending map untouched, so the two protocol shapes stay distinct.",
 "The runnable lab prints the expected connected count, pending count, and final log line.",
 "The code is plausible Rust and easy to test without a live network."
 ],
@@ -7938,7 +8081,7 @@
 },
 {
 "number": 2,
-"kind": "code reading",
+"kind": "architecture review",
 "title": "Refactor an API workflow so proving and verification are isolated",
 "objective": "Read one service path and explain why the prover boundary should not look like the verifier boundary.",
 "starterPrompt": "A request handler currently derives the witness, generates the proof inline, verifies it again locally, and stores both proof and witness in the same outbound record.",
@@ -8055,7 +8198,7 @@
 "What makes transcript domain separation a protocol rule instead of one local implementation detail?",
 "Why is a proof artifact not the same thing as a witness or proving key?",
 "What does zero knowledge fail to protect if public inputs or metadata are already too revealing?",
-"Why should large proof systems still be reviewed for ordinary Rust concerns such as queues, logging, unsafe wrappers, and resource limits?"
+"Why should proof-backed systems still be reviewed for ordinary Rust concerns such as queues, logging, unsafe wrappers, and resource limits?"
 ],
 "workingLoop": [
 "State what is public, what is private, and what is an artifact.",
@@ -8069,8 +8212,8 @@
 "title": "Runnable lab · Keep verification separate from the witness",
 "filename": "proof_boundary_lab.rs",
 "runKey": "ch51_ex_proof_boundary",
-"expectedOutput": "verified = true\npublic total = 45\nproof bytes = 96",
-"initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Statement {\n    public_total: u64,\n    public_limit: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct Witness {\n    left: u64,\n    right: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofArtifact {\n    public_total: u64,\n    public_limit: u64,\n    proof_bytes_len: usize,\n}\n\nfn prove(statement: Statement, witness: Witness) -> Result<ProofArtifact, &'static str> {\n    if witness.left + witness.right != statement.public_total {\n        return Err(\"sum constraint failed\");\n    }\n\n    if statement.public_total > statement.public_limit {\n        return Err(\"limit violated\");\n    }\n\n    Ok(ProofArtifact {\n        public_total: statement.public_total,\n        public_limit: statement.public_limit,\n        proof_bytes_len: 96,\n    })\n}\n\nfn verify(_statement: Statement, _proof: ProofArtifact) -> bool {\n    false\n}\n\nfn main() {\n    let statement = Statement {\n        public_total: 45,\n        public_limit: 50,\n    };\n    let witness = Witness { left: 20, right: 25 };\n    let proof = prove(statement, witness).unwrap();\n\n    println!(\"verified = {}\", verify(statement, proof));\n    println!(\"public total = {}\", statement.public_total);\n    println!(\"proof bytes = {}\", proof.proof_bytes_len);\n}"
+"expectedOutput": "public total = 45\nproof bytes = 96\nverified = true",
+"initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Statement {\n    public_total: u64,\n    public_limit: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct Witness {\n    left: u64,\n    right: u64,\n}\n\n#[derive(Debug, Clone, Copy)]\nstruct ProofArtifact {\n    public_total: u64,\n    public_limit: u64,\n    proof_bytes_len: usize,\n}\n\nfn prove(statement: Statement, witness: Witness) -> Result<ProofArtifact, &'static str> {\n    if witness.left + witness.right != statement.public_total {\n        return Err(\"sum constraint failed\");\n    }\n\n    if statement.public_total > statement.public_limit {\n        return Err(\"limit violated\");\n    }\n\n    Ok(ProofArtifact {\n        public_total: statement.public_total,\n        public_limit: statement.public_limit,\n        proof_bytes_len: 96,\n    })\n}\n\nfn verify(_statement: Statement, _proof: ProofArtifact) -> bool {\n    false\n}\n\nfn main() {\n    let statement = Statement {\n        public_total: 45,\n        public_limit: 50,\n    };\n    let witness = Witness { left: 20, right: 25 };\n    let proof = prove(statement, witness).unwrap();\n\n    println!(\"public total = {}\", statement.public_total);\n    println!(\"proof bytes = {}\", proof.proof_bytes_len);\n    println!(\"verified = {}\", verify(statement, proof));\n}"
 }
 },
 "ch52": {
@@ -8101,7 +8244,7 @@
 "number": 2,
 "kind": "code reading",
 "title": "Review a proof workflow for proof-friendly input modeling",
-"objective": "Spot the places where transport-shaped data is being pushed into the ZoKrates boundary without enough normalization or commitment discipline.",
+"objective": "Spot the places where transport-shaped data is being pushed into the ZoKrates boundary without enough normalization or commitment discipline (commitments are hash-based digests of the private data).",
 "starterPrompt": "A Rust API currently forwards raw JSON strings, variable-length lists, and unbounded notes fields directly into a proof step that is supposed to justify only one public total and one public limit.",
 "prompts": [
 "Which parts should become canonical numeric inputs before witness generation?",
@@ -8217,7 +8360,8 @@
 "What makes a proof request different from a verifier request in Rust terms?",
 "Why is contract or key version drift often a bigger operational risk than one single failed proof?",
 "What does native verification prove, and what does it not prove about the Ethereum deployment path?",
-"Why should generated verifier contracts still go through normal Solidity review and release discipline?"
+"Why should generated verifier contracts still go through normal Solidity review and release discipline?",
+"Where in the pipeline does latency actually accumulate: witness generation, proof generation, or the verifier call, and how should that shape the queue design?"
 ],
 "workingLoop": [
 "State which inputs are public, private, or artifact identifiers first.",
@@ -8231,8 +8375,8 @@
 "title": "Runnable lab · Build a verifier request without leaking witness material",
 "filename": "verifier_request_boundary.rs",
 "runKey": "ch52_ex_verifier_request",
-"expectedOutput": "contract = contracts/AgeCheckVerifier.sol\npublic inputs = 2\nwitness included = false",
-"initialCode": "#[derive(Debug, Clone)]\nstruct ProofBundle {\n    verifier_contract: String,\n    public_inputs: Vec<String>,\n    proof_path: String,\n    witness_path: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerificationRequest {\n    contract: String,\n    public_inputs_len: usize,\n    proof_path: String,\n    witness_included: bool,\n}\n\nfn to_verification_request(bundle: &ProofBundle) -> VerificationRequest {\n    VerificationRequest {\n        contract: String::new(),\n        public_inputs_len: 0,\n        proof_path: bundle.witness_path.clone(),\n        witness_included: true,\n    }\n}\n\nfn main() {\n    let bundle = ProofBundle {\n        verifier_contract: String::from(\"contracts/AgeCheckVerifier.sol\"),\n        public_inputs: vec![String::from(\"45\"), String::from(\"50\")],\n        proof_path: String::from(\"artifacts/proof.json\"),\n        witness_path: String::from(\"artifacts/witness\"),\n    };\n\n    let request = to_verification_request(&bundle);\n\n    println!(\"contract = {}\", request.contract);\n    println!(\"public inputs = {}\", request.public_inputs_len);\n    println!(\"witness included = {}\", request.witness_included);\n}"
+"expectedOutput": "contract = contracts/AgeCheckVerifier.sol\npublic inputs = 2\nproof path = artifacts/proof.json\nwitness included = false",
+"initialCode": "#[derive(Debug, Clone)]\nstruct ProofBundle {\n    verifier_contract: String,\n    public_inputs: Vec<String>,\n    proof_path: String,\n    witness_path: String,\n}\n\n#[derive(Debug, Clone)]\nstruct VerificationRequest {\n    contract: String,\n    public_inputs_len: usize,\n    proof_path: String,\n    witness_included: bool,\n}\n\nfn to_verification_request(bundle: &ProofBundle) -> VerificationRequest {\n    VerificationRequest {\n        contract: String::new(),\n        public_inputs_len: 0,\n        proof_path: bundle.witness_path.clone(),\n        witness_included: true,\n    }\n}\n\nfn main() {\n    let bundle = ProofBundle {\n        verifier_contract: String::from(\"contracts/AgeCheckVerifier.sol\"),\n        public_inputs: vec![String::from(\"45\"), String::from(\"50\")],\n        proof_path: String::from(\"artifacts/proof.json\"),\n        witness_path: String::from(\"artifacts/witness\"),\n    };\n\n    let request = to_verification_request(&bundle);\n\n    println!(\"contract = {}\", request.contract);\n    println!(\"public inputs = {}\", request.public_inputs_len);\n    println!(\"proof path = {}\", request.proof_path);\n    println!(\"witness included = {}\", request.witness_included);\n}"
 }
 },
 "ch53": {
@@ -8402,7 +8546,7 @@
 {
 "number": 1,
 "kind": "warm-up comprehension",
-"title": "Name what the session owns and what you own",
+"title": "Identify what the session owns and what you own",
 "objective": "Restate the three-stage inference pipeline and identify which stage the ONNX runtime is responsible for.",
 "starterPrompt": "The chapter frames inference as a three-stage pipeline with the session in the middle: raw input becomes a tensor, the session turns that tensor into output tensors, and post-processing turns those into a domain decision. In your own words, describe each stage and assign ownership of correctness.",
 "prompts": [
@@ -8496,7 +8640,7 @@
 "kind": "debugging or refactoring",
 "title": "Diagnose a shape and dtype mismatch",
 "objective": "Reason about why a tensor whose shape or dtype disagrees with the graph either errors or silently returns wrong answers.",
-"starterPrompt": "A colleague's session run sometimes errors and sometimes returns confident nonsense after they changed the input builder. The graph declares a named input of shape [4] with dtype f32, but their code now passes a length-3 vector in one path and an i64 buffer in another. Explain each failure and fix the contract.",
+"starterPrompt": "A colleague's session run sometimes errors and sometimes returns confident nonsense because they changed the input builder. The graph declares a named input of shape [4] with dtype f32, but their code now passes a length-3 vector in one path and an i64 buffer in another. Explain each failure and fix the contract.",
 "prompts": [
 "Explain what happens when the input length is 3 but the graph fixed the input dimension at 4.",
 "Explain why passing an i64 buffer where the graph expects f32 is a different class of bug.",
@@ -8553,12 +8697,12 @@
 ],
 "diagnosticRubric": [],
 "lab": {
-"title": "Runnable lab · softmax over a one-layer model",
-"filename": "softmax_post_processing_lab.rs",
-"runKey": "ch54_ex_softmax",
-"expectedOutput": "logits = [-1.5750, 1.0500, 0.9750]\nprobs = [0.0362, 0.5000, 0.4638]\nprobs sum = 1.0000\npredicted class = 1\nconfidence = 0.5000",
-"helperText": "Complete the softmax function so the one-layer model reports calibrated probabilities. The forward pass and argmax mirror the chapter's dense layer; softmax is post-processing you own, exactly like argmax.",
-"initialCode": "// Companion lab: add a softmax stage so the one-layer model reports\n// calibrated probabilities, not just raw logits. The forward pass and\n// argmax mirror the chapter's dense layer; softmax is post-processing\n// that you own, exactly like argmax.\n\nconst IN: usize = 4;\nconst OUT: usize = 3;\n\n// Weights stored row-major: one row of IN values per output class.\nconst WEIGHTS: [[f32; IN]; OUT] = [\n    [0.2, 0.8, -0.5, 0.1],\n    [-0.3, 0.5, 0.9, 0.4],\n    [0.6, -0.2, 0.3, -0.7],\n];\nconst BIAS: [f32; OUT] = [0.1, -0.2, 0.05];\n\n// One fixed input \"tensor\" of shape [IN].\nfn input_tensor() -> [f32; IN] {\n    [0.5, -1.0, 2.0, 0.25]\n}\n\n// Dense layer: logits[o] = bias[o] + sum_c weights[o][c] * input[c].\nfn forward(input: &[f32; IN]) -> [f32; OUT] {\n    let mut logits = [0.0f32; OUT];\n    for o in 0..OUT {\n        let mut sum = BIAS[o];\n        for c in 0..IN {\n            sum += WEIGHTS[o][c] * input[c];\n        }\n        logits[o] = sum;\n    }\n    logits\n}\n\n// Post-processing you own: largest logit wins.\nfn argmax(logits: &[f32; OUT]) -> usize {\n    let mut best = 0;\n    for i in 1..OUT {\n        if logits[i] > logits[best] {\n            best = i;\n        }\n    }\n    best\n}\n\n// Numerically stable softmax: subtract the max logit before exponentiating.\nfn softmax(logits: &[f32; OUT]) -> [f32; OUT] {\n    // TODO: replace this uniform placeholder with a real softmax.\n    // 1. Find the maximum logit.\n    // 2. Set probs[i] = (logits[i] - max).exp().\n    // 3. Divide every entry by the sum so the vector sums to 1.0.\n    let _ = logits;\n    [1.0 / OUT as f32; OUT]\n}\n\nfn main() {\n    let input = input_tensor();\n    let logits = forward(&input);\n    let probs = softmax(&logits);\n    let class = argmax(&logits);\n\n    println!(\"logits = [{:.4}, {:.4}, {:.4}]\", logits[0], logits[1], logits[2]);\n    println!(\"probs = [{:.4}, {:.4}, {:.4}]\", probs[0], probs[1], probs[2]);\n    println!(\"probs sum = {:.4}\", probs[0] + probs[1] + probs[2]);\n    println!(\"predicted class = {}\", class);\n    println!(\"confidence = {:.4}\", probs[class]);\n}"
+"title": "Runnable lab · Real ONNX inference on the GPU from Rust — measure the speedup",
+"filename": "onnx_challenge.rs",
+"runKey": "ch54_ex_onnx_gpu",
+"expectedOutput": "cpu        = 20.41 ms / inference\ngpu (cuda) = 1.25 ms / inference\nbatch      = 128, model = 1024->4096->4096->4096->10 (f32)\nspeedup    = 16.3x\nagree      = true",
+"helperText": "Real ONNX Runtime inference from Rust on the GPU via the `ort` crate's CUDA execution provider, timed against the CPU provider. Build and run it with the GPU Docker project in `public/onnx-gpu/`: `docker compose run --rm onnx`. The harness loads the model, runs both providers, and checks they agree; your job in the challenge is to register the CUDA execution provider in `build()` so the GPU session actually runs on the device. Exact times vary by GPU.",
+"initialCode": "//! Chapter 54 — real ONNX inference from Rust, on the GPU (CHALLENGE / starter).\n//!\n//! The whole harness is here: model loading, the CPU/GPU sessions, timing, and\n//! the output-agreement check. One thing is left for you — register the CUDA\n//! execution provider in `build()` so the \"gpu\" session actually runs on the\n//! device. As shipped, both sessions run on the CPU, so the speedup is ~1x.\n\n#![allow(unused_imports)]\nuse ort::execution_providers::CUDAExecutionProvider;\nuse ort::session::{builder::GraphOptimizationLevel, Session};\nuse ort::value::Tensor;\nuse std::time::Instant;\n\nconst BATCH: usize = 128;\nconst DIN: usize = 1024;\n\nfn build(cuda: bool) -> ort::Result<Session> {\n    let builder = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;\n    let builder = if cuda {\n        // TODO: register the CUDA execution provider so this session runs on the GPU:\n        //     builder.with_execution_providers(\n        //         [CUDAExecutionProvider::default().build().error_on_failure()])?\n        // Until you do, the \"gpu\" session falls back to the CPU and speedup stays ~1x.\n        builder\n    } else {\n        builder\n    };\n    builder.commit_from_file(\"model.onnx\")\n}\n\nfn run_once(s: &mut Session, input: &[f32]) -> ort::Result<Vec<f32>> {\n    let t = Tensor::from_array(([BATCH, DIN], input.to_vec()))?;\n    let outputs = s.run(ort::inputs![\"input\" => t])?;\n    let (_shape, data) = outputs[\"gemm3\"].try_extract_tensor::<f32>()?;\n    Ok(data.to_vec())\n}\n\nfn bench(label: &str, s: &mut Session, input: &[f32], iters: usize) -> ort::Result<(f64, Vec<f32>)> {\n    let out = run_once(s, input)?;\n    let t = Instant::now();\n    for _ in 0..iters {\n        let _ = run_once(s, input)?;\n    }\n    let ms = t.elapsed().as_secs_f64() * 1e3 / iters as f64;\n    println!(\"{label:11}= {ms:.2} ms / inference\");\n    Ok((ms, out))\n}\n\nfn main() -> ort::Result<()> {\n    let input: Vec<f32> = (0..BATCH * DIN).map(|i| ((i % 97) as f32) * 0.01).collect();\n    let iters = 50;\n\n    let mut cpu = build(false)?;\n    let (cpu_ms, cpu_out) = bench(\"cpu\", &mut cpu, &input, iters)?;\n\n    let mut gpu = build(true)?;\n    let (gpu_ms, gpu_out) = bench(\"gpu (cuda)\", &mut gpu, &input, iters)?;\n\n    let (mut max_abs, mut max_val) = (0.0f32, 1.0f32);\n    for (a, b) in cpu_out.iter().zip(gpu_out.iter()) {\n        max_abs = max_abs.max((a - b).abs());\n        max_val = max_val.max(a.abs());\n    }\n\n    println!(\"batch      = {BATCH}, model = 1024->4096->4096->4096->10 (f32)\");\n    println!(\"speedup    = {:.1}x\", cpu_ms / gpu_ms);\n    println!(\"agree      = {}\", max_abs / max_val < 1e-3);\n    if cpu_ms / gpu_ms < 2.0 {\n        println!(\"note       = both sessions are on CPU — add the CUDA EP in build()\");\n    }\n    Ok(())\n}"
 }
 },
 "ch55": {
@@ -8635,7 +8779,7 @@
 {
 "number": 4,
 "kind": "implementation",
-"title": "Encode the platform comparison as queryable data",
+"title": "Turn the platform comparison table into runnable code",
 "objective": "Turn the four-question comparison table into runnable data and add a lookup that answers a single question across all three platforms.",
 "starterPrompt": "Using the smart_contract_platform_compare model, where each Platform maps to a PlatformModel with four fields, write fn serialization_of(platform: Platform) -> &'static str and a loop that prints the serialization format for every platform.",
 "prompts": [
@@ -8663,7 +8807,7 @@
 "starterPrompt": "The counter program uses current + 1 for Increment. A counter sitting at u64::MAX is valid input from a hostile caller, and in release builds that addition wraps to 0 instead of failing. Make the increment path reject overflow instead of silently wrapping.",
 "prompts": [
 "Explain why current + 1 is a boundary bug, not just a theoretical edge case, given that input bytes come from an untrusted counterparty.",
-"Add a ProgramError::Overflow variant and switch the Increment (and any SetTo/Add) path to checked_add.",
+"Add a ProgramError::Overflow variant and switch the Increment (and any SetTo) path to checked_add.",
 "Return Err(ProgramError::Overflow) before write_counter runs, so no invalid value reaches the buffer.",
 "Show that incrementing a buffer initialized to u64::MAX returns an error and leaves the buffer unchanged."
 ],
@@ -8721,8 +8865,8 @@
 "filename": "solana_counter_boundary_lab.rs",
 "runKey": "ch55_ex_counter",
 "expectedOutput": "after add = 40\nafter increment = 41\ncounter = 41\noverflow rejected = true",
-"helperText": "Model a stateless Solana-style program over an external account buffer. Fill in process_instruction so it decodes the little-endian counter, applies the instruction with checked_add, and rejects overflow before any value is written back to state.",
-"initialCode": "// A crate-free model of a Solana-style program over an external account buffer.\n// State lives in the account's byte buffer; the program is stateless code that\n// borrows the buffer, decodes a little-endian u64 by hand (as Borsh would),\n// applies an instruction, validates, and writes the bytes back.\n\n#[derive(Debug)]\nenum Instruction {\n    Increment,\n    Add(u64),\n}\n\n#[derive(Debug)]\nenum ProgramError {\n    DataTooSmall,\n    Overflow,\n}\n\nfn read_counter(data: &[u8]) -> Result<u64, ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    let mut bytes = [0u8; 8];\n    bytes.copy_from_slice(&data[..8]);\n    Ok(u64::from_le_bytes(bytes))\n}\n\nfn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    data[..8].copy_from_slice(&value.to_le_bytes());\n    Ok(())\n}\n\n// Stateless entry point: decode, apply, validate against overflow, re-encode.\nfn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {\n    let current = read_counter(data)?;\n    // TODO: compute `next` from `current` and `instruction` using checked_add,\n    // returning ProgramError::Overflow instead of wrapping. For now this stub\n    // ignores the instruction so the program still compiles.\n    let next = current;\n    write_counter(data, next)?;\n    Ok(next)\n}\n\nfn main() {\n    let mut data = [0u8; 8];\n\n    let a = process_instruction(&mut data, &Instruction::Add(40)).unwrap();\n    let b = process_instruction(&mut data, &Instruction::Increment).unwrap();\n\n    // A hostile instruction that would overflow must be rejected, not wrap.\n    let mut maxed = u64::MAX.to_le_bytes();\n    let bad = process_instruction(&mut maxed, &Instruction::Increment);\n\n    println!(\"after add = {}\", a);\n    println!(\"after increment = {}\", b);\n    println!(\"counter = {}\", read_counter(&data).unwrap());\n    println!(\"overflow rejected = {}\", bad.is_err());\n}"
+"helperText": "Model a stateless Solana-style program over an external account buffer. Fill in process_instruction to apply the instruction and reject overflow before writing back to state.",
+"initialCode": "// A crate-free model of a Solana-style program over an external account buffer.\n// State lives in the account's byte buffer; the program is stateless code that\n// borrows the buffer, decodes a little-endian u64 by hand (as Borsh would),\n// applies an instruction, validates, and writes the bytes back.\n\n#[derive(Debug)]\nenum Instruction {\n    Increment,\n    Add(u64),\n}\n\n#[derive(Debug)]\nenum ProgramError {\n    DataTooSmall,\n    Overflow,\n}\n\nfn read_counter(data: &[u8]) -> Result<u64, ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    let mut bytes = [0u8; 8];\n    bytes.copy_from_slice(&data[..8]);\n    Ok(u64::from_le_bytes(bytes))\n}\n\nfn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {\n    if data.len() < 8 {\n        return Err(ProgramError::DataTooSmall);\n    }\n    data[..8].copy_from_slice(&value.to_le_bytes());\n    Ok(())\n}\n\n// Stateless entry point: decode, apply, validate against overflow, re-encode.\nfn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {\n    let current = read_counter(data)?;\n    // TODO: compute `next` from `current` and `instruction` using checked_add,\n    // returning ProgramError::Overflow instead of wrapping. For now this stub\n    // ignores the instruction so the program still compiles.\n    // NOTE (maintainers): the card's expectedOutput describes the COMPLETED\n    // solution, not this stub. Running the stub as-is prints zeros and\n    // \"overflow rejected = false\"; the expected values appear once the TODO\n    // is filled in. This is intentional scaffolding, not a mismatch.\n    let next = current;\n    write_counter(data, next)?;\n    Ok(next)\n}\n\nfn main() {\n    let mut data = [0u8; 8];\n\n    let a = process_instruction(&mut data, &Instruction::Add(40)).unwrap();\n    let b = process_instruction(&mut data, &Instruction::Increment).unwrap();\n\n    // A hostile instruction that would overflow must be rejected, not wrap.\n    let mut maxed = u64::MAX.to_le_bytes();\n    let bad = process_instruction(&mut maxed, &Instruction::Increment);\n\n    println!(\"after add = {}\", a);\n    println!(\"after increment = {}\", b);\n    println!(\"counter = {}\", read_counter(&data).unwrap());\n    println!(\"overflow rejected = {}\", bad.is_err());\n}"
 }
 },
 "ch56": {
@@ -8741,7 +8885,7 @@
 ],
 "acceptanceCriteria": [
 "core is described as always available, alloc as requiring a heap, and std as requiring an OS.",
-"checksum is pinned to core because it takes only a slice and returns an integer; encode_frame to alloc because it returns an owned Vec<u8>; write_diagnostic to std because it produces a String and is meant for host diagnostics.",
+"checksum is pinned to core because it takes only a slice and returns an integer; encode_frame to alloc because it returns an owned Vec<u8>; write_diagnostic to std because it formats host-facing diagnostics (returns a String) and is meant for an environment with an OS.",
 "The answer states that a crate can be no_std yet still use alloc, so dropping std does not by itself remove the heap.",
 "The target triple is identified as what determines the highest ring a given build is allowed to use."
 ],
@@ -8765,12 +8909,13 @@
 "acceptanceCriteria": [
 "alloc_copy returns None when bytes.len() exceeds BYTES, and otherwise None only when every slot is already used.",
 "The third allocation fails because both of the two slots are occupied, not because of byte capacity.",
-"in_use is 1 after release, overflow is true, and sent_bytes is 3 (the length of b\"abc\").",
+"in_use is 1 after release, overflow is true, and sent_bytes is 3 (the length of b\"abc\"); the output is printed in the order in_use, overflow, sent_bytes, matching Example 2's println! order.",
 "release is identified as clearing the used flag and zeroing the recorded length for that slot."
 ],
 "hints": [
 "SLOTS bounds how many buffers exist; BYTES bounds the size of each one.",
-"as_slice reads lens[id], which release sets back to 0."
+"as_slice reads lens[id], which release sets back to 0.",
+"Two different rejection paths: here b\"more\" (4 bytes) fails because no slot is free, while the lab's b\"overflowing\" (11 bytes) fails the byte-capacity check. Do not conflate them."
 ]
 },
 {
@@ -8801,7 +8946,7 @@
 "kind": "implementation",
 "title": "Transfer slot ownership to a DMA handoff",
 "objective": "Use move semantics to encode that a peripheral, not the caller, owns a buffer while a transfer is in flight.",
-"starterPrompt": "Following the chapter's submit_to_dma idea, write fn submit_to_dma(slot: SlotId) -> InFlight that takes the SlotId by value and returns a handle, plus fn complete(token: InFlight) -> SlotId that returns ownership once the transfer finishes. The caller must be unable to read the buffer between submit and complete.",
+"starterPrompt": "Following the chapter's submit_to_dma idea, write fn submit_to_dma(slot: SlotId) -> InFlight that takes the SlotId by value and returns a handle, plus fn complete(token: InFlight) -> SlotId that returns ownership once the transfer finishes. The caller must be unable to read the buffer between submit and complete. Note that the chapter shows only the consuming call (submit_to_dma taking a TxSlot with no return); you must derive InFlight and complete yourself from the prose description of the ownership round-trip.",
 "prompts": [
 "Define SlotId and a separate InFlight type that wraps the moved SlotId.",
 "Make submit_to_dma consume the SlotId by value so the caller no longer holds it.",

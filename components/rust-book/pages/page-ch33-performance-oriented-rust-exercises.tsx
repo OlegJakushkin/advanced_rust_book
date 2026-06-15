@@ -116,7 +116,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "analysis or methodology",
     title: "Compare iterator and loop implementations responsibly",
     objective: "Avoid folklore by designing a fair comparison between two equivalent hot loops.",
     starterPrompt:
@@ -150,12 +150,14 @@ const exercises: Exercise[] = [
       "Which profile settings would you consider, and what tradeoff does each one carry?",
       "When might `panic = \"abort\"` be acceptable, and when would it be the wrong contract?",
       "Which live signals would you require before trusting the optimized build in production?",
+      "Where would synchronization cost (lock scope, queue depth, or batch size at an IO boundary) show up, and how would you keep it from becoming the next regression?",
     ],
     acceptanceCriteria: [
       "You name release mode explicitly for measurement.",
       "You justify at least two profile settings or profile decisions with tradeoffs.",
       "You explain `panic = \"abort\"` as a binary contract choice rather than a free speed flag.",
       "You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate.",
+      "You name at least one synchronization-cost decision (lock hold duration, queue depth, or batch size) as part of the design, not an afterthought.",
     ],
     hints: [
       "Compiler flags are workload tools, not trophies.",
@@ -170,6 +172,7 @@ const reviewQuestions = [
   "Why are slice-based and chunk-based loops often easier to optimize than index-heavy loops?",
   "When is a clone economically justified even in performance-sensitive code?",
   "What does release mode change, and what questions does it still not answer by itself?",
+  "What question does a distributed trace answer that a microbenchmark cannot, and what question does production observability answer that a trace alone cannot?",
 ]
 
 const workingLoop = [
@@ -211,7 +214,8 @@ export function PageCh33PerformanceOrientedRustExercises() {
               <p className="text-sm text-muted-foreground leading-6">
                 Treat each exercise as a performance review. The strongest answer does not stop at “make it faster.” It
                 says what the workload is, what the metric is, what moved in the cost model, and which measurement tool
-                ownership boundaries, and layout choices that make the CPU&apos;s job easier rather than harder.
+                matched the question, how ownership boundaries shaped the cost, and which layout choices made the CPU&apos;s
+                job easier rather than harder.
               </p>
             </div>
             <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">

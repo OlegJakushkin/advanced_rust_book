@@ -100,6 +100,7 @@ const exercises: Exercise[] = [
       "Where should you add context before the spawn boundary and after the await?",
       "Why is `JoinHandle<Result<T, E>>` a two-layer error surface instead of one?",
       "Which fields belong in the context message: job ID, queue name, attempt, resource name?",
+      "Which failures in this path are retryable, and where would you record that policy so callers do not infer it from message text?",
       "When should cancellation be modeled distinctly from ordinary inner failure?",
     ],
     acceptanceCriteria: [
@@ -231,16 +232,11 @@ export function PageCh41ErrorHandlingInLargeSystemsExercises() {
         <section className="grid gap-4">
           {exercises.map((exercise) => (
             <article key={exercise.number} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-3 flex-col md:flex-row md:items-center mb-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
-                    Exercise {exercise.number} · {exercise.kind}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
+              <div className="mb-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">
+                  Exercise {exercise.number} · {exercise.kind}
                 </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Error contract drill
-                </span>
+                <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -311,7 +307,12 @@ export function PageCh41ErrorHandlingInLargeSystemsExercises() {
               or an explicit <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">match</code> for the
               missing case, and map parse failure into{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ConfigError::InvalidPort</code> without
-              using <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">unwrap</code>.
+              using <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">unwrap</code>. Note that{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ok_or(...)</code> returns a{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Result</code>, so follow it with{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">?</code> to propagate the missing case;
+              dropping the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">?</code> is a type error, not
+              a panic.
             </>
           }
           initialCode={`#[derive(Debug, PartialEq, Eq)]

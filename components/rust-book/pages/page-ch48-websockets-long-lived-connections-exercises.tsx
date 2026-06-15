@@ -46,7 +46,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "design comparison",
     title: "Review explicit read/write ownership in one connection loop",
     objective:
       "Read two async designs and explain why one writer-task boundary is calmer than several unrelated tasks writing directly through one shared sink.",
@@ -176,6 +176,7 @@ const reviewQuestions = [
   "Why are reconnect and resume protocol decisions separate from ping or pong liveness?",
   "When is SSE a better answer than WebSockets even if the product still wants live updates?",
   "Why should graceful shutdown for long-lived sockets stop admission before closing active connections?",
+  "Why does Rust's ownership model force you to name the channel bound and payload type that Go or Python would leave implicit?",
 ]
 
 const workingLoop = [
@@ -265,7 +266,7 @@ export function PageCh48WebsocketsLongLivedConnectionsExercises() {
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  WebSocket drill
+                  Long-lived connection drill
                 </span>
               </div>
 
@@ -376,7 +377,10 @@ impl Hub {
     }
 
     fn broadcast(&mut self, payload: &str) {
-        let ids: Vec<_> = self.clients.keys().copied().collect();
+        // Iterate over a sorted snapshot of ids so eviction order is deterministic
+        // regardless of HashMap iteration order (which is randomized per process).
+        let mut ids: Vec<_> = self.clients.keys().copied().collect();
+        ids.sort_unstable();
 
         for id in ids {
             if let Some(client) = self.clients.get_mut(id) {

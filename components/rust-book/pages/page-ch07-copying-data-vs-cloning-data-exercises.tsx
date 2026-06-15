@@ -96,20 +96,22 @@ const exercises: Exercise[] = [
     title: "Remove unnecessary clones from a read-only API",
     objective: "Repair an API that clones owned strings where borrowing would express the contract more accurately.",
     starterPrompt:
-      "A helper `fn route_label(route: String) -> String` is called only to log and compare route text. Refactor the API so callers stop cloning route strings just to satisfy the signature.",
+      "A helper `fn route_label(route: String) -> String` returns the route unchanged when it already starts with `/`, and otherwise returns a corrected copy with a leading `/` added. Callers that still need their route afterward currently write `route_label(route.clone())` just to satisfy the owned parameter. Refactor the API so callers stop cloning route strings.",
     prompts: [
-      "What should the parameter type become if the helper only reads?",
-      "Should the return type stay owned or become borrowed?",
+      "What should the parameter type become if the helper only reads its input?",
+      "Since the function usually returns the input unchanged and only sometimes rewrites it, could `Cow<'_, str>` as the return type avoid a mandatory allocation on the common path?",
       "Which call sites can lose `.clone()` after the change?",
     ],
     acceptanceCriteria: [
-      "Your refactor changes the signature to borrow when read-only access is enough.",
+      "Your refactor changes the parameter to borrow with `&str` when read-only access is enough.",
+      "Your return type avoids allocating on the unchanged-input path, for example by returning `Cow<'_, str>` that only allocates on the rewrite branch.",
       "You remove at least one unnecessary clone from the caller side.",
       "You explain why borrowing communicates the contract more clearly than taking ownership here.",
     ],
     hints: [
       "If the helper only inspects text, start with `&str`.",
       "A better signature usually fixes more than one clone at once.",
+      "`Cow<'_, str>` lets the unchanged branch return `Cow::Borrowed` with no allocation and the rewrite branch return `Cow::Owned`.",
     ],
   },
   {
@@ -118,15 +120,16 @@ const exercises: Exercise[] = [
     title: "Decide whether a type should implement Copy",
     objective: "Practice the conservative rule set for implementing `Copy` safely.",
     starterPrompt:
-      "Evaluate whether each type should implement `Copy`: `RequestId(u64)`, `Span { start: usize, end: usize }`, `SessionKey(String)`, `SharedSchema(Arc<str>)`, and `SocketOwner(TcpStream)`.",
+      "Evaluate whether each type should implement `Copy`: `RequestId(u64)`, `Span { start: usize, end: usize }`, `SessionToken(u64)`, `SharedSchema(Arc<str>)`, and `SocketOwner(TcpStream)`.",
     prompts: [
-      "Which ones satisfy Rust's mechanical rules for `Copy`?",
-      "Which ones would still be a semantic mistake even if the shape looked small?",
+      "Which ones cannot be `Copy` because the compiler would reject the derive outright?",
+      "Which ones could mechanically be `Copy` but would still be a semantic mistake?",
       "Where is explicit `Clone` or no duplication trait the better signal?",
     ],
     acceptanceCriteria: [
       "You approve `Copy` only for types where implicit duplication is trivial and unsurprising.",
-      "You reject `Copy` for heap-owning or resource-owning types.",
+      "You separate the two gates: `SharedSchema` and `SocketOwner` fail the mechanical rule outright, while `SessionToken(u64)` passes it yet is a semantic mistake to copy.",
+      "You reject `Copy` for `SessionToken(u64)` even though every field is `Copy`, because implicitly duplicating a credential hides which copy is authoritative.",
       "You explain why `Arc<T>` being cheap to clone does not make the wrapper automatically a good `Copy` candidate.",
     ],
     hints: [
@@ -216,7 +219,7 @@ export function PageCh07CopyingDataVsCloningDataExercises() {
                 obvious to the next engineer.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(14)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch07-copying-data-vs-cloning-data"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 07
             </Button>

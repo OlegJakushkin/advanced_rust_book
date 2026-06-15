@@ -27,7 +27,8 @@ fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
         Invocation {
             stage: "setup",
             program: "zokrates",
-            args: vec!["setup".into(), "-i".into(), compiled.clone()],
+            // setup reads the compiled program from its default path; no -i here.
+            args: vec!["setup".into()],
             artifact: PathBuf::from("artifacts/proving.key"),
         },
         Invocation {
@@ -54,13 +55,17 @@ fn plan_for(circuit: &str, witness_args: &[&str]) -> Vec<Invocation> {
         Invocation {
             stage: "export-verifier",
             program: "zokrates",
-            args: vec!["export-verifier".into(), "-i".into(), compiled.clone()],
+            // export-verifier consumes the verification key, not the compiled
+            // program, and writes the Solidity contract to its default path.
+            args: vec!["export-verifier".into()],
             artifact: PathBuf::from("artifacts/AgeCheckVerifier.sol"),
         },
         Invocation {
             stage: "verify",
             program: "zokrates",
-            args: vec!["verify".into(), "-i".into(), compiled],
+            // verify takes the proof and verification key, not a compiled
+            // program input, so it carries no -i flag.
+            args: vec!["verify".into()],
             artifact: PathBuf::from("artifacts/verify.log"),
         },
     ]

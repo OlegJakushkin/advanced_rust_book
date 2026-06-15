@@ -113,7 +113,7 @@ const exercises: Exercise[] = [
     number: 5,
     kind: "debugging or refactoring",
     title: "Profile communication-heavy HPC work conceptually before rewriting it",
-    objective: "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic.",
+    objective: "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic. This is a diagnostic task: you are measuring an existing run before changing anything, not planning a new deployment.",
     starterPrompt:
       "A solver slowed down after a mesh change. Every rank still finishes the same kernel code path, but total runtime rose sharply.",
     prompts: [
@@ -135,7 +135,7 @@ const exercises: Exercise[] = [
     number: 6,
     kind: "design or production scenario",
     title: "Choose hybrid MPI plus threads and cluster deployment policy deliberately",
-    objective: "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload.",
+    objective: "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload. This is a design task: you are planning a deployment before launch, not measuring a run that already exists.",
     starterPrompt:
       "You are designing `load block -> local compute -> allreduce convergence -> write checkpoint`, with CPU-heavy kernels, one read-mostly lookup table per rank, and a cluster policy that limits cores per node tightly.",
     prompts: [
@@ -302,9 +302,9 @@ export function PageCh32MpiAndHighPerformanceComputingExercises() {
           }
           helperText={
             <>
-              Tip: keep the range half-open, use the same helper for every rank, and let the first{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">rows % ranks</code> ranks absorb one
-              extra row each.
+              Tip: keep the range half-open, use the same helper for every rank, and let the first R ranks absorb one
+              extra row each, where R is the remainder{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">rows % ranks</code>.
             </>
           }
           initialCode={`#[derive(Debug, Clone, Copy)]
@@ -327,13 +327,13 @@ fn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {
 fn main() {
     let rows = 11_usize;
     let ranks = 4_usize;
-    let cols = 5_usize;
 
     for rank in 0..ranks {
         let part = block_range(rows, ranks, rank);
         println!("rank {} = {}..{}", rank, part.start_row, part.end_row);
     }
 
+    let cols = 5_usize;
     let part = block_range(rows, ranks, 2);
     println!("cells rank2 = {}", (part.end_row - part.start_row) * cols);
 }`}

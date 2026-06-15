@@ -132,12 +132,12 @@ fn build_label<'a>(service: &'a str, route: &'a str) -> &'a str { /* wrong model
 
 // after
 fn build_label(service: &str, route: &str) -> String {
-    format!("{}::{}", service, route)
+    format!("{}/{}", service, route)
 }`,
   },
   {
     title: "Extracting safe abstractions from unsafe code",
-    body: "Unsafe refactors are most successful when the public API becomes safer than the original, not merely faster. The pattern is a thin safe wrapper that validates every precondition in ordinary checked code, and only then enters a minimal `unsafe` block containing the raw operation alone. Shrink the unsafe surface until the proof of correctness fits in a `// SAFETY:` comment that another engineer can re-derive in a few seconds. The example below avoids unsafe entirely by returning a `Result`, which is itself the most idiomatic outcome: the safest unsafe code is the unsafe code you removed.",
+    body: "Services ported from C++ or wrapping C FFI sometimes carry raw pointer operations, so the same three-pass discipline has to cover unsafe regions too. Unsafe refactors are most successful when the public API becomes safer than the original, not merely faster. The pattern is a thin safe wrapper that validates every precondition in ordinary checked code, and only then enters a minimal `unsafe` block containing the raw operation alone. Shrink the unsafe surface until the proof of correctness fits in a `// SAFETY:` comment that another engineer can re-derive in a few seconds. The example below avoids unsafe entirely by returning a `Result`, which is itself the most idiomatic outcome: the safest unsafe code is the unsafe code you removed.",
     bullets: [
       "Keep bounds, contiguity, aliasing, and lifetime checks outside the unsafe block when possible.",
       "If the caller must uphold the contract, make the function `unsafe fn` and document it explicitly.",
@@ -400,8 +400,8 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
           <p className="text-sm text-muted-foreground leading-6">
             Most of the friction in an idiomatic refactor is not about Rust syntax. It is about the instinct you brought
             from your previous language and where that instinct now points you wrong. The cards below name the specific
-            mental-model shift for each background, not a library mapping. Find the one that fits you and keep it in mind
-            while you read the core concepts.
+            mental-model shift for each background, not a library mapping. Typically only one applies to any given reader,
+            and the repair it describes reappears in the core concepts that follow.
           </p>
           <div className="grid gap-3 lg:grid-cols-2">
             {comparisonCallouts.map((comparison) => (
@@ -608,7 +608,9 @@ export function PageCh17RefactoringTowardIdiomaticRust() {
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   A closed mode becomes an enum, a notifier becomes a small trait seam, and the processor becomes easy to
-                  test with a fake implementation.
+                  test with a fake implementation. The example keeps charging and notification as two separate calls only
+                  to show each seam in isolation; production code would usually compose both steps inside one method so a
+                  caller cannot run them out of order.
                 </p>
               </div>
               {codes.refactoring_traits_enums_testable !== DEFAULT_CODES.refactoring_traits_enums_testable && (

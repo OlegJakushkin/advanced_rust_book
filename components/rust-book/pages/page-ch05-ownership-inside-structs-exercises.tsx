@@ -96,7 +96,7 @@ const exercises: Exercise[] = [
     objective:
       "Replace an invalid self-borrowing layout with a representation Rust can move and reason about safely.",
     starterPrompt:
-      "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }`. Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
+      "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }` (this layout cannot be constructed in safe Rust — see why in the chapter, then refactor it away entirely). Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
     prompts: [
       "Will you store a byte range, a start/end offset pair, or a typed token ID?",
       "How will the accessor recover `&str` from `&self`?",
@@ -115,7 +115,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "design or production scenario",
     title: "Choose Box, Rc, or Arc intentionally",
     objective:
       "Practice mapping pointer types to actual ownership semantics instead of treating them as interchangeable heap wrappers.",
@@ -212,7 +212,7 @@ export function PageCh05OwnershipInsideStructsExercises() {
                 working spec.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(8)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(10)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 05
             </Button>
@@ -313,7 +313,7 @@ export function PageCh05OwnershipInsideStructsExercises() {
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">&amp;self</code>.
             </>
           }
-          initialCode={`struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(),\n        }\n    }\n\n    fn level(&self) -> &str {\n        "UNKNOWN"\n    }\n}\n\nfn main() {\n    let line = AuditLine::new("WARN: cache miss");\n    println!("level = {}", line.level());\n    println!("raw = {}", line.raw);\n}`}
+          initialCode={`struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(), // intentional stub - fix me: store the raw argument\n        }\n    }\n\n    fn level(&self) -> &str {\n        "UNKNOWN" // intentional stub - fix me: derive the level from self.raw\n    }\n}\n\nfn main() {\n    let line = AuditLine::new("WARN: cache miss");\n    println!("level = {}", line.level());\n    println!("raw = {}", line.raw);\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

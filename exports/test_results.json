@@ -5,10 +5,11 @@
   "solutions"
  ],
  "summary": {
-  "PASS": 167,
+  "PASS": 165,
   "SKIP_WASM": 1,
-  "STARTER_OK": 52,
-  "STARTER_NOCOMPILE": 2
+  "STARTER_OK": 50,
+  "STARTER_NOCOMPILE": 2,
+  "SKIP_CUDA": 4
  },
  "rows": [
   {
@@ -762,8 +763,8 @@
    "detail": ""
   },
   {
-   "status": "STARTER_OK",
-   "path": "exercises/ch37_cuda_and_gpu_acceleration/safe_launch_wrapper_lab.rs",
+   "status": "SKIP_CUDA",
+   "path": "exercises/ch37_cuda_and_gpu_acceleration/matmul_challenge.rs",
    "detail": ""
   },
   {
@@ -837,8 +838,8 @@
    "detail": ""
   },
   {
-   "status": "STARTER_OK",
-   "path": "exercises/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "status": "SKIP_CUDA",
+   "path": "exercises/ch54_onnx_model_inference_in_rust/onnx_challenge.rs",
    "detail": ""
   },
   {
@@ -1032,8 +1033,8 @@
    "detail": ""
   },
   {
-   "status": "PASS",
-   "path": "solutions/ch37_cuda_and_gpu_acceleration/safe_launch_wrapper_lab.rs",
+   "status": "SKIP_CUDA",
+   "path": "solutions/ch37_cuda_and_gpu_acceleration/matmul_challenge.rs",
    "detail": ""
   },
   {
@@ -1107,8 +1108,8 @@
    "detail": ""
   },
   {
-   "status": "PASS",
-   "path": "solutions/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "status": "SKIP_CUDA",
+   "path": "solutions/ch54_onnx_model_inference_in_rust/onnx_challenge.rs",
    "detail": ""
   },
   {

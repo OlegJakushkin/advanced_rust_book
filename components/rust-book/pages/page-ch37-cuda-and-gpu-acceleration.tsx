@@ -409,7 +409,7 @@ export function PageCh37CudaAndGpuAcceleration() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">GPU cost model and Rust integration</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -601,7 +601,10 @@ export function PageCh37CudaAndGpuAcceleration() {
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 A practical first question is simple: are you transfer-bound, launch-bound, queue-bound, or actually
-                kernel-bound? A kernel-only profile cannot answer that by itself.
+                kernel-bound? A kernel-only profile cannot answer that by itself. If the profile shows the path is
+                transfer-bound and the inputs are relatively static, the fix is on the transfer side: consider pinned
+                (page-locked) host memory to speed the copies, or keep the inputs resident on the device between calls so
+                they are not re-sent every request.
               </p>
             </div>
           </div>
@@ -644,6 +647,15 @@ export function PageCh37CudaAndGpuAcceleration() {
                   <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                Before this lane ships, instrument it like any other shared subsystem. The hooks that matter most are
+                queue age or wait time at the admission point, transfer bytes per request in each direction, launch count
+                per second, and the CPU-fallback rate. Add device utilization and per-stage latency so you can still tell
+                transfer-bound from launch-bound from genuinely kernel-bound under real load, which is the whole point of
+                refusing to ship the boundary on faith.
+              </p>
             </div>
           </div>
 
@@ -851,8 +863,10 @@ export function PageCh37CudaAndGpuAcceleration() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to estimate host-device transfer cost for a matrix workload, sketch a safe
-            Rust wrapper around a kernel call, and choose among CPU, Rayon, MPI, and CUDA from workload shape.
+            The companion exercise page asks you to choose among CPU, Rayon, MPI, and CUDA from workload shape, estimate
+            host-device transfer cost for a matrix workload, sketch a safe Rust wrapper around a kernel call, repair a
+            launch-bound service path that lost to the CPU, read a profiling report before rewriting the kernel, and design
+            GPU admission for an async and distributed service.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 37 Exercises

@@ -88,6 +88,7 @@ const exercises: Exercise[] = [
     hints: [
       "180 * 100 / 840 truncates to 21; doing the divide first would collapse it to 0.",
       "A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec.",
+      "Shares truncated to integers may not sum to exactly 100 (here 21 + 73 + 4 = 98); that is expected, so do not assert the shares add up to 100.",
     ],
   },
   {
@@ -129,7 +130,7 @@ const exercises: Exercise[] = [
       "Hold time and wait time are stored and reported as two separate fields rather than one combined number.",
       "classify returns \"contention\" for (hold_us=5, wait_us=900) and \"hold\" for (hold_us=900, wait_us=5).",
       "The explanation ties high wait_us with low hold_us to a frequently-acquired short critical section.",
-      "The answer names narrowing shared state, shortening critical sections, or giving a subsystem its own owner before going lock-free.",
+      "The answer names narrowing shared state, shortening critical sections, sharding, or giving a subsystem its own owner (read-mostly redesign included) before going lock-free.",
     ],
     hints: [
       "The two halves fail in opposite ways, so a single averaged number erases exactly the signal you need.",
@@ -200,7 +201,7 @@ fn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {
 }
 
 fn wall_time(stats: &PipelineStats) -> u64 {
-    layers(stats).iter().map(|(_, value)| value).sum()
+    layers(stats).into_iter().map(|(_, value)| value).sum()
 }
 
 fn dominant(stats: &PipelineStats) -> (&'static str, u64) {

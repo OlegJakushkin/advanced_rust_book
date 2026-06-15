@@ -93,7 +93,7 @@
   },
   {
    "number": 5,
-   "kind": "design or production scenario",
+   "kind": "incident reconstruction",
    "title": "Connect logs, metrics, and traces in one incident narrative",
    "objective": "Practice telling one coherent production story from three signal types instead of reading each one in isolation.",
    "starterPrompt": "Metrics show oldest visible age rising from 200 ms to 4 s. One trace shows a task waited 3.6 s before claim and then only 80 ms in the handler. Structured logs show the same task retried twice because a downstream store timed out.",

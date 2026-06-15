@@ -142,15 +142,18 @@ const syncRepositorySnippet = `trait OrderRepository {
     fn save(&mut self, order: Order) -> Result<(), RepositoryError>;
 }`
 
-const asyncRepositorySnippet = `use std::future::Future;
-use std::pin::Pin;
-
+const asyncRepositorySnippet = `// async fn in traits is stable since Rust 1.75.
 trait AsyncOrderRepository {
-    fn load<'a>(
-        &'a self,
-        id: OrderId,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<Order>, RepositoryError>> + Send + 'a>>;
-}`
+    async fn load(&self, id: OrderId) -> Result<Option<Order>, RepositoryError>;
+}
+
+// Before 1.75 (or to pin a Send bound on the returned future for a
+// public API), the same method is written by hand as a boxed future:
+//
+// fn load<'a>(
+//     &'a self,
+//     id: OrderId,
+// ) -> Pin<Box<dyn Future<Output = Result<Option<Order>, RepositoryError>> + Send + 'a>>;`
 
 const repositoryRules = [
   "Repository traits should usually speak in aggregate roots, aggregate IDs, or purpose-built projections, not persistence rows.",
@@ -165,7 +168,7 @@ const asyncRepositoryCards = [
     body: "Once a repository method becomes async, borrowed return values get awkward quickly. The borrow may have to survive across suspension points, which tends to couple the future to the repository's internal storage lifetime. In practice, async repository boundaries usually return owned aggregates or owned projections.",
   },
   {
-    title: "Technical correction",
+    title: "Why owned returns are correct",
     body: "The underlying issue is not that async and lifetimes are 'bad together.' The issue is that borrowing across await points and returning references from IO-driven boundaries usually expresses the wrong ownership model for the problem.",
   },
 ]
@@ -215,7 +218,7 @@ const pitfalls = [
   "Leaving domain IDs as raw `u64` or `String` everywhere, then mixing order IDs, customer IDs, and transport IDs by accident.",
   "Building anaemic record bags and pushing all real rules into handlers, repositories, or controllers because that felt more familiar from framework-heavy designs.",
   "Letting repository traits mirror storage tables instead of aggregate boundaries. That usually means persistence leaked upward and the domain leaked downward.",
-  "Returning borrowed references from async repository or service boundaries. The lifetime friction is often design feedback, not ownership or borrowing rule involved.",
+  "Returning borrowed references from async repository or service boundaries. The lifetime friction is often design feedback, not a borrow-checker rule to work around.",
   "Adopting event sourcing for every aggregate. Some domains need a durable event log; others only need plain current state plus a few audit records.",
   "Confusing domain events with public integration events. Not every internal fact should become an external contract.",
 ]

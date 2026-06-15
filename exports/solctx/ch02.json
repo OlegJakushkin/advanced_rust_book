@@ -116,7 +116,8 @@
   "Where do `Vec<T>` metadata and `Vec<T>` elements usually live?",
   "What does a lifetime annotation constrain, and what does it not do?",
   "Why can block expressions reduce mutation pressure in production code?",
-  "When is `Drop` useful, and what kinds of logic should usually stay out of it?"
+  "When is `Drop` useful, and what kinds of logic should usually stay out of it?",
+  "In what order do a block's local variables drop, and how does that differ from the drop order of a struct's fields?"
  ],
  "lab": {
   "title": "Runnable lab · Exercise 3",
@@ -131,8 +132,8 @@
   "Operational checklist",
   "Mental model",
   "Core concepts",
-  "translating prior instincts",
-  "Two corrections that remove a lot of confusion",
+  "Translating prior instincts",
+  "Two common misconceptions corrected",
   "Expressions, statements, and blocks in one pass",
   "Lifetime repair rule of thumb",
   "Production patterns",

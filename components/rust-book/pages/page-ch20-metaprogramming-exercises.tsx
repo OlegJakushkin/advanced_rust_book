@@ -50,7 +50,7 @@ const exercises: Exercise[] = [
     title: "Explain repetition and hygiene in a `macro_rules!` helper",
     objective: "Read a declarative macro and describe what repetition removes and why local identifiers do not collide with caller names.",
     starterPrompt:
-      "Review a `macro_rules!` helper that expands a repeated list of service checks and introduces a local accumulator named `passed` inside the macro.",
+      "Review the chapter's `sum_values!` macro (Example 1 on the main chapter page), which expands a repeated list of values and introduces a local accumulator named `total` in its expansion body.",
     prompts: [
       "Where is the repeated syntax pattern in the macro arm?",
       "Why does the macro's local accumulator not casually overwrite a caller variable with the same spelling?",
@@ -81,7 +81,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "The macro accepts repeated `name => bool` pairs.",
       "The expansion counts the true cases correctly.",
-      "The runnable lab prints the expected passed and total counts.",
+      "The runnable lab prints the passing count computed by the macro and the total count, which is a fixed call-site argument in this starter rather than a macro-computed value.",
       "The call site remains easier to read than the repeated code it replaced.",
     ],
     hints: [

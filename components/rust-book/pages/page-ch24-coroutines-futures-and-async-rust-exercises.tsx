@@ -119,7 +119,7 @@ const exercises: Exercise[] = [
     kind: "debugging or refactoring",
     title: "Fix a manual future that never yields",
     objective: "Diagnose and repair a poll implementation whose state transitions are wrong so the executor spins or completes too early.",
-    starterPrompt: "A colleague's Handshake-style future returns Poll::Ready on its very first poll even though it should pass through a Waiting stage first, and a second variant accidentally returns Pending forever. Repair the match arms so it yields Pending a bounded number of times and then completes.",
+    starterPrompt: "Repair this colleague's Handshake-style future. Its poll body is: match self.stage { Stage::Start => Poll::Ready(\"connected\"), Stage::Waiting => Poll::Pending, Stage::Done => Poll::Ready(\"connected\") }. The Start arm returns Poll::Ready on the very first poll even though it should pass through a Waiting stage first, and the Waiting arm returns Pending forever without changing any state. Fix the match arms so the future yields Pending a bounded number of times and then completes.",
     prompts: [
       "Identify the arm that returns Ready before any Pending and explain why that defeats the point of the future.",
       "Identify the arm that never advances the Stage and would make block_on loop forever.",
@@ -160,6 +160,29 @@ const exercises: Exercise[] = [
       "Structured concurrency makes the parent own the whole fan-out and wait for or drop every child.",
     ],
   },
+  {
+    number: 7,
+    kind: "debugging or refactoring",
+    title: "Repair a future that fails the Send bound at a spawn boundary",
+    objective: "Diagnose why a future captured into a spawn-style boundary is rejected as not Send, and fix it by owning thread-safe data instead of an Rc.",
+    starterPrompt: "A spawn-style function require_send_spawn<F>(future: F) where F: Future<Output = String> + Send + 'static accepts a future from async fn render(config: Rc<String>). The compiler reports that the future is not Send. Explain the error and convert render so its future satisfies Send + 'static.",
+    prompts: [
+      "Read the compiler error and name the exact captured value that makes the future non-Send.",
+      "Explain why the Send bound applies to the whole future rather than only to data held across an .await.",
+      "Change Rc<String> to a thread-safe owned type so the future becomes Send + 'static.",
+      "Confirm the corrected future is accepted by require_send_spawn and can be driven to its String result.",
+    ],
+    acceptanceCriteria: [
+      "The diagnosis names Rc<String> as the captured value that is not Send, which is why the whole future is rejected.",
+      "The answer explains that a spawn boundary needs the entire future to be Send + 'static, because the runtime may move it across worker threads.",
+      "render is changed to take Arc<String> (or another Send + 'static owned type) so the generated future is Send.",
+      "The corrected future passes require_send_spawn and produces \"rendered with prod-config\" when driven to completion.",
+    ],
+    hints: [
+      "Rc<T> is not Send; Arc<T> is the thread-safe shared owner with the same clone-on-share shape.",
+      "The future stores its captured argument as a field, so a non-Send argument makes the whole future non-Send even with no .await between captures.",
+    ],
+  },
 ]
 
 const reviewQuestions = [
@@ -168,11 +191,13 @@ const reviewQuestions = [
   "Why does Future::poll take a Pin<&mut Self> receiver rather than a plain &mut Self?",
   "What are the two cooperating parts of an async runtime, and what does each one do?",
   "In async Rust, what does cancelling a future mean operationally, and what is the future author still responsible for?",
+  "Why does a future fail the Send bound at a spawn boundary, and how do async fn in traits force the same Send question back into the design?",
 ]
 
 const workingLoop = [
   "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
   "Write the smallest version that compiles, then make it correct.",
+  "Verify every Poll::Pending arm changes at least one field of self, so the executor is guaranteed to make progress.",
   "Check each acceptance criterion explicitly before moving on.",
   "Name one tradeoff or failure mode your solution accepts.",
 ]
@@ -197,6 +222,8 @@ enum Stage {
 
 struct Handshake {
     stage: Stage,
+    // Optional internal counter for your own debugging. It is never printed,
+    // so it does not affect the expected output; remove it if you prefer.
     polls: u32,
 }
 

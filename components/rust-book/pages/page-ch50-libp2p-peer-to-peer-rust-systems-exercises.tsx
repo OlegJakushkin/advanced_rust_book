@@ -32,17 +32,20 @@ const exercises: Exercise[] = [
       "Which events belong to the network edge and which commands belong to local application logic?",
       "Which peer or request IDs must be carried through the state machine?",
       "Which state transitions add pending work and which clear it?",
+      "When two peers report different values for the same state key, write the deterministic merge rule that decides the winner (for example: higher version wins, then break a version tie by author), and trace a version-tie case by hand.",
       "What should the node record so another engineer can replay the same sequence in a deterministic test?",
     ],
     acceptanceCriteria: [
       "You separate local commands from inbound network events clearly.",
       "You include at least one pending-request or connected-peer state transition.",
       "You identify at least one stable correlation field such as peer ID or request ID.",
+      "You state a deterministic merge rule for conflicting updates and name one case where a scalar version plus tie-break is too weak.",
       "You explain the design in terms of owned events rather than shared mutable transport access.",
     ],
     hints: [
       "A protocol loop is usually easier to test when every event is a plain value.",
       "If the state change is important in production, it should have a name in the model.",
+      "See Chapter 42 for the deterministic event-loop test patterns that replay a fixed sequence of owned events.",
     ],
   },
   {
@@ -74,18 +77,20 @@ const exercises: Exercise[] = [
     kind: "implementation",
     title: "Build a small libp2p-style swarm loop over owned enums",
     objective:
-      "Implement one small event loop that records connected peers, tracks one pending request map, and clears state on response.",
+      "Implement one small event loop that records connected peers, tracks one pending request map, clears state on response, and also handles an inbound gossip arm so the loop spans both protocol shapes.",
     starterPrompt:
-      "Create `PeerId`, `Event`, and `SwarmState`, then handle a connect, request, and response sequence with no real networking required.",
+      "Create `PeerId`, `Event`, and `SwarmState`, then handle a connect, request, response, and gossip sequence with no real networking required.",
     prompts: [
       "Keep the owner as one plain Rust struct.",
       "Use one map keyed by request ID for pending work.",
       "Use one small log or event queue for observability.",
+      "Add a Gossip arm so the loop covers pub-sub news, not only request-response: it records a log line but adds no pending state.",
       "Do not use `Rc`, `RefCell`, or raw pointers for the main design.",
     ],
     acceptanceCriteria: [
       "The event loop keeps one central owner for protocol state.",
       "Requests create pending entries and responses clear them.",
+      "A Gossip event appends a log line and leaves the pending map untouched, so the two protocol shapes stay distinct.",
       "The runnable lab prints the expected connected count, pending count, and final log line.",
       "The code is plausible Rust and easy to test without a live network.",
     ],
@@ -265,7 +270,7 @@ export function PageCh50Libp2pPeerToPeerRustSystemsExercises() {
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  P2P drill
+                  {exercise.kind}
                 </span>
               </div>
 
@@ -408,9 +413,10 @@ fn main() {
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
           <p className="text-sm text-muted-foreground leading-6">
-            By the end of this page, you should be able to model a small P2P protocol as events and state transitions,
-            identify ownership boundaries in a libp2p-style swarm loop, design abuse controls and observability for peer
-            discovery, and explain when P2P is or is not the right transport choice for a production system.
+            After this page you can model a small P2P protocol as owned events and state transitions, identify ownership
+            boundaries in a libp2p-style swarm loop, write a deterministic merge rule for conflicting state, design abuse
+            controls and observability for peer discovery, and decide when P2P beats a broker or service API for a
+            production system.
           </p>
         </section>
       </div>

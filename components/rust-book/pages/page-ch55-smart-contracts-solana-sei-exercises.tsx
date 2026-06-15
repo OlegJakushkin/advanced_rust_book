@@ -94,7 +94,7 @@ const exercises: Exercise[] = [
   {
     number: 4,
     kind: "implementation",
-    title: "Encode the platform comparison as queryable data",
+    title: "Turn the platform comparison table into runnable code",
     objective: "Turn the four-question comparison table into runnable data and add a lookup that answers a single question across all three platforms.",
     starterPrompt: "Using the smart_contract_platform_compare model, where each Platform maps to a PlatformModel with four fields, write fn serialization_of(platform: Platform) -> &'static str and a loop that prints the serialization format for every platform.",
     prompts: [
@@ -122,7 +122,7 @@ const exercises: Exercise[] = [
     starterPrompt: "The counter program uses current + 1 for Increment. A counter sitting at u64::MAX is valid input from a hostile caller, and in release builds that addition wraps to 0 instead of failing. Make the increment path reject overflow instead of silently wrapping.",
     prompts: [
       "Explain why current + 1 is a boundary bug, not just a theoretical edge case, given that input bytes come from an untrusted counterparty.",
-      "Add a ProgramError::Overflow variant and switch the Increment (and any SetTo/Add) path to checked_add.",
+      "Add a ProgramError::Overflow variant and switch the Increment (and any SetTo) path to checked_add.",
       "Return Err(ProgramError::Overflow) before write_counter runs, so no invalid value reaches the buffer.",
       "Show that incrementing a buffer initialized to u64::MAX returns an error and leaves the buffer unchanged.",
     ],
@@ -182,7 +182,7 @@ const workingLoop = [
   filename="solana_counter_boundary_lab.rs"
   runKey="ch55_ex_counter"
   expectedOutput={"after add = 40\nafter increment = 41\ncounter = 41\noverflow rejected = true"}
-  helperText={"Model a stateless Solana-style program over an external account buffer. Fill in process_instruction so it decodes the little-endian counter, applies the instruction with checked_add, and rejects overflow before any value is written back to state."}
+  helperText={"Model a stateless Solana-style program over an external account buffer. Fill in process_instruction to apply the instruction and reject overflow before writing back to state."}
   initialCode={`// A crate-free model of a Solana-style program over an external account buffer.
 // State lives in the account's byte buffer; the program is stateless code that
 // borrows the buffer, decodes a little-endian u64 by hand (as Borsh would),
@@ -223,6 +223,10 @@ fn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64
     // TODO: compute \`next\` from \`current\` and \`instruction\` using checked_add,
     // returning ProgramError::Overflow instead of wrapping. For now this stub
     // ignores the instruction so the program still compiles.
+    // NOTE (maintainers): the card's expectedOutput describes the COMPLETED
+    // solution, not this stub. Running the stub as-is prints zeros and
+    // "overflow rejected = false"; the expected values appear once the TODO
+    // is filled in. This is intentional scaffolding, not a mismatch.
     let next = current;
     write_counter(data, next)?;
     Ok(next)

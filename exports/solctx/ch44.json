@@ -56,7 +56,7 @@
    "prompts": [
     "Keep the target set explicit with an enum.",
     "Name the native output with a target triple suffix.",
-    "Name the container output like a registry tag.",
+    "Name the container output like a registry tag, using the format `ghcr.io/acme/<app>:<version>`.",
     "Name the wasm output like a wasm artifact rather than a native binary."
    ],
    "acceptanceCriteria": [
@@ -71,7 +71,7 @@
   },
   {
    "number": 4,
-   "kind": "debugging or refactoring",
+   "kind": "design or analysis",
    "title": "Design a feature-gated release workflow",
    "objective": "Replace one catch-all default build with an explicit feature policy that matches real deployment shapes.",
    "starterPrompt": "You inherit a crate where the default feature set includes metrics, admin endpoints, optional native bindings, and browser support, even though most service deployments only need the core server.",

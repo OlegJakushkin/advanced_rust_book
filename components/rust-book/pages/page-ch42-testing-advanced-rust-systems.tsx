@@ -89,13 +89,14 @@ fuzz_target!(|data: &[u8]| {
     let _ = parse_frame(data);
 });`
 
-const asyncTestSnippet = `#[tokio::test(start_paused = true)]
+const asyncTestSnippet = `// One clock, not two: start_paused freezes Tokio's own timer, and
+// tokio::time::advance is the only thing that moves it forward.
+#[tokio::test(start_paused = true)]
 async fn lease_expires_and_redelivers() {
-    let clock = TestClock::new();
-    let queue = TestQueue::new(clock.clone());
+    let queue = TestQueue::new();
 
     let first = queue.claim("task-7").await.unwrap();
-    clock.advance(Duration::from_secs(31)).await;
+    tokio::time::advance(Duration::from_secs(31)).await;
 
     assert_eq!(queue.claim("task-7").await.unwrap().id, first.id);
 }`
@@ -390,12 +391,12 @@ export function PageCh42TestingAdvancedRustSystems() {
               <h4 className="font-semibold text-foreground">The shape of a layered suite</h4>
             </div>
             <p className="text-sm text-muted-foreground leading-6">
-              The familiar “test pyramid” is really a statement about cost and stability. Cheap, fast, deterministic tests
-              live at the bottom and there are many of them; expensive, slower, more fragile tests live at the top and
-              there are few. Property tests and fuzzing sit off to the side: they are not a separate altitude so much as a
-              different way of generating inputs for the bottom and middle layers. Read the next diagram as a budget — most
-              of your assertions should be near the base, and each step up should be justified by a claim that genuinely
-              needs that much machinery to be true.
+              The point worth adding to the opening scenario is this: property tests and fuzzing are not a separate top
+              tier. They feed generated inputs into the cheap lower layers rather than sitting above integration tests.
+              With that in place, the familiar “test pyramid” is simply a statement about cost and stability — cheap, fast,
+              deterministic tests live at the bottom and there are many of them; expensive, slower, more fragile tests live
+              at the top and there are few. Read the next diagram as a budget: most of your assertions should be near the
+              base, and each step up should be justified by a claim that genuinely needs that much machinery to be true.
             </p>
             <div className="mt-4">
               <MermaidDiagram
@@ -534,8 +535,9 @@ export function PageCh42TestingAdvancedRustSystems() {
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">start_paused = true</code>
               freezes the clock so it only advances when you advance it, which turns “wait 31 seconds for a lease to
               expire” into an instantaneous, exact, repeatable step. The same instinct applies to queueing, cancellation,
-              and task ownership: control them deliberately rather than hoping the runtime cooperates. For genuinely
-              concurrent state machines, loom can later explore interleavings, but a deterministic boundary comes first.
+              and task ownership: control them deliberately rather than hoping the runtime cooperates. Loom is a separate
+              tool for exhaustively exploring thread interleavings in genuinely concurrent state machines; it is beyond the
+              scope of this chapter, and a deterministic time boundary comes first regardless.
             </p>
             <p className="text-sm text-muted-foreground leading-6 mt-3">
               The test below exercises a lease that should expire and let the task be reclaimed. The behavior under test is

@@ -28,7 +28,7 @@ for d in $dirs; do
     if grep -Eq '^[[:space:]]*use[[:space:]]+wasm_bindgen\b' "$src" || grep -q '#\[wasm_bindgen' "$src"; then
       emit "SKIP_WASM" "$rel" ""; continue
     fi
-    if grep -Eq '^[[:space:]]*use[[:space:]]+cudarc\b' "$src" || grep -Eq '\bcudarc::' "$src"; then
+    if grep -Eq '^[[:space:]]*use[[:space:]]+(cudarc|ort)\b' "$src"; then
       emit "SKIP_CUDA" "$rel" ""; continue
     fi
     edition=2021

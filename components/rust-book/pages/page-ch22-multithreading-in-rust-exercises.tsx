@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { PAGES } from "../types"
+import { getPageIndexById } from "../page-index"
 import { Button } from "@/components/ui/button"
 import { RustPracticeCard } from "../rust-practice-card"
 
@@ -124,7 +125,7 @@ const exercises: Exercise[] = [
       "You are designing `accept request -> parse -> schedule work -> update metrics -> publish completion` for a CPU-heavy service with a few hot counters and one central retry table.",
     prompts: [
       "Which parts want owned messages over channels?",
-      "Which parts truly want shared immutable state through `Arc<T>` only?",
+      "Which parts are satisfied by shared immutable state through `Arc<T>` alone, without a lock?",
       "Which parts, if any, justify `Arc<Mutex<T>>` or another synchronized shared-state tool?",
       "What backpressure or contention signal would you monitor in production?",
     ],
@@ -172,6 +173,7 @@ const reviewQuestions = [
   "What is the difference between message passing and shared-state locking as an ownership design?",
   "Why is work stealing a scheduler strategy rather than a synonym for threads?",
   "Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?",
+  "When would you use `thread::Builder` instead of `thread::spawn` directly?",
 ]
 
 const workingLoop = [
@@ -183,7 +185,8 @@ const workingLoop = [
 
 export function PageCh22MultithreadingInRustExercises() {
   const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 43
+  const pageIndex = getPageIndexById("ch22-multithreading-in-rust-exercises")
+  const mainPageIndex = getPageIndexById("ch22-multithreading-in-rust")
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -218,7 +221,7 @@ export function PageCh22MultithreadingInRustExercises() {
                 exists, and why a different execution model might actually be the more honest choice.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(42)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 22
             </Button>
@@ -317,6 +320,9 @@ export function PageCh22MultithreadingInRustExercises() {
               spawn with a <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">move</code> closure, compute the total from{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">job.cost</code>, and send{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">(worker, total)</code> back over the channel.
+              Draining <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">rx</code> after joining both workers is safe
+              here: joining waits for each worker to finish, which drops its sender clone, so by the time the loop runs every sender is
+              gone and the receiver iterator ends instead of blocking.
             </>
           }
           initialCode={`use std::sync::mpsc;\nuse std::thread;\n\n#[derive(Debug)]\nstruct Job {\n    cost: u32,\n}\n\nfn spawn_worker(\n    tx: mpsc::Sender<(&'static str, u32)>,\n    worker: &'static str,\n    jobs: Vec<Job>,\n) -> thread::JoinHandle<()> {\n    thread::spawn(|| {\n        let total = 0;\n        tx.send((worker, total)).unwrap();\n    })\n}\n\nfn main() {\n    let (tx, rx) = mpsc::channel();\n\n    let ingest_jobs = vec![Job { cost: 2 }, Job { cost: 3 }];\n    let index_jobs = vec![Job { cost: 4 }];\n\n    let ingest = spawn_worker(tx.clone(), "ingest", ingest_jobs);\n    let index = spawn_worker(tx, "index", index_jobs);\n\n    ingest.join().unwrap();\n    index.join().unwrap();\n\n    let mut ingest_total = 0;\n    let mut index_total = 0;\n    let mut grand = 0;\n\n    for (worker, total) in rx {\n        grand += total;\n        if worker == "ingest" {\n            ingest_total = total;\n        } else if worker == "index" {\n            index_total = total;\n        }\n    }\n\n    println!(\"ingest = {}\", ingest_total);\n    println!(\"index = {}\", index_total);\n    println!(\"grand = {}\", grand);\n}`}

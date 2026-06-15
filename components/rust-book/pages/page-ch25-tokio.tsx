@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
+import { getPageIndexById } from "../page-index"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
@@ -176,7 +177,7 @@ export function PageCh25Tokio() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 48
+  const pageIndex = getPageIndexById("ch25-tokio")
   const page = PAGES[pageIndex]
 
   useEffect(() => {

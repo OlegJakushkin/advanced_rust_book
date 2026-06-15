@@ -306,10 +306,11 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
             calling it machine-to-machine, and long-lived administrative sessions. Some of that traffic crosses the
             public internet and some stays inside a private network. The team's job is to define one coherent boundary
             that answers every security question for all three audiences: where TLS terminates, who holds the
-            certificates, how peer identity is established and authorized, which proxy headers the application is allowed
-            to believe, what the secure HTTP defaults are, how local and CI tests obtain trust, and how certificates
-            rotate without an outage. None of those answers come from a framework. They are decisions, and this chapter
-            is about making them on purpose and writing them down where a reviewer can see them.
+            certificates, and how peer identity is established and authorized. The same boundary also has to settle which
+            proxy headers the application is allowed to believe, what the secure HTTP defaults are, how local and CI
+            tests obtain trust, and how certificates rotate without an outage. None of those answers come from a
+            framework. They are decisions, and this chapter is about making them on purpose and writing them down where a
+            reviewer can see them.
           </p>
           <p className="text-sm text-muted-foreground leading-6 mt-3">
             Before any of that policy makes sense, it helps to see exactly what happens on the wire. Notice that every
@@ -349,7 +350,9 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              TLS handshake, termination topology, and HTTP-layer defaults
+            </h3>
           </div>
 
           <article className="rounded-xl border border-border bg-card p-5">
@@ -430,6 +433,20 @@ export function PageCh49HttpsTlsSecureServiceBoundaries() {
               <p className="text-sm text-muted-foreground leading-6">
                 A good senior-level decision is usually “which runtime trust-store and packaging contract do we want?” long
                 before it is “which exact client or server API looks shortest in code?”
+              </p>
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground leading-6">
+                The examples in this chapter stay at the policy layer on purpose, so a single listing reads the same
+                whichever stack you pick. When you do terminate in-process, the shape is small and identical in spirit
+                across libraries: load the certificate chain and private key, build a server config (with a client-CA
+                trust root if you want mTLS), set the ALPN protocols, and wrap each accepted TCP stream in the TLS
+                acceptor before handing it to your HTTP server. With <code>tokio-rustls</code> that is a
+                <code> ServerConfig</code> plus a <code>TlsAcceptor</code>; with the platform stack it is the equivalent
+                native handle. The runnable files under{" "}
+                <code>examples/ch49_https_tls_secure_service_boundaries/</code> (the topology-policy and
+                security-defaults listings) encode the surrounding decisions this section is about, so the only piece
+                left to bind to a concrete crate is that acceptor wrapper.
               </p>
             </div>
           </article>

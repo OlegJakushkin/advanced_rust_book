@@ -31,6 +31,7 @@ const exercises: Exercise[] = [
       "Which case wants Rayon because CPU saturation over one data set is the real job?",
       "Which case wants Crossbeam because thread-based coordination and bounded queues are the model?",
       "Which case wants `FuturesUnordered` because the futures themselves are the unit of composition?",
+      "For that last case, contrast a `FuturesUnordered` drained with `next().await` against the same work spawned into a `JoinSet`: which keeps the futures local and non-Send, and which hands each unit to the runtime to make progress on its own?",
     ],
     acceptanceCriteria: [
       "You assign each workload to a plausible primary tool and justify it with scheduling shape.",
@@ -109,6 +110,7 @@ const exercises: Exercise[] = [
     hints: [
       "A retry loop hidden inside the task body is often harder to cap and harder to observe.",
       "Cancellation is easier to reason about when admission, draining, and timeouts are one visible control flow.",
+      "Match the stop primitive to its shape: `oneshot` suits a single-fire shutdown to one consumer, while `watch` suits a broadcast stop flag many tasks observe.",
     ],
   },
   {
@@ -177,7 +179,7 @@ const workingLoop = [
 
 export function PageCh26TaskLibrariesAndParallelExecutionExercises() {
   const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 51
+  const pageIndex = 55
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -208,7 +210,7 @@ export function PageCh26TaskLibrariesAndParallelExecutionExercises() {
                 the ownership handoff, the queue or pool budget, and the stop story before it reaches for a library name.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(50)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(54)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 26
             </Button>
@@ -235,7 +237,7 @@ export function PageCh26TaskLibrariesAndParallelExecutionExercises() {
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Task orchestration drill
+                  {exercise.kind.includes("design") ? "Design scenario" : "Task orchestration drill"}
                 </span>
               </div>
 
@@ -301,14 +303,16 @@ export function PageCh26TaskLibrariesAndParallelExecutionExercises() {
           expectedOutput={"capacity = 2\naccepted = 2\nretried = 1\ncancelled = true"}
           helperText={
             <>
-              Tip: keep the queue capacity at{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">2</code>, increment the retry counter in
-              the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">"retry"</code> branch, and make the
-              stop condition explicit by setting <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">cancelled</code>{" "}
-              to <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">true</code>.
+              Tip: the starter has exactly two deliberate bugs to fix, both marked with{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">// bug</code> comments. Keep the queue
+              capacity at <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">2</code>, increment the retry
+              counter in the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">"retry"</code> branch, and
+              make the stop condition explicit by setting{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">cancelled</code> to{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">true</code>.
             </>
           }
-          initialCode={`fn main() {\n    let (tx, rx) = crossbeam::channel::bounded::<&'static str>(2);\n\n    let worker = std::thread::spawn(move || {\n        let mut accepted = 0;\n        let mut retried = 0;\n        let mut cancelled = false;\n\n        while let Ok(job) = rx.recv() {\n            if job == "retry" {\n                retried += 0;\n            } else {\n                accepted += 1;\n            }\n        }\n\n        (accepted, retried, cancelled)\n    });\n\n    tx.send("parse").unwrap();\n    tx.send("retry").unwrap();\n    tx.send("flush").unwrap();\n    drop(tx);\n\n    let (accepted, retried, cancelled) = worker.join().unwrap();\n\n    println!("capacity = {}", 2);\n    println!("accepted = {}", accepted);\n    println!("retried = {}", retried);\n    println!("cancelled = {}", cancelled);\n}`}
+          initialCode={`fn main() {\n    // This starter has two deliberate bugs to fix (both marked below).\n    let (tx, rx) = crossbeam::channel::bounded::<&'static str>(2);\n\n    let worker = std::thread::spawn(move || {\n        let mut accepted = 0;\n        let mut retried = 0;\n        let mut cancelled = false; // bug 2: this is never set to true below\n\n        while let Ok(job) = rx.recv() {\n            if job == "retry" {\n                retried += 0; // bug 1: should count the retry (+= 1)\n            } else {\n                accepted += 1;\n            }\n        }\n        // bug 2 fix goes here: set cancelled = true once the queue is closed\n\n        (accepted, retried, cancelled)\n    });\n\n    tx.send("parse").unwrap();\n    tx.send("retry").unwrap();\n    tx.send("flush").unwrap();\n    drop(tx);\n\n    let (accepted, retried, cancelled) = worker.join().unwrap();\n\n    println!("capacity = {}", 2);\n    println!("accepted = {}", accepted);\n    println!("retried = {}", retried);\n    println!("cancelled = {}", cancelled);\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

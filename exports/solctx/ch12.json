@@ -72,7 +72,7 @@
   },
   {
    "number": 4,
-   "kind": "debugging or refactoring",
+   "kind": "design",
    "title": "Design a matrix view without copying data",
    "objective": "Replace a clone-heavy submatrix helper with a borrowed view that carries enough metadata to interpret the same storage.",
    "starterPrompt": "A helper currently builds a fresh `Vec<T>` for every 2D window extracted from a larger flat buffer. Redesign it as a borrowed view.",
@@ -94,7 +94,7 @@
   },
   {
    "number": 5,
-   "kind": "debugging or refactoring",
+   "kind": "design",
    "title": "Choose between const generics and runtime dimensions honestly",
    "objective": "Separate fixed-invariant shapes from merely common shapes.",
    "starterPrompt": "Review three cases: a 3x3 image kernel, a 4x4 transform matrix in a graphics or simulation path, and a batch-sized score matrix whose dimensions come from request input.",
@@ -109,7 +109,7 @@
     "You explain at least one tradeoff involving API specificity, monomorphization, or call-site simplicity."
    ],
    "hints": [
-    "“Often 4x4” and “must be 4x4” are not the same statement.",
+    "\"Often 4x4\" and \"must be 4x4\" are not the same statement.",
     "Fixed shape in the type is strongest when the invariant is truly global to the API."
    ]
   },
@@ -149,8 +149,8 @@
   "title": "Runnable lab · Row-major `Matrix<T>` wrapper",
   "filename": "row_major_matrix_lab.rs",
   "runKey": "ch12_ex_row_major_matrix",
-  "expectedOutput": "a01 = 7\nrow1 sum = 11\ncells = 4",
-  "initialCode": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 2, 0_i32);\n    m.set(0, 0, 5);\n    m.set(0, 1, 7);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}"
+  "expectedOutput": "a01 = 7\nrow1 sum = 16\ncells = 6",
+  "initialCode": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 3, 0_i32);\n    m.set(0, 0, 10);\n    m.set(0, 1, 7);\n    m.set(0, 2, 30);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n    m.set(1, 2, 5);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 08, 10, and 11",
@@ -208,7 +208,7 @@
  ],
  "codeSamples": {
   "matrices_row_major_dense": "#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        row * self.cols + col\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.cols;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 3, 0_i32);\n    m.set(0, 0, 10);\n    m.set(0, 1, 20);\n    m.set(0, 2, 30);\n    m.set(1, 0, 4);\n    m.set(1, 1, 5);\n    m.set(1, 2, 6);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"last in row0 = {}\", m.get(0, 2).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n}",
-  "matrices_views_const_generics": "struct MatrixView<'a, T> {\n    data: &'a [T],\n    rows: usize,\n    cols: usize,\n    stride: usize,\n    offset: usize,\n}\n\nimpl<'a, T> MatrixView<'a, T> {\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            let index = self.offset + row * self.stride + col;\n            self.data.get(index)\n        } else {\n            None\n        }\n    }\n}\n\nfn trace<const N: usize>(matrix: [[i32; N]; N]) -> i32 {\n    let mut sum = 0;\n    let mut i = 0;\n\n    while i < N {\n        sum += matrix[i][i];\n        i += 1;\n    }\n\n    sum\n}\n\nfn main() {\n    let backing = vec![\n        1_i32, 2, 3, 4,\n        5, 6, 7, 8,\n        9, 10, 11, 12,\n    ];\n\n    let view = MatrixView {\n        data: &backing,\n        rows: 2,\n        cols: 2,\n        stride: 4,\n        offset: 5,\n    };\n\n    let fixed = [[3_i32, 1], [2, 4]];\n\n    println!(\"view corner = {}\", view.get(1, 1).copied().unwrap());\n    println!(\"fixed trace = {}\", trace(fixed));\n}"
+  "matrices_views_const_generics": "struct MatrixView<'a, T> {\n    data: &'a [T],\n    rows: usize,\n    cols: usize,\n    stride: usize,\n    offset: usize,\n}\n\nimpl<'a, T> MatrixView<'a, T> {\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            let index = self.offset + row * self.stride + col;\n            self.data.get(index)\n        } else {\n            None\n        }\n    }\n}\n\nfn trace<const N: usize>(matrix: [[i32; N]; N]) -> i32 {\n    let mut sum = 0;\n\n    for i in 0..N {\n        sum += matrix[i][i];\n    }\n\n    sum\n}\n\nfn main() {\n    let backing = vec![\n        1_i32, 2, 3, 4,\n        5, 6, 7, 8,\n        9, 10, 11, 12,\n    ];\n\n    let view = MatrixView {\n        data: &backing,\n        rows: 2,\n        cols: 2,\n        stride: 4,\n        offset: 5,\n    };\n\n    let fixed = [[3_i32, 1], [2, 4]];\n\n    println!(\"view corner = {}\", view.get(1, 1).copied().unwrap());\n    println!(\"fixed trace = {}\", trace(fixed));\n}"
  },
  "labReferenceSolution": null
 }

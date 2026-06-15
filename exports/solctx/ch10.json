@@ -70,7 +70,7 @@
   },
   {
    "number": 4,
-   "kind": "debugging or refactoring",
+   "kind": "measurement",
    "title": "Benchmark preallocation versus push-only growth honestly",
    "objective": "Measure whether capacity planning changes your workload enough to matter.",
    "starterPrompt": "Build a small benchmark harness that pushes the same number of elements into two vectors: one created with `Vec::new()` and one created with `Vec::with_capacity(n)`.",
@@ -93,22 +93,25 @@
   {
    "number": 5,
    "kind": "debugging or refactoring",
-   "title": "Repair a structural-mutation bug without changing the API lie",
+   "title": "Repair a slice borrow that outlives its backing vector's mutation",
    "objective": "Fix code that keeps a borrowed slice alive while reshaping the underlying vector.",
    "starterPrompt": "A helper takes `let hot = &buffer[..4];`, then `buffer.push(99);`, then still reads from `hot`. Refactor the flow without pretending the original borrow should survive structural mutation.",
    "prompts": [
     "Can the borrowed work happen earlier?",
     "Should the code copy a tiny fixed header into an array before the push if it truly needs that data later?",
-    "Would two phases make the buffer and borrow lifetime easier to review?"
+    "Would two phases make the buffer and borrow lifetime easier to review?",
+    "If the algorithm needs to read one region while writing another, can `split_at_mut` give you two disjoint mutable parts without a borrow conflict?"
    ],
    "acceptanceCriteria": [
     "Your repair ends the active borrow before structural mutation, or copies the tiny truly-needed subset into independent storage deliberately.",
     "You explain the failure in terms of borrowing a view into storage that may change, not in terms of compiler stubbornness.",
-    "You do not keep the old slice alive across the vector growth path."
+    "You do not keep the old slice alive across the vector growth path.",
+    "If you need to read one region while writing another, you reach for `split_at_mut` to obtain two disjoint mutable parts instead of fighting the borrow checker."
    ],
    "hints": [
     "A slice is a view into existing storage, not a durable reservation of future layout.",
-    "If later code really needs a tiny fixed piece, a small copied array may be the honest repair."
+    "If later code really needs a tiny fixed piece, a small copied array may be the honest repair.",
+    "`split_at_mut` returns two mutable slices that do not overlap, so you can write to both halves at once."
    ]
   },
   {
@@ -140,7 +143,9 @@
   "Why is `&[T]` usually a better function parameter than `&Vec<T>`?",
   "What is the practical difference between `len()` and `capacity()`?",
   "Why should production code avoid depending on a specific vector growth factor?",
-  "What workload characteristics make contiguous storage especially attractive?"
+  "What workload characteristics make contiguous storage especially attractive?",
+  "When would you choose `iter_mut()` over `into_iter()` on a `Vec<T>`?",
+  "When does `split_at_mut` let you write to two parts of a slice at the same time?"
  ],
  "lab": {
   "title": "Runnable lab · Slice-first implementation",

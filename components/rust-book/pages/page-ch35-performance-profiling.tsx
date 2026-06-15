@@ -323,6 +323,9 @@ export function PageCh35PerformanceProfiling() {
               </div>
             ))}
           </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The sections below unpack each of these ideas with the specific tools and failure modes.
+          </p>
         </section>
 
         <section className="space-y-5">
@@ -595,7 +598,7 @@ perf report`}</code>
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="flex items-center gap-2 mb-3">
               <Layers className="h-5 w-5 text-primary" />
-              <h4 className="font-semibold text-foreground">How to think about this coming from another language</h4>
+              <h4 className="font-semibold text-foreground">If you are coming from C++, C#, Go, or Python</h4>
             </div>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
               The tools overlap with what you already know, but the mental model shifts. The useful question is not
@@ -803,8 +806,10 @@ perf report`}</code>
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to interpret a flame graph narrative, design a Criterion benchmark,
-            separate CPU and waiting bottlenecks in an async pipeline, and build a profiling plan for WASM and FFI edges.
+            The companion exercise page asks you to match each profiling question to its instrument, trace the
+            hottest-stage reduction, report each stage as a share of wall time, measure fixed per-crossing overhead at a
+            WASM or FFI boundary, fix a lock metric that hides contention, and write the decompose-first plan that settles
+            a p99 regression argument.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 35 Exercises

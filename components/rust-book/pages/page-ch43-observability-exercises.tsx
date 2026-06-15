@@ -118,7 +118,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "design or production scenario",
+    kind: "incident reconstruction",
     title: "Connect logs, metrics, and traces in one incident narrative",
     objective:
       "Practice telling one coherent production story from three signal types instead of reading each one in isolation.",
@@ -220,7 +220,7 @@ export function PageCh43ObservabilityExercises() {
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">How to use this page</h3>
               <p className="text-sm text-muted-foreground leading-6">
-                Treat each exercise as an incident and design review at the same time. The strongest answer does not stop
+                Treat each exercise as both an incident analysis and a design decision. The strongest answer does not stop
                 at “add tracing.” It says which fields, which queue signals, which trace lineage, and which alert contract
                 actually make the service operable.
               </p>
@@ -334,6 +334,9 @@ export function PageCh43ObservabilityExercises() {
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">route</code> fields, create one{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">info_span!</code> for the worker, and run
               the future with <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">.instrument(...)</code>.
+              The starter already prints{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">instrumented = true</code> as a
+              deterministic assertion that the span wiring is in place — keep that line so the output matches.
             </>
           }
           initialCode={`use tokio::sync::mpsc;
@@ -388,6 +391,7 @@ async fn main() {
         }
     }
 
+    println!("instrumented = {}", true);
     println!("processed = {}", processed);
     println!("last trace = {}", last_trace);
 }`}

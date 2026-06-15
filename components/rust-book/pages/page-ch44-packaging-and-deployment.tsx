@@ -74,8 +74,9 @@ const crossCompilationSection = {
 
 const dockerSection = {
   title: "Docker images: build heavy, ship light",
-  body: "The point of a multi-stage build is to separate the machinery that produces the artifact from the machinery that runs it. The builder stage carries the full Rust toolchain, the C cross-tools, and the source tree; the runtime stage carries nothing but the compiled binary copied across the stage boundary. Everything the compiler needed is left behind, so the final image is small, its attack surface is narrow, and the build still reproduces deterministically in CI because every input is pinned in the Dockerfile. Read the example below as two distinct worlds joined by a single `COPY --from=builder` line: the left world compiles, the right world runs, and almost nothing crosses between them.",
-  code: `FROM rust:1 AS builder
+  body: "The point of a multi-stage build is to separate the machinery that produces the artifact from the machinery that runs it. The builder stage carries the full Rust toolchain, the C cross-tools, and the source tree; the runtime stage carries nothing but the compiled binary copied across the stage boundary. Everything the compiler needed is left behind, so the final image is small and its attack surface is narrow. The build reproduces deterministically in CI only when every input is pinned: note that the `rust:1` tag below is a floating tag that can quietly move to a new toolchain version between builds, so a production Dockerfile should pin a specific minor version (for example `rust:1.79`) or a digest and lock it in CI. Read the example as two distinct worlds joined by a single `COPY --from=builder` line: the left world compiles, the right world runs, and almost nothing crosses between them.",
+  code: `# 'rust:1' floats; pin a minor version (e.g. rust:1.79) or a digest for reproducible builds.
+FROM rust:1 AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y musl-tools && rm -rf /var/lib/apt/lists/*
 RUN rustup target add x86_64-unknown-linux-musl
@@ -99,7 +100,7 @@ const minimalRuntimeSection = {
 }
 
 const wasmSection = {
-  title: "WASM packaging: two targets that look alike and are not",
+  title: "WASM packaging: browser modules and WASI modules are different artifact classes",
   body: "WebAssembly is not one packaging story; it is two release families that happen to share a file extension. Browser-oriented modules typically build for `wasm32-unknown-unknown` and ship alongside generated JavaScript glue and a bundler step, because the module has no operating system underneath it and reaches the outside world only through the host page's APIs. WASI-oriented modules build for a target like `wasm32-wasip1` and assume a runtime that provides a standardized, sandboxed system interface, so they look more like a portable command-line program than a browser component. Treating these as one artifact with a different file extension is a recurring mistake; they have different hosts, different capabilities, and different things that can go wrong at load time.",
   code: `# browser-oriented
 cargo build --release --target wasm32-unknown-unknown
@@ -114,8 +115,8 @@ const nativeLibrarySection = {
   code: `[lib]
 crate-type = ["cdylib"] # or ["staticlib"]`,
   notes: [
-    "Use `cdylib` when another runtime loads a shared object or DLL-style artifact.",
-    "Use `staticlib` when the embedding side wants static linking and the release story can support it.",
+    "Choose `cdylib` when the consumer loads a shared object or DLL-style artifact at runtime, and `staticlib` when the consumer wants to link the Rust code statically into its own binary and needs no loader.",
+    "The linking model is the deciding factor: a `cdylib` is loaded as a separate file the host can update independently, while a `staticlib` is baked into the host binary at the host's build time.",
     "Keep the public ABI narrow and versioned. A smaller exported surface is easier to preserve.",
   ],
 }
@@ -131,10 +132,10 @@ const ciCdSection = {
 }
 
 const supplyChainSection = {
-  title: "Supply-chain security: trust you can verify, not assume",
+  title: "Supply-chain security: prove what went into the artifact",
   body: "Supply-chain discipline answers a blunt question: when an operator downloads your artifact, can they prove it is the one you built from the dependencies you reviewed? Rust gives you good materials for that answer, but only if you make them explicit. Commit `Cargo.lock` for applications so the dependency graph is pinned and reproducible, review dependency changes the way you review code, scan for known advisories and license violations, and emit checksums and signatures for the files operators actually pull. Provenance and SBOM data describe what went into the build, and they belong in the release lane where they are generated automatically, not in a wiki page assembled by hand after the fact.",
   notes: [
-    "Well-known ecosystem options include advisory, license, and dependency-policy tools such as cargo-audit, cargo-deny, or cargo-vet.",
+    "Well-known ecosystem tools each do one job: cargo-audit scans the dependency tree against the RustSec advisory database for known vulnerabilities, cargo-deny enforces dependency policy (license allowlists, banned crates, untrusted sources), and cargo-vet records human review of the crates you depend on.",
     "Checksums and signatures should be attached to the final artifacts operators actually download.",
     "SBOM and provenance generation belong in the release lane, not in a wiki page after the fact.",
   ],
@@ -408,10 +409,11 @@ export function PageCh44PackagingAndDeployment() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-2">The release pipeline as a gate sequence</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-1">
-              It helps to picture the pipeline as a chain of gates rather than a script. Each stage only runs if the one
-              before it passed, and the artifact only earns a signature and publication after the smoke test confirms it
-              actually runs on a target-like environment. The key transition to watch is the one from build to smoke
-              test: that is where a release stops being 'it compiled' and becomes 'it runs.'
+              This expands the CI/CD concept card above into a picture. The same stages read more clearly as a chain of
+              gates than as a script: each stage only runs if the one before it passed, and the artifact only earns a
+              signature and publication after the smoke test confirms it actually runs on a target-like environment. The
+              key transition to watch is the one from build to smoke test: that is where a release stops being 'it
+              compiled' and becomes 'it runs.'
             </p>
             <MermaidDiagram
               chart={`flowchart TD\n  Check[cargo check] --> Test[unit + integration tests]\n  Test --> Lint[clippy + fmt]\n  Lint --> Build[cross-build per target]\n  Build --> Smoke[smoke test artifact]\n  Smoke -->|pass| Package[package image / wasm / lib]\n  Smoke -->|fail| Stop[block release]\n  Package --> Sign[checksum + sign + SBOM]\n  Sign --> Publish[publish artifacts]`}

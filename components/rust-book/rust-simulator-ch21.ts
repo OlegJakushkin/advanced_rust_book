@@ -27,6 +27,11 @@ export function simulateCh21Output(code: string, key?: string): string | null {
     return `plugins = ${firstName},${secondName}\njson pretty = ${hasDowncast ? prettyValue : "false"}\nfirst kind = ${firstKind}`
   }
 
+  if (key === "reflection_type_name_labels") {
+    const retries = Number(code.match(/RetryBudget\((\d+)\)/)?.[1] ?? "3")
+    return `retries = ${retries}\ntype label = type_name_labels::RetryBudget\nu32 label = u32`
+  }
+
   if (key === "ch21_ex_typemap_lab") {
     const hasInsert =
       /self\.values\.insert\(\s*TypeId::of::<T>\(\)\s*,\s*Box::new\(\s*value\s*\)\s*\)/.test(code) ||

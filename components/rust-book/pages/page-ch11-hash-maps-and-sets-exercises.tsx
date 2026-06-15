@@ -26,7 +26,7 @@ const exercises: Exercise[] = [
     title: "Choose map, set, or tree from the contract",
     objective: "Practice choosing `HashMap`, `HashSet`, `BTreeMap`, or `BTreeSet` from semantics rather than familiarity.",
     starterPrompt:
-      "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports range-like prefix reviews.",
+      "Pick one structure for each case: a request counter keyed by route, a dedup list of active feature flags, a config renderer that must emit stable sorted output, and an ordered allow-list that supports prefix range queries.",
     prompts: [
       "Which workload is really key-value association?",
       "Which workload is only membership and deduplication?",
@@ -50,7 +50,7 @@ const exercises: Exercise[] = [
     title: "Remove duplicate lookups with Entry API",
     objective: "Read a read-modify-write path and replace repeated lookup logic with a single-entry update path.",
     starterPrompt:
-      "You inherit a counter update that does `contains_key`, then `get_mut`, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
+      "You inherit a counter update that does `contains_key`, then indexes with `counts[&route]` to read the old value, then `insert` on the same `HashMap<String, usize>` key path. Refactor the logic conceptually before touching syntax.",
     prompts: [
       "What duplicate work is the original shape doing?",
       "Which `entry` helper best fits: `or_insert`, `or_default`, or `and_modify`?",
@@ -304,7 +304,14 @@ export function PageCh11HashMapsAndSetsExercises() {
             <>
               Tip: on stable standard-library APIs, Entry is the right tool for an owned-key update path. Borrowed lookup
               is the right tool for reads. The ordered render can be a{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`BTreeMap`}</code> projection.
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`BTreeMap`}</code> projection. Under the{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{"&HashMap"}</code> signature, sort by
+              collecting{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`counts.iter()`}</code> into a{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`BTreeMap<&String, &usize>`}</code>;{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`into_iter()`}</code> on a shared
+              reference yields <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{"(&K, &V)"}</code>{" "}
+              pairs, not <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{"(K, V)"}</code>.
             </>
           }
           initialCode={`use std::collections::{BTreeMap, HashMap};

@@ -182,7 +182,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 50
+  const pageIndex = 54
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -224,16 +224,16 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(42)}>
+              <Button variant="outline" onClick={() => setCurrentPage(46)}>
                 Chapter 22
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(44)}>
+              <Button variant="outline" onClick={() => setCurrentPage(48)}>
                 Chapter 23
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(46)}>
+              <Button variant="outline" onClick={() => setCurrentPage(50)}>
                 Chapter 24
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(48)}>
+              <Button variant="outline" onClick={() => setCurrentPage(52)}>
                 Chapter 25
               </Button>
             </div>
@@ -343,6 +343,24 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
               chart={`flowchart TD\n  F[FuturesUnordered] -->|polled in place| FA[future a]\n  F -->|polled in place| FB[future b]\n  FA --> ME[your single task]\n  FB --> ME`}
               caption="FuturesUnordered path: futures advance inside your own task only while you poll the collection, so they never need to be Send."
             />
+            <p className="mt-4 text-sm text-muted-foreground leading-6">
+              In code the local path is small: push the futures into the set, then drain them with{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">next().await</code> as each one
+              completes. Nothing is spawned, so the futures stay inside this task.
+            </p>
+            <pre className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs overflow-x-auto">
+              <code className="font-mono text-foreground">{`use futures::stream::{FuturesUnordered, StreamExt};
+
+let mut pending = FuturesUnordered::new();
+for id in [1_u32, 2, 3] {
+    pending.push(async move { id * 2 });
+}
+
+let mut total = 0;
+while let Some(value) = pending.next().await {
+    total += value; // results arrive as each future finishes
+}`}</code>
+            </pre>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -408,6 +426,11 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Designing task APIs</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              When you wrap any of this into a reusable subsystem, expose these concerns at the API boundary rather than
+              hiding them in the implementation. The examples below show the same patterns in working code, so it helps
+              to read those first and treat these as the rules they illustrate.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {apiDesignRules.map((rule) => (
                 <div key={rule} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -636,7 +659,7 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
             The companion exercise page asks you to choose Tokio, Rayon, Crossbeam, or futures combinators from real
             workload shape, implement a bounded worker queue, and add retry and cancellation behavior to task orchestration.
           </p>
-          <Button onClick={() => setCurrentPage(51)} className="gap-2">
+          <Button onClick={() => setCurrentPage(55)} className="gap-2">
             Open Chapter 26 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

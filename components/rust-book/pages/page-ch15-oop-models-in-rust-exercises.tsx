@@ -112,7 +112,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "state modeling",
     title: "Refactor a state machine into Rust-native transitions",
     objective: "Replace flag-based or inheritance-heavy state transitions with an enum or typestate model.",
     starterPrompt:
@@ -235,7 +235,7 @@ export function PageCh15OopModelsInRustExercises() {
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  OOP modeling drill
+                  {exercise.kind}
                 </span>
               </div>
 
@@ -303,7 +303,8 @@ export function PageCh15OopModelsInRustExercises() {
           helperText={
             <>
               Tip: the point is not inheritance. The point is one valid transition per type. Keep the draft-to-review and
-              review-to-published handoffs explicit, and build the slug when the value becomes published.
+              review-to-published handoffs explicit, and build the slug when the value becomes published: derive it from
+              the title with <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">{`.to_lowercase().replace(' ', "-")`}</code>.
             </>
           }
           initialCode={`struct DraftPost {\n    title: String,\n}\n\nstruct ReviewPost {\n    title: String,\n}\n\nstruct PublishedPost {\n    title: String,\n    slug: String,\n}\n\nimpl DraftPost {\n    fn new(title: &str) -> Self {\n        Self {\n            title: title.to_string(),\n        }\n    }\n\n    fn request_review(self) -> ReviewPost {\n        ReviewPost { title: self.title }\n    }\n}\n\nimpl ReviewPost {\n    fn publish(self) -> PublishedPost {\n        PublishedPost {\n            title: self.title,\n            slug: String::new(),\n        }\n    }\n}\n\nimpl PublishedPost {\n    fn slug(&self) -> &str {\n        &self.slug\n    }\n}\n\nfn main() {\n    let draft = DraftPost::new(\"Rust OOP\");\n    let review = draft.request_review();\n    let published = review.publish();\n\n    println!(\"published = {}\", !published.slug().is_empty());\n    println!(\"slug = {}\", published.slug());\n}`}

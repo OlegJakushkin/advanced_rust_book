@@ -25,7 +25,7 @@ fn run_stage(program: &str, args: &[String]) -> std::io::Result<()> {
 const mentalModelPoints = [
   {
     title: "ZoKrates is a workflow you orchestrate, not a proving library you embed.",
-    body: "Rust drives the ZoKrates CLI or wraps a proving service; it does not reimplement the prover. The verifier contract, proof blobs, witness files, and setup keys are files on disk with custody rules. Modeling them as ordinary in-memory structs that the whole system passes around is the first mistake that leads to a leaked witness or a mismatched key.",
+    body: "Rust drives the ZoKrates CLI or wraps a proving service; it does not reimplement the prover. The verifier contract, proof artifacts, witness files, and setup keys are files on disk with custody rules. Modeling them as ordinary in-memory structs that the whole system passes around is the first mistake that leads to a leaked witness or a mismatched key.",
   },
   {
     title: "The prover and the verifier are different shapes of service.",
@@ -83,7 +83,7 @@ const workflowRows = [
   },
   {
     stage: "5. Generate proof",
-    artifact: "proof blob or proof.json",
+    artifact: "proof artifact (proof.json)",
     owner: "prover worker",
     note: "Heavy CPU and memory stage; queue it and observe it like a specialist worker.",
   },
@@ -195,7 +195,7 @@ const artifactRows = [
     note: "Do not log, replicate, or hand to Ethereum verification paths casually.",
   },
   {
-    artifact: "proof blob",
+    artifact: "proof artifact",
     secrecy: "transport artifact",
     owner: "prover output, verifier input",
     retention: "bounded by replay and audit policy",
@@ -417,10 +417,8 @@ export function PageCh52ZoKratesWorkflowsAndEthereumVerifiers() {
             <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
-            Three ideas keep this work tractable. ZoKrates is a boundary you orchestrate rather than a library you embed.
-            Proving and verifying are different shapes of service with different costs. And Ethereum integration is mostly
-            artifact management plus a small amount of transport translation. Hold these and most design questions in the
-            chapter answer themselves.
+            Three ideas keep this work tractable, and once you hold them most design questions in the chapter answer
+            themselves. Each is spelled out in a card below.
           </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -544,7 +542,7 @@ zokrates verify`}</code>
             </div>
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                In practice Rust owns the contract address map, the public-input encoder, proof-blob transport, and the
+                In practice Rust owns the contract address map, the public-input encoder, proof-artifact transport, and the
                 on-chain submission policy, including gas, confirmation, and retry. The Solidity verifier itself stays a
                 generated contract artifact with its own toolchain and deployment review path. Owning the calldata is not
                 the same as owning the verifier logic, and conflating the two is how teams end up shipping a contract
@@ -585,7 +583,12 @@ zokrates verify`}</code>
                 worth getting right: spawn the process, wait for it to finish, and translate a non-zero exit status into a
                 proper Rust error instead of letting it pass silently. The helper below does exactly that, returning
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Ok(())</code> only when the
-                stage actually succeeded. Read it as the success-or-error branch a worker would call once per stage.
+                stage actually succeeded. This is where the plan from Example 1 gets executed: a worker walks the
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Vec&lt;Invocation&gt;</code> and
+                calls <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">run_stage(inv.program, &amp;inv.args)</code>{" "}
+                once per stage, so the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">args</code>{" "}
+                each <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">Invocation</code> carries are
+                exactly what the process runs.
               </p>
               <MermaidDiagram
                 chart={`flowchart TD\n  Run[run_stage] --> Spawn[Command::status]\n  Spawn --> Check{status.success?}\n  Check -->|yes| Ok[Ok]\n  Check -->|no| Err[Err: stage failed]`}

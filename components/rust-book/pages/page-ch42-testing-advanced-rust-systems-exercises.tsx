@@ -26,7 +26,7 @@ const exercises: Exercise[] = [
     title: "Choose unit, integration, property, fuzz, snapshot, or benchmark from the claim",
     objective: "Practice selecting the cheapest test layer that can prove the real behavior instead of defaulting to one broad test shape.",
     starterPrompt:
-      "Classify five needs: a state-machine invariant, a public HTTP contract, a hostile binary parser input space, a large human-reviewable error report, and a latency budget for one hot batch encoder.",
+      "Classify five needs, each to its cheapest test layer: (1) a state-machine invariant, (2) a public HTTP contract, (3) a hostile binary parser input space, (4) a large human-reviewable error report, and (5) a latency budget for one hot batch encoder.",
     prompts: [
       "Which need is best served by a unit test first?",
       "Which need wants a true integration test against a public boundary?",
@@ -131,6 +131,7 @@ const exercises: Exercise[] = [
       "You include at least one deterministic time-control technique.",
       "You define one idempotency or duplicate-suppression assertion at the durable boundary.",
       "You separate task-join behavior from inner operation behavior.",
+      "You describe what happens to in-flight work under cancellation.",
       "You mention at least one request, task, or message identity field in the assertions.",
     ],
     hints: [
@@ -302,7 +303,11 @@ export function PageCh42TestingAdvancedRustSystemsExercises() {
             <>
               Repair the starter so the quota object refuses reservations that would exceed the limit, and the deterministic
               invariant harness reports zero violations. This keeps the browser example dependency-light while teaching the
-              same invariant-first shape you would later lift into a property-testing crate.
+              same invariant-first shape you would later lift into a property-testing crate. This lab is a companion to
+              Example 1 in the main chapter, not the same program: the lab prints a{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">violations</code> count, while the
+              chapter example prints the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">limit</code>,
+              so the third output line differs by design.
             </>
           }
           filename="property_invariant_lab.rs"

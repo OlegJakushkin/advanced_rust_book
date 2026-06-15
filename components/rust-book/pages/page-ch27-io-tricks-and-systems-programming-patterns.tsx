@@ -143,10 +143,16 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 52
+  const pageIndex = getPageIndexById("ch27-io-tricks-and-systems-programming-patterns")
   const page = PAGES[pageIndex]
   const exercisesPageIndex = getPageIndexById("ch27-io-tricks-and-systems-programming-patterns-exercises")
   const chapter28PageIndex = getPageIndexById("ch28-cpp-integration")
+  const chapter10PageIndex = getPageIndexById("ch10-arrays-slices-and-vectors")
+  const chapter22PageIndex = getPageIndexById("ch22-multithreading-in-rust")
+  const chapter23PageIndex = getPageIndexById("ch23-synchronization-primitives")
+  const chapter24PageIndex = getPageIndexById("ch24-coroutines-futures-and-async-rust")
+  const chapter25PageIndex = getPageIndexById("ch25-tokio")
+  const chapter26PageIndex = getPageIndexById("ch26-task-libraries-and-parallel-execution")
 
   useEffect(() => {
     markPageComplete(pageIndex)
@@ -188,22 +194,22 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(18)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter10PageIndex)}>
                 Chapter 10
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(42)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter22PageIndex)}>
                 Chapter 22
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(44)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter23PageIndex)}>
                 Chapter 23
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(46)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter24PageIndex)}>
                 Chapter 24
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(48)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter25PageIndex)}>
                 Chapter 25
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(50)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter26PageIndex)}>
                 Chapter 26
               </Button>
             </div>
@@ -214,9 +220,12 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Opening scenario</h3>
           <p className="text-sm text-muted-foreground leading-6">
             A log and event pipeline tails files, parses line-oriented records, proxies small TCP responses, and moves
-            bursts through an internal queue. The business requirement is to reduce syscall churn, copies, and unbounded
-            buffering by assigning clear ownership to bytes and handles, then choosing buffering, batching, vectored IO, or
-            async orchestration from measured cost rather than from instinct.
+            bursts through an internal queue.
+          </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            The goal is to reduce syscall churn, copies, and unbounded buffering. The way there is to assign clear ownership
+            to bytes and handles first, then choose buffering, batching, vectored IO, or async orchestration from measured
+            cost rather than from instinct.
           </p>
           <p className="text-sm text-muted-foreground leading-6 mt-3">
             The shape worth holding in your head is a pipeline of stages connected by a bounded queue. Bytes arrive at a
@@ -328,6 +337,31 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
                   clear before you adopt it.
                 </p>
               </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground leading-6 mb-3">
+                There is no listing to run here because the standard library has no mapping call, but the ecosystem shape is
+                small enough to read at a glance. A read-only mapping over an opened file looks like this:
+              </p>
+              <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+                <code className="font-mono text-foreground">{`// Cargo.toml: memmap2 = "0.9"
+use std::fs::File;
+use memmap2::Mmap;
+
+let file = File::open("index.bin")?;
+// SAFETY: the file must not be truncated or mutated by another
+// process for the lifetime of the mapping, or reads can fault.
+let map = unsafe { Mmap::map(&file)? };
+
+// map now behaves like a &[u8] backed by page faults, not read syscalls.
+let first_four = &map[..4];`}</code>
+              </pre>
+              <p className="mt-3 text-sm text-muted-foreground leading-6">
+                The mapping is created with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">unsafe</code>{" "}
+                because the safety contract lives outside Rust: nothing in the type system stops another process from
+                truncating the file out from under the mapping. That is the lifetime story the caveats above are asking you to
+                pin down before reaching for it.
+              </p>
             </div>
           </div>
 
@@ -587,7 +621,12 @@ export function PageCh27IoTricksAndSystemsProgrammingPatterns() {
               This example already uses a small{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">write_all_vectored</code> helper so the
               logical response is fully sent even if one vectored syscall only writes part of the buffers. Keep that pattern
-              near the socket boundary in real services instead of assuming small responses always finish in one call.
+              near the socket boundary in real services instead of assuming small responses always finish in one call. The
+              reported{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">vectored parts = 2</code> counts the
+              original slice array the response was built from, not how many slices remained after the retry loop. The helper
+              advances its own local view of the slices while draining them, so the array the server still holds is unchanged
+              at length two; this value is the slice count, not a partial-write progress signal.
             </p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border border-border bg-muted/30 p-3">

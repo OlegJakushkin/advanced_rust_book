@@ -48,7 +48,7 @@ const exercises: Exercise[] = [
     title: "Find the unnecessary clone",
     objective: "Identify where cloning papers over an ownership design that could be simpler.",
     starterPrompt:
-      "Review a helper that clones a request path into `path_copy`, prints it, then still uses the original path immediately after. Decide whether the clone is required and explain the cleaner alternative.",
+      "Review this helper. It clones the request path into `path_copy`, prints it, then still uses the original path immediately after. Decide whether the clone is required and explain the cleaner alternative.\n\nfn log_path_bad(path: String) {\n    let path_copy = path.clone();\n    println!(\"handling {}\", path_copy);\n    route(&path);\n}\n\nfn route(_path: &str) {}",
     prompts: [
       "Can a shared borrow do the same work?",
       "Would returning ownership from a helper be more appropriate than cloning?",
@@ -92,7 +92,7 @@ const exercises: Exercise[] = [
     title: "Annotate lifetimes only where required",
     objective: "Separate cases that need explicit lifetime relationships from cases handled by elision.",
     starterPrompt:
-      "Decide which signatures need explicit lifetimes and write the corrected form: `fn first_word(s: &str) -> &str` and `fn pick_longer(left: &str, right: &str) -> &str`.",
+      "Decide which signatures need explicit lifetimes and write the corrected form: `fn first_word(s: &str) -> &str` and `fn pick_longer(left: &str, right: &str) -> &str`. (Here we use the standard `first_word` pattern rather than the chapter's `first_segment` to keep the example self-contained; both illustrate the same single-input elision.)",
     prompts: [
       "Which function has only one input borrow?",
       "Which function returns one of several input borrows?",
@@ -123,7 +123,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "Your repair ends the borrow before the mutable operation, or deliberately converts to owned data for a justified reason.",
       "You do not default to cloning without explaining why independent ownership is needed.",
-      "You explain the conflict as overlapping borrow duration, not as ownership or borrowing rule involved.",
+      "You explain the conflict as overlapping borrow duration, not as a borrowing rule being violated in principle.",
     ],
     hints: [
       "Ask when the immutable borrow is last used.",
@@ -162,6 +162,7 @@ const reviewQuestions = [
   "What does a lifetime annotation describe, and what does it never do?",
   "When is returning `String` cleaner than returning `&str`?",
   "Why do queue, cache, and async boundaries often push you toward owned data?",
+  "Name one aliasing or mutation habit from your prior language (C++, C#, Go, or Python) that Rust's borrow checker makes explicit and enforced.",
 ]
 
 const workingLoop = [
@@ -205,7 +206,11 @@ export function PageCh04OwnershipBorrowingAndLifetimesExercises() {
                 given repair is cheaper or clearer in production.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(6)} className="gap-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}
+              className="gap-2 shrink-0"
+            >
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 04
             </Button>
@@ -250,7 +255,7 @@ export function PageCh04OwnershipBorrowingAndLifetimesExercises() {
                     <Wrench className="h-4 w-4 text-primary" />
                     <h4 className="font-medium text-foreground">Starter prompt</h4>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-6">{exercise.starterPrompt}</p>
+                  <p className="text-sm text-muted-foreground leading-6 whitespace-pre-line">{exercise.starterPrompt}</p>
                   {exercise.prompts?.length ? (
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc list-inside">
                       {exercise.prompts.map((prompt) => (

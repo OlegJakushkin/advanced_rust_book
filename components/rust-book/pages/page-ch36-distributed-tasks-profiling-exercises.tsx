@@ -23,7 +23,7 @@ const exercises: Exercise[] = [
   {
     number: 1,
     kind: "warm-up comprehension",
-    title: "Design metrics for worker saturation on purpose",
+    title: "Design metrics for worker saturation",
     objective: "Choose a small metric set that distinguishes healthy throughput from hidden backlog and retry amplification.",
     starterPrompt:
       "You run three worker pools: fast CPU tasks, slow GPU tasks, and a reducer pool. Decide which counters, gauges, and histograms each pool should expose.",
@@ -45,7 +45,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "incident reconstruction",
     title: "Trace a tail-latency incident across logs, metrics, and traces",
     objective: "Practice reconstructing one slow path when mean handler time still looks calm.",
     starterPrompt:
@@ -82,7 +82,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "The helper computes saturation and retry rate correctly.",
       "The storm rule is visible in code rather than hidden in prose.",
-      "The runnable lab prints the expected saturation, retry rate, and storm flag.",
+      "When you implement the three helpers, running the program prints saturation = 0.90, retry rate = 0.40, and storm = true.",
     ],
     hints: [
       "This is a metric and policy drill, not a transport drill.",
@@ -114,7 +114,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "design",
     title: "Profile a task graph by critical path instead of average stage time",
     objective: "Replace stage-local averages with graph-aware signals that reveal reducer lag and join bottlenecks.",
     starterPrompt:
@@ -353,11 +353,12 @@ fn main() {
         </section>
 
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">Expected outcomes</h3>
           <p className="text-sm text-muted-foreground leading-6">
             By the end of this page, you should be able to design a useful saturation surface, trace one tail-latency
-            incident across metrics, logs, and traces, identify retry storm signals early, and defend one capacity plan
-            with explicit worker, queue, and drain-time budgets.
+            incident across metrics, logs, and traces, identify retry storm signals early, repair a profiling surface
+            that hides queue latency, compute and explain a critical path through a task graph, and defend one capacity
+            plan with explicit worker, queue, and drain-time budgets.
           </p>
         </section>
       </div>

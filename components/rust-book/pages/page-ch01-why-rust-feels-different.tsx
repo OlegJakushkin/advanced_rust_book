@@ -181,7 +181,10 @@ export function PageCh01WhyRustFeelsDifferent() {
             <div className="p-4 rounded-lg bg-card border border-border">
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <strong className="text-foreground">Ownership</strong> says who is responsible for cleanup.
+                  <strong className="text-foreground">Ownership</strong> says who is responsible for cleanup. When the
+                  owner goes out of scope, Rust runs
+                  <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Drop</code>
+                  to release the resource deterministically.
                 </li>
                 <li>
                   <strong className="text-foreground">Borrowing</strong> says who may access a value temporarily.
@@ -251,7 +254,7 @@ export function PageCh01WhyRustFeelsDifferent() {
           </div>
 
           <div className="p-4 rounded-lg bg-card border border-border">
-            <h4 className="font-semibold text-foreground mb-3">what changes by background</h4>
+            <h4 className="font-semibold text-foreground mb-3">What changes by background</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -309,6 +312,9 @@ export function PageCh01WhyRustFeelsDifferent() {
               </ol>
               <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
                 <div className="text-sm font-medium text-foreground mb-2">A practical reading loop</div>
+                <p className="text-xs text-muted-foreground leading-5 mb-2">
+                  This is the shorter habit you internalize once the four steps above become routine: the same process, condensed into the order you actually run it in.
+                </p>
                 <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
                   {compilerReadingLoop.map((step) => (
                     <li key={step}>{step}</li>
@@ -477,7 +483,7 @@ export function PageCh01WhyRustFeelsDifferent() {
             implementation, debugging, and production design. One exercise explicitly asks you to interpret three
             compiler diagnostics and propose repairs.
           </p>
-          <Button onClick={() => setCurrentPage(1)} className="gap-2">
+          <Button onClick={() => setCurrentPage(getPageIndexById("ch01-why-rust-feels-different-exercises"))} className="gap-2">
             Open Chapter 01 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -489,7 +495,7 @@ export function PageCh01WhyRustFeelsDifferent() {
               <h3 className="text-lg font-semibold text-foreground mb-3">Next chapter</h3>
               <p className="text-sm text-muted-foreground leading-6">Chapter 02 turns this intuition into an operational model: values, bindings, moves, drops, stack versus heap-backed ownership, and why lifetimes are about borrowed references rather than object survival.</p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(2)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))} className="gap-2 shrink-0">
               Continue to Chapter 02
               <ArrowRight className="h-4 w-4" />
             </Button>

@@ -156,7 +156,12 @@ const summaryPoints = [
   "Parallel construction is straightforward per level, but only worth it when the level is large enough to amortize scheduling overhead.",
 ]
 
-const proofEnvelopeSnippet = `struct ProofEnvelope {
+const proofEnvelopeSnippet = `struct ProofStepWire {
+    sibling: [u8; 32],
+    sibling_is_left: bool,
+}
+
+struct ProofEnvelope {
     hash_alg: &'static str,
     tree_version: u16,
     leaf_index: u64,
@@ -293,6 +298,9 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
             <pre className="rounded-md bg-card px-3 py-2 text-xs overflow-x-auto">
               <code className="font-mono text-foreground">{treeDiagram}</code>
             </pre>
+            <p className="mt-2 text-xs text-muted-foreground leading-5">
+              where n0 = H(leaf0), n1 = H(leaf1), n2 = H(leaf2), and n3 = H(leaf3).
+            </p>
           </div>
         </section>
 
@@ -431,6 +439,13 @@ export function PageCh38MerkleTreeGamesAndChallenges() {
               inputs are the outputs of the level below. That gives you a clean shape — parallelize <em>within</em> a level,
               synchronize <em>between</em> levels — and it holds whether the workers are CPU threads, Rayon tasks, GPU lanes,
               or remote nodes.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              The GPU-lane case is where Chapter 37 earns its place here. A wide bottom level — thousands of leaf pairs — maps
+              directly onto GPU lanes: shard the level into fixed-size tiles, hash one pair per lane, and copy the next level
+              back. The same boundary budgeting from Chapter 37 applies unchanged: the host-to-device transfer and kernel
+              launch are only worth it when the level is wide enough to amortize them, which is exactly the threshold question
+              the next card raises for CPU threads.
             </p>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
               In the snippet below, look at the boundary, not the scheduler. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">par_chunks(2)</code>{" "}

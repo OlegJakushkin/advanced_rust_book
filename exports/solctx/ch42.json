@@ -8,7 +8,7 @@
    "kind": "warm-up comprehension",
    "title": "Choose unit, integration, property, fuzz, snapshot, or benchmark from the claim",
    "objective": "Practice selecting the cheapest test layer that can prove the real behavior instead of defaulting to one broad test shape.",
-   "starterPrompt": "Classify five needs: a state-machine invariant, a public HTTP contract, a hostile binary parser input space, a large human-reviewable error report, and a latency budget for one hot batch encoder.",
+   "starterPrompt": "Classify five needs, each to its cheapest test layer: (1) a state-machine invariant, (2) a public HTTP contract, (3) a hostile binary parser input space, (4) a large human-reviewable error report, and (5) a latency budget for one hot batch encoder.",
    "prompts": [
     "Which need is best served by a unit test first?",
     "Which need wants a true integration test against a public boundary?",
@@ -109,6 +109,7 @@
     "You include at least one deterministic time-control technique.",
     "You define one idempotency or duplicate-suppression assertion at the durable boundary.",
     "You separate task-join behavior from inner operation behavior.",
+    "You describe what happens to in-flight work under cancellation.",
     "You mention at least one request, task, or message identity field in the assertions."
    ],
    "hints": [
@@ -215,7 +216,7 @@
   "The most expensive advanced-testing mistake is usually not “too few tests.” It is too much of the wrong test layer and too little control over time, replay, unsafe invariants, and output stability."
  ],
  "codeSamples": {
-  "testing_property_invariant_harness": "#[derive(Debug, Clone, Copy)]\nstruct Quota {\n    limit: u32,\n    used: u32,\n}\n\nimpl Quota {\n    fn try_reserve(&mut self, qty: u32) -> bool {\n        if self.used + qty > self.limit {\n            return false;\n        }\n\n        self.used += qty;\n        true\n    }\n}\n\nfn invariant_holds(limit: u32, ops: &[u32]) -> bool {\n    let mut quota = Quota { limit, used: 0 };\n\n    for &qty in ops {\n        let _accepted = quota.try_reserve(qty);\n        if quota.used > quota.limit {\n            return false;\n        }\n    }\n\n    true\n}\n\nfn main() {\n    let limit = 8_u32;\n    let scenarios: &[&[u32]] = &[\n        &[1_u32, 1, 1],\n        &[4_u32, 4],\n        &[5_u32, 4],\n        &[2_u32, 2, 2, 2],\n        &[8_u32],\n    ];\n\n    let all_valid = scenarios\n        .iter()\n        .all(|ops| invariant_holds(limit, ops));\n\n    println!(\"cases = {}\", scenarios.len());\n    println!(\"all valid = {}\", all_valid);\n    println!(\"limit = {}\", limit);\n}",
+  "testing_property_invariant_harness": "#[derive(Debug, Clone, Copy)]\nstruct Quota {\n    limit: u32,\n    used: u32,\n}\n\nimpl Quota {\n    fn try_reserve(&mut self, qty: u32) -> bool {\n        // Plain addition is fine for these small demo values; in production\n        // use self.used.saturating_add(qty) so a huge qty cannot overflow.\n        if self.used + qty > self.limit {\n            return false;\n        }\n\n        self.used += qty;\n        true\n    }\n}\n\nfn invariant_holds(limit: u32, ops: &[u32]) -> bool {\n    let mut quota = Quota { limit, used: 0 };\n\n    for &qty in ops {\n        let _accepted = quota.try_reserve(qty);\n        if quota.used > quota.limit {\n            return false;\n        }\n    }\n\n    true\n}\n\nfn main() {\n    let limit = 8_u32;\n    let scenarios: &[&[u32]] = &[\n        &[1_u32, 1, 1],\n        &[4_u32, 4],\n        &[5_u32, 4],\n        &[2_u32, 2, 2, 2],\n        &[8_u32],\n    ];\n\n    let all_valid = scenarios\n        .iter()\n        .all(|ops| invariant_holds(limit, ops));\n\n    println!(\"cases = {}\", scenarios.len());\n    println!(\"all valid = {}\", all_valid);\n    println!(\"limit = {}\", limit);\n}",
   "testing_async_idempotent_delivery_harness": "use std::collections::HashSet;\nuse std::sync::Arc;\n\nuse tokio::sync::Mutex;\n\n#[derive(Default)]\nstruct FakeStore {\n    applied: Mutex<HashSet<&'static str>>,\n    duplicate_count: Mutex<usize>,\n}\n\nimpl FakeStore {\n    async fn apply_once(&self, event_id: &'static str) -> bool {\n        let mut applied = self.applied.lock().await;\n        if !applied.insert(event_id) {\n            drop(applied);\n            let mut duplicates = self.duplicate_count.lock().await;\n            *duplicates += 1;\n            return false;\n        }\n\n        true\n    }\n\n    async fn processed(&self) -> usize {\n        self.applied.lock().await.len()\n    }\n\n    async fn duplicates(&self) -> usize {\n        *self.duplicate_count.lock().await\n    }\n}\n\n#[tokio::main]\nasync fn main() {\n    let store = Arc::new(FakeStore::default());\n\n    for event_id in [\"evt-1\", \"evt-1\", \"evt-2\"] {\n        let _ = store.apply_once(event_id).await;\n    }\n\n    println!(\"processed = {}\", store.processed().await);\n    println!(\"duplicates = {}\", store.duplicates().await);\n    println!(\"deliveries = {}\", 3);\n}"
  },
  "labReferenceSolution": null

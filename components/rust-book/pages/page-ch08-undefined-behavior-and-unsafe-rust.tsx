@@ -186,6 +186,10 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
             hot path. The business requirement is a narrow unsafe boundary with written invariants for pointer validity,
             initialization, aliasing, thread safety, and safe wrapper behavior.
           </p>
+          <p className="text-sm text-muted-foreground leading-6 mt-3">
+            Before writing any of the packet-service code, three discipline questions apply. They keep the unsafe surface
+            small enough that the rest of this chapter has something concrete to audit.
+          </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A useful rule before writing unsafe code</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
@@ -508,8 +512,8 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               <div>
                 <h4 className="font-semibold text-foreground">Example 1: a safe slice API over raw-pointer writes</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The caller gets a safe function. Bounds and exclusivity are enforced before the raw-pointer write loop
-                  begins.
+                  This is the hot-path buffer fill from the opening scenario. The caller gets a safe function. Bounds and
+                  exclusivity are enforced before the raw-pointer write loop begins.
                 </p>
               </div>
               {codes.unsafe_rust_fill_window !== DEFAULT_CODES.unsafe_rust_fill_window && (
@@ -577,8 +581,8 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               <div>
                 <h4 className="font-semibold text-foreground">Example 2: build initialized bytes with `MaybeUninit`</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The storage starts explicitly uninitialized, each byte is written once, and `assume_init` appears only
-                  after the invariant is fully true.
+                  This is the packet-framing step from the opening scenario. The storage starts explicitly uninitialized,
+                  each byte is written once, and `assume_init` appears only after the invariant is fully true.
                 </p>
               </div>
               {codes.unsafe_rust_maybe_uninit !== DEFAULT_CODES.unsafe_rust_maybe_uninit && (
@@ -597,6 +601,14 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               written exactly once, and only the final{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">assume_init</code> turns the storage
               into a real value. Trace the diagram and confirm that no read happens on any branch before the last write.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              One detail in the code is the cast{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">as_mut_ptr() as *mut u8</code>. Because{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">[u8; 4]</code> has alignment 1 and
+              stores its bytes contiguously, casting the array pointer to a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">*mut u8</code> is valid and lets the
+              pointer arithmetic address each byte individually.
             </p>
             <MermaidDiagram
               chart={`flowchart TD\n  U["MaybeUninit array, uninit"] --> W0["write index 0"]\n  W0 --> W1["write index 1"]\n  W1 --> W2["write index 2"]\n  W2 --> W3["write index 3"]\n  W3 -->|all slots written| AI["unsafe assume_init"]\n  AI --> V["real fixed-size array"]`}

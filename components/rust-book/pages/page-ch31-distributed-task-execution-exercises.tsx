@@ -74,7 +74,7 @@ const exercises: Exercise[] = [
     starterPrompt:
       "Complete a tiny in-memory queue so timed-out work returns to visibility and a second completion attempt becomes a harmless duplicate.",
     prompts: [
-      "Requeue the task only when the current time is past the deadline.",
+      "Requeue the task only when the current time is past the deadline. The starter contains a reversed condition, so your first task is to find and flip it.",
       "Record completion in a set keyed by task ID.",
       "Return a boolean from completion so the caller can tell whether this was the first successful application or a duplicate.",
       "Keep the queue owner as one struct instead of scattering state globally.",
@@ -114,7 +114,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "design or analysis",
     title: "Trace a distributed task graph end to end",
     objective: "Make one task graph observable enough that queue wait, handler work, and fan-in are all attributable.",
     starterPrompt:
@@ -148,12 +148,14 @@ const exercises: Exercise[] = [
       "How will final aggregation decide when the whole graph is complete?",
       "Which tracing fields, queue metrics, and duplicate metrics would you require before rollout?",
       "Where would you isolate slow GPU retries so they do not stall the rest of the platform?",
+      "Which two metrics would tell you whether a slow run is bottlenecked at the GPU transcode step or at the aggregation reducer?",
     ],
     acceptanceCriteria: [
       "You choose at least one queue or shard split deliberately.",
       "You define a lease or renewal policy for the long-running step.",
       "You describe one result-aggregation rule and one failure-isolation rule.",
       "You mention at least three observability hooks such as queue age, redelivery rate, reducer lag, trace lineage, or duplicate suppression hits.",
+      "You name two metrics that distinguish a GPU-step bottleneck from an aggregation-reducer bottleneck, such as per-stage handler time versus reducer lag at the join.",
     ],
     hints: [
       "The cleanest answer gives every expensive stage a visible budget and a visible failure policy.",

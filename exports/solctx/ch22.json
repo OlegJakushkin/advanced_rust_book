@@ -103,7 +103,7 @@
    "starterPrompt": "You are designing `accept request -> parse -> schedule work -> update metrics -> publish completion` for a CPU-heavy service with a few hot counters and one central retry table.",
    "prompts": [
     "Which parts want owned messages over channels?",
-    "Which parts truly want shared immutable state through `Arc<T>` only?",
+    "Which parts are satisfied by shared immutable state through `Arc<T>` alone, without a lock?",
     "Which parts, if any, justify `Arc<Mutex<T>>` or another synchronized shared-state tool?",
     "What backpressure or contention signal would you monitor in production?"
    ],
@@ -148,7 +148,8 @@
   "When is `thread::scope` a better answer than cloning or heap-sharing more data?",
   "What is the difference between message passing and shared-state locking as an ownership design?",
   "Why is work stealing a scheduler strategy rather than a synonym for threads?",
-  "Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?"
+  "Why are async tasks and distributed workers separate from OS-thread design even when all three are 'concurrent'?",
+  "When would you use `thread::Builder` instead of `thread::spawn` directly?"
  ],
  "lab": {
   "title": "Runnable lab · Move owned jobs into worker threads and report results",
@@ -186,7 +187,7 @@
   "Multithreaded Rust systems need clear ownership transfer, shared-state policy, and shutdown behavior. This chapter covers threads, scoped work, channels, and synchronization as production boundaries.",
   "Chapter 04 established ownership and borrowing. Chapter 07 separated moves, copies, and clones. Chapter 09 introduced Arc, Mutex, and related pointer choices. Chapter 14 explained trait-based boundaries. This chapter applies those ideas to OS threads directly.",
   "Picture a request-processing service with three kinds of work happening at once. It does CPU-heavy preprocessing on incoming payloads, it keeps a shared metrics index up to date, and it hands off slower background jobs to a pool of worker threads. In another language you might re",
-  "That is the spine of the chapter. Each of those four moves, move, share, synchronize, and borrow-in-scope, is a distinct primitive with a distinct cost, and the skill is matching the primitive to the workload rather than defaulting to whichever one compiled first.",
+  "That is the spine of the chapter. Each of those four patterns, move, share, synchronize, and borrow-in-scope, is a distinct primitive with a distinct cost, and the skill is matching the primitive to the workload rather than defaulting to whichever one compiled first.",
   "Everything here concerns OS threads, the kind the operating system schedules and that cost real memory and scheduler attention. It is deliberately not about async tasks, futures, or executors, even though those also do concurrent work. The two models look similar from a distance ",
   "Most confusion in this area is vocabulary, not code. \"Concurrency\" gets stretched across several unrelated mechanisms with different schedulers, different costs, and different ownership rules. Before any API, fix the terms. The diagram shows who schedules what: the OS schedules t",
   "Each of those four kinds is scheduled by something different. The same four branches map to four schedulers:",

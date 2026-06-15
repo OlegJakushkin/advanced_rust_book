@@ -41,6 +41,7 @@ const exercises: Exercise[] = [
     hints: [
       "Ask first whether the graph is sparse or dense.",
       "Then ask who should own nodes and how long edges need to stay meaningful.",
+      "Treat the grid as a form of adjacency list: each cell's neighbors come from its coordinates, so it maps to the adjacency-list category rather than being a fourth representation.",
     ],
   },
   {
@@ -158,6 +159,30 @@ const exercises: Exercise[] = [
     hints: [
       "Distributed graph search is partly an algorithm problem and partly a control-plane problem.",
       "Frontier size and duplicate rate are often more useful than raw CPU usage at first.",
+    ],
+  },
+  {
+    number: 7,
+    kind: "implementation",
+    title: "Implement Dijkstra and A* and verify they agree on the sample graph",
+    objective:
+      "Build weighted shortest-path search two ways and confirm a consistent heuristic does not change the optimal cost.",
+    starterPrompt:
+      "Reuse the weighted graph from the chapter's Example 2 (nodes A, B, C, D, Goal with the same coordinates and edge costs). Implement `dijkstra_cost` and `a_star_cost` over a `BinaryHeap` frontier, then run both from A to Goal.",
+    prompts: [
+      "Order the frontier with a `State` whose `Ord` is inverted so the max-heap pops the lowest priority first.",
+      "Use cost-so-far as the Dijkstra priority and cost-so-far plus the Manhattan heuristic as the A* priority.",
+      "Skip stale heap entries by comparing the popped cost against the best recorded cost for that node.",
+      "Print both results and confirm `dijkstra cost = 7` and `a_star cost = 7` on the sample graph.",
+    ],
+    acceptanceCriteria: [
+      "Both methods share one `BinaryHeap`-backed frontier with an inverted `Ord` so the smallest priority pops first.",
+      "Dijkstra orders by cost only; A* adds the Manhattan heuristic to the goal.",
+      "Both return the same optimal cost (7) on the sample graph, and you explain why the consistent heuristic preserves that answer.",
+    ],
+    hints: [
+      "The heuristic must never overestimate the remaining cost, or A* can return a non-optimal answer.",
+      "A stale-entry guard (`if cost > best[node.0] { continue }`) is simpler than trying to update entries already in the heap.",
     ],
   },
 ]
@@ -287,9 +312,6 @@ export function PageCh39GraphSearchGamesExercises() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  Graph drill
-                </span>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -357,7 +379,12 @@ export function PageCh39GraphSearchGamesExercises() {
               Tip: keep the owner as <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">Vec&lt;Node&gt;</code>,
               use <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">NodeId</code> in the edge lists, and let{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">VecDeque</code> drive both BFS layers and
-              unweighted shortest hops.
+              unweighted shortest hops. This lab prints{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">visited =</code> and{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">hops =</code>; the chapter&apos;s Example 1 is the
+              same program with the labels <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">bfs =</code> and{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">path hops =</code>, so the graph and the hop count
+              match even though the line labels differ.
             </>
           }
           initialCode={`use std::collections::VecDeque;

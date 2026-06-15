@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
+import { ArrowRight, BookOpen, Bug, Code, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { getPageIndexById } from "../page-index"
 import { DEFAULT_CODES, PAGES } from "../types"
@@ -78,7 +78,7 @@ const ownershipCards = [
   },
   {
     title: "One Vec plus a typed NodeId is the whole arena",
-    body: "You do not need a crate to get arena semantics for a graph. A Vec of nodes plus a NodeId(usize) newtype is already an arena: appending is cheap, every node has a stable logical identity, and traversal borrows the table read-only while the search state lives in separate buffers. The newtype keeps you from accidentally mixing a node index with some other usize.",
+    body: "You do not need a crate to get arena semantics for a graph: a Vec of nodes plus a NodeId(usize) newtype already is one. The Arena-backed graphs section below works through why this stays calm under mutation and serialization.",
   },
   {
     title: "When shared ownership is actually warranted",
@@ -576,7 +576,7 @@ struct Graph {
 
         <section className="space-y-5">
           <div className="flex items-center gap-2">
-            <Cpu className="h-5 w-5 text-primary" />
+            <Code className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">

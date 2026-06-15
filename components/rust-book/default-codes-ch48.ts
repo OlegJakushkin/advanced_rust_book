@@ -63,6 +63,8 @@ async fn main() {
         loop {
             tokio::select! {
                 biased;
+                // recv() returns None when outbound_tx is dropped; Some(frame) does not
+                // match None, so that arm is skipped and the shutdown arm fires instead.
                 Some(frame) = outbound_rx.recv() => {
                     match frame {
                         OutboundFrame::Text(_) | OutboundFrame::Pong(_) | OutboundFrame::Close => {

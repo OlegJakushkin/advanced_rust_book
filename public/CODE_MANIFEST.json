@@ -8,16 +8,16 @@
   "total": 222
  },
  "verification": {
-  "ok": 149,
+  "ok": 148,
   "needs-crates": 16,
   "compile-error": 0,
   "output-mismatch": 0,
   "timeout": 0,
-  "starter-ok": 49,
+  "starter-ok": 48,
   "starter-incomplete": 2,
   "needs-edition-2024": 3,
   "needs-nightly": 1,
-  "needs-cuda": 2
+  "needs-cuda": 4
  },
  "files": [
   {
@@ -2644,29 +2644,31 @@
    "status": "ok"
   },
   {
-   "path": "exercises/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "path": "exercises/ch54_onnx_model_inference_in_rust/onnx_challenge.rs",
    "book": "exercise",
    "chapter": 54,
    "title": "ONNX Model Inference in Rust",
-   "name": "softmax_post_processing_lab.rs",
-   "key": "ch54_ex_softmax",
-   "crates": [],
+   "name": "onnx_challenge.rs",
+   "key": "ch54_ex_onnx_gpu",
+   "crates": [
+    "ort"
+   ],
    "expected": null,
-   "solutionExpected": "logits = [-1.5750, 1.0500, 0.9750]\nprobs = [0.0362, 0.5000, 0.4638]\nprobs sum = 1.0000\npredicted class = 1\nconfidence = 0.5000",
-   "actualOutput": "logits = [-1.5750, 1.0500, 0.9750]\nprobs = [0.3333, 0.3333, 0.3333]\nprobs sum = 1.0000\npredicted class = 1\nconfidence = 0.3333",
-   "status": "starter-ok"
+   "solutionExpected": "cpu        = 20.41 ms / inference\ngpu (cuda) = 1.25 ms / inference\nbatch      = 128, model = 1024->4096->4096->4096->10 (f32)\nspeedup    = 16.3x\nagree      = true",
+   "status": "needs-cuda"
   },
   {
-   "path": "solutions/ch54_onnx_model_inference_in_rust/softmax_post_processing_lab.rs",
+   "path": "solutions/ch54_onnx_model_inference_in_rust/onnx_challenge.rs",
    "book": "solution",
    "chapter": 54,
    "title": "ONNX Model Inference in Rust",
-   "name": "softmax_post_processing_lab.rs",
-   "key": "ch54_ex_softmax",
-   "crates": [],
-   "expected": "logits = [-1.5750, 1.0500, 0.9750]\nprobs = [0.0362, 0.5000, 0.4638]\nprobs sum = 1.0000\npredicted class = 1\nconfidence = 0.5000",
-   "actualOutput": "logits = [-1.5750, 1.0500, 0.9750]\nprobs = [0.0362, 0.5000, 0.4638]\nprobs sum = 1.0000\npredicted class = 1\nconfidence = 0.5000",
-   "status": "ok"
+   "name": "onnx_challenge.rs",
+   "key": "ch54_ex_onnx_gpu",
+   "crates": [
+    "ort"
+   ],
+   "expected": "cpu        = 20.41 ms / inference\ngpu (cuda) = 1.25 ms / inference\nbatch      = 128, model = 1024->4096->4096->4096->10 (f32)\nspeedup    = 16.3x\nagree      = true",
+   "status": "needs-cuda"
   },
   {
    "path": "examples/ch55_smart_contracts_in_rust_solana_sei_and_beyond/platform_compare.rs",

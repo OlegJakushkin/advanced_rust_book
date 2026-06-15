@@ -40,7 +40,7 @@
         "The answer maps two->0, three->1, four->2, sum->3, root->4 as the issued ExprId values.",
         "The trace shows eval(root) = eval(sum) * eval(four) = (2 + 3) * 4 = 20.",
         "The answer reports value = 20 and nodes = 5 as printed output.",
-        "The answer explains that ExprId is logical identity into one owning vector, not shared ownership, so edges are indices rather than owners."
+        "The answer explains that ExprId is logical identity into one owning vector, not shared ownership, so edges are indices rather than owners, and states that switching Add to Box<Expr> would make each node own its children exclusively, preventing sub-expression sharing and giving a tree-only (not DAG) structure."
       ],
       "hints": [
         "Allocation order is the slot order, because alloc pushes onto nodes and returns its length as the id.",
@@ -67,7 +67,7 @@
       ],
       "hints": [
         "This is the same one-cursor idea as reset, but to an arbitrary saved position instead of zero.",
-        "rewind is only sound forward to backward; guard or document the case where mark exceeds the live cursor."
+        "rewind is only valid when the saved mark is less than or equal to the current used cursor; guard or document the case where mark exceeds the live cursor."
       ]
     },
     {
@@ -98,7 +98,7 @@
       "kind": "debugging or refactoring",
       "title": "Remove the reference cycle from an Rc graph",
       "objective": "Convert an Rc-based node graph with a leaking back-edge into an arena-and-index graph.",
-      "starterPrompt": "You are given a small graph of Rc<RefCell<Node>> where edges are Rc<Node> owners and a back-edge from D to A forms a cycle that never drops to zero. Refactor it so one arena owns all nodes and every edge is a NodeId index.",
+      "starterPrompt": "You are given a small graph of Rc<RefCell<Node>> where edges are Rc<RefCell<Node>> owners and a back-edge from D to A forms a cycle that never drops to zero. Refactor it so one arena owns all nodes and every edge is a NodeId index.",
       "prompts": [
         "Identify why the back-edge in the Rc version leaks and which counts never reach zero.",
         "Introduce an arena that owns all nodes in one vector and hands out NodeId handles.",
@@ -145,7 +145,8 @@
     "Why does an arena-and-index AST avoid the reference-cycle problem that an Rc<RefCell<Node>> graph can hit?",
     "What is the difference between what a reference arena and an index arena hand back across a boundary, and which one the borrow checker ties to the arena's lifetime?",
     "What problem does a generation counter on an arena handle solve that a plain usize index does not?",
-    "When is the arena model the wrong fit, given that its cheap operation is whole-region reset rather than per-object free?"
+    "The arena's only cheap teardown operation is whole-region reset, not per-object free. When does that make it the wrong fit?",
+    "Given the chapter's three-question framework, which crate family fits a build-once AST and which fits a deleting registry that needs stale-handle protection?"
   ],
   "lab": {
     "title": "Runnable lab · bump allocator with overflow and reset",

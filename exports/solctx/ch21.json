@@ -37,7 +37,7 @@
     "What redesign would be calmer: own the data, keep the view local, or attach explicit metadata?"
    ],
    "acceptanceCriteria": [
-    "You explain that `Any` is usually for `'static` concrete types, not arbitrary borrowed views with wider lifetime claims.",
+    "You explain that `Any` requires `T: 'static`, so a type containing a borrowed reference with any named lifetime cannot implement `Any` at all.",
     "You explain that `Any` supports type recovery, not field walking or method discovery.",
     "You propose one ownership repair and one metadata repair."
    ],
@@ -56,12 +56,14 @@
     "Use `TypeId::of::<T>()` as the key.",
     "Store values as `Box<dyn Any>`.",
     "Recover with `downcast_ref::<T>()`.",
+    "Add a `get_mut<T>` that recovers a mutable handle with `downcast_mut::<T>()`.",
     "Do not use string keys for type identity."
    ],
    "acceptanceCriteria": [
     "The typemap stores heterogeneous values behind one erased owner.",
     "Lookup is keyed by `TypeId`, not by type name string.",
     "Recovery uses `downcast_ref::<T>()` safely.",
+    "A `get_mut<T>` demonstrates the by-mut form with `downcast_mut::<T>()`, updating one stored value in place.",
     "The runnable lab prints the expected port, label, and missing-type check."
    ],
    "hints": [
@@ -109,7 +111,8 @@
    ],
    "hints": [
     "If operators need the fact, make it a normal API.",
-    "A plugin registry is easier to operate when the metadata is boring and explicit."
+    "A plugin registry is easier to operate when the metadata is boring and explicit.",
+    "The chapter's production patterns become tests directly: logging metadata at startup turns into a registration test that asserts unique names, and a config-schema check per format becomes a load-time validation that fails fast."
    ]
   },
   {
@@ -153,8 +156,8 @@
   "Builds on Chapters 14, 19, and 20",
   "Opening scenario",
   "A practical decision order",
-  "Mental model",
-  "Core concepts",
+  "What Rust answers at runtime, and what it does not",
+  "The four introspection tools, and when to use each",
   "The four tools, and what each one is for",
   "Why Rust has limited runtime reflection",
   "Any and TypeId: erase a type, then recover it safely",
@@ -174,7 +177,7 @@
   "Summary"
  ],
  "proseParagraphs": [
-  "Runtime introspection is limited in Rust, so production systems need explicit metadata and generated descriptors. This chapter covers trait-based inspection, registries, and schema surfaces.",
+  "Runtime introspection is limited in Rust, so production systems need explicit metadata and generated descriptors. This chapter covers trait-based inspection, registries, compile-time code generation, and schema surfaces.",
   "Chapter 14 introduced traits and trait objects. Chapter 19 covered schema and wire contracts. Chapter 20 covered compile-time metaprogramming. Reflection and introspection in Rust sit across those boundaries.",
   "A service platform needs typed request extensions, plugin capability metadata, and admin-facing schema descriptors. The business requirement is narrow introspection: use TypeId and Any only for type-keyed registries, expose plugin metadata as ordinary trait methods, and generate ",
   "It helps to see the whole landscape before the details, because &ldquo;reflection&rdquo; in Rust is not one feature but four narrow tools that solve four different problems. Two of them work at runtime and two of them work at compile time. The runtime pair, TypeId and Any, gives ",
@@ -204,7 +207,8 @@
  ],
  "codeSamples": {
   "reflection_any_typeid_registry": "use std::any::{Any, TypeId};\nuse std::collections::HashMap;\n\n#[derive(Debug)]\nstruct RequestContext {\n    trace_id: &'static str,\n}\n\n#[derive(Debug)]\nstruct RetryBudget(u32);\n\n#[derive(Default)]\nstruct TypeMap {\n    values: HashMap<TypeId, Box<dyn Any>>,\n}\n\nimpl TypeMap {\n    fn insert<T: 'static>(&mut self, value: T) {\n        self.values.insert(TypeId::of::<T>(), Box::new(value));\n    }\n\n    fn get<T: 'static>(&self) -> Option<&T> {\n        self.values.get(&TypeId::of::<T>())?.downcast_ref::<T>()\n    }\n\n    fn contains<T: 'static>(&self) -> bool {\n        self.values.contains_key(&TypeId::of::<T>())\n    }\n}\n\nfn main() {\n    let mut request_scoped = TypeMap::default();\n    request_scoped.insert(RequestContext { trace_id: \"req-7\" });\n    request_scoped.insert(RetryBudget(3));\n\n    println!(\"has context = {}\", request_scoped.contains::<RequestContext>());\n    println!(\"retries = {}\", request_scoped.get::<RetryBudget>().unwrap().0);\n    println!(\"trace = {}\", request_scoped.get::<RequestContext>().unwrap().trace_id);\n}",
-  "reflection_plugin_metadata_downcast": "use std::any::Any;\n\n#[derive(Debug, Clone, Copy)]\nstruct PluginMetadata {\n    name: &'static str,\n    kind: &'static str,\n    config_format: &'static str,\n}\n\ntrait Plugin {\n    fn metadata(&self) -> PluginMetadata;\n    fn run(&self, input: &str) -> String;\n    fn as_any(&self) -> &dyn Any;\n}\n\nstruct JsonFormatter {\n    pretty: bool,\n}\n\nstruct RedactSecrets;\n\nimpl Plugin for JsonFormatter {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"json\",\n            kind: \"formatter\",\n            config_format: \"json\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        if self.pretty {\n            format!(\"pretty({})\", input)\n        } else {\n            format!(\"compact({})\", input)\n        }\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nimpl Plugin for RedactSecrets {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"redact\",\n            kind: \"filter\",\n            config_format: \"none\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        input.replace(\"token=\", \"token=***\")\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nfn main() {\n    let plugins: Vec<Box<dyn Plugin>> = vec![\n        Box::new(JsonFormatter { pretty: true }),\n        Box::new(RedactSecrets),\n    ];\n\n    let listed = plugins\n        .iter()\n        .map(|plugin| plugin.metadata().name)\n        .collect::<Vec<_>>()\n        .join(\",\");\n\n    let pretty = plugins\n        .iter()\n        .find_map(|plugin| plugin.as_any().downcast_ref::<JsonFormatter>())\n        .map(|json| json.pretty)\n        .unwrap_or(false);\n\n    println!(\"plugins = {}\", listed);\n    println!(\"json pretty = {}\", pretty);\n    println!(\"first kind = {}\", plugins[0].metadata().kind);\n}"
+  "reflection_plugin_metadata_downcast": "use std::any::Any;\n\n#[derive(Debug, Clone, Copy)]\nstruct PluginMetadata {\n    name: &'static str,\n    kind: &'static str,\n    config_format: &'static str,\n}\n\ntrait Plugin {\n    fn metadata(&self) -> PluginMetadata;\n    fn run(&self, input: &str) -> String;\n    fn as_any(&self) -> &dyn Any;\n}\n\nstruct JsonFormatter {\n    pretty: bool,\n}\n\nstruct RedactSecrets;\n\nimpl Plugin for JsonFormatter {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"json\",\n            kind: \"formatter\",\n            config_format: \"json\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        if self.pretty {\n            format!(\"pretty({})\", input)\n        } else {\n            format!(\"compact({})\", input)\n        }\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nimpl Plugin for RedactSecrets {\n    fn metadata(&self) -> PluginMetadata {\n        PluginMetadata {\n            name: \"redact\",\n            kind: \"filter\",\n            config_format: \"none\",\n        }\n    }\n\n    fn run(&self, input: &str) -> String {\n        input.replace(\"token=\", \"token=***\")\n    }\n\n    fn as_any(&self) -> &dyn Any {\n        self\n    }\n}\n\nfn main() {\n    let plugins: Vec<Box<dyn Plugin>> = vec![\n        Box::new(JsonFormatter { pretty: true }),\n        Box::new(RedactSecrets),\n    ];\n\n    let listed = plugins\n        .iter()\n        .map(|plugin| plugin.metadata().name)\n        .collect::<Vec<_>>()\n        .join(\",\");\n\n    let pretty = plugins\n        .iter()\n        .find_map(|plugin| plugin.as_any().downcast_ref::<JsonFormatter>())\n        .map(|json| json.pretty)\n        .unwrap_or(false);\n\n    println!(\"plugins = {}\", listed);\n    println!(\"json pretty = {}\", pretty);\n    println!(\"first kind = {}\", plugins[0].metadata().kind);\n}",
+  "reflection_type_name_labels": "use std::any::type_name;\n\nstruct RetryBudget(u32);\n\nfn label_of<T>(_value: &T) -> &'static str {\n    // type_name returns a best-effort, human-readable string for diagnostics.\n    // The exact text is not guaranteed stable across compiler versions, so it\n    // is fine in a log line but must never become a schema or protocol key.\n    type_name::<T>()\n}\n\nfn main() {\n    let budget = RetryBudget(3);\n    println!(\"retries = {}\", budget.0);\n    println!(\"type label = {}\", label_of(&budget));\n    println!(\"u32 label = {}\", label_of(&budget.0));\n}"
  },
  "labReferenceSolution": null
 }

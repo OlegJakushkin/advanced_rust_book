@@ -18,11 +18,14 @@ RUN apt-get update \
 RUN pip3 install --no-cache-dir "numpy<2" onnx==1.16.2 \
  && pip3 install --no-cache-dir --no-deps onnxruntime-gpu==1.22.0
 
-# Point the ort crate at the CUDA-enabled ONNX Runtime that ships with onnxruntime-gpu.
-RUN ort_so="$(find / -name 'libonnxruntime.so*' -path '*onnxruntime*' 2>/dev/null | head -1)" \
- && echo "ORT lib: $ort_so" \
- && ln -sf "$ort_so" /usr/local/lib/libonnxruntime.so \
- && ldconfig
+# Point the ort crate at the CUDA-enabled ONNX Runtime. The CUDA EP loads sibling
+# libraries (libonnxruntime_providers_shared.so / _cuda.so) from the main lib's
+# directory, so expose the whole onnxruntime capi dir on the loader path.
+RUN capi="$(dirname "$(find / -name 'libonnxruntime_providers_shared.so' 2>/dev/null | head -1)")" \
+ && echo "onnxruntime capi: $capi" \
+ && ln -sf "$capi"/*.so* /usr/local/lib/ \
+ && ln -sf "$capi"/libonnxruntime.so.* /usr/local/lib/libonnxruntime.so \
+ && echo /usr/local/lib > /etc/ld.so.conf.d/onnxruntime.conf && ldconfig
 ENV ORT_DYLIB_PATH=/usr/local/lib/libonnxruntime.so
 
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
@@ -30,12 +33,19 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 
 WORKDIR /work
 COPY Cargo.toml ./Cargo.toml
-RUN mkdir -p src && printf 'fn main(){}\n' > src/main.rs && cargo build --release ; rm -rf src
+RUN mkdir -p src/bin \
+ && printf 'fn main(){}\n' > src/bin/onnx_solution.rs \
+ && printf 'fn main(){}\n' > src/bin/onnx_challenge.rs \
+ && cargo build --release ; rm -rf src
 
 COPY gen_model.py ./gen_model.py
 RUN python3 gen_model.py
 
 COPY src ./src
-RUN touch src/*.rs && cargo build --release
+RUN touch src/bin/*.rs && cargo build --release
 
-ENTRYPOINT ["/work/target/release/onnx_infer"]
+COPY run-onnx.sh /usr/local/bin/run-onnx
+RUN sed -i 's/\r$//' /usr/local/bin/run-onnx && chmod +x /usr/local/bin/run-onnx
+
+ENTRYPOINT ["run-onnx"]
+CMD ["onnx_solution"]

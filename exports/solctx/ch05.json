@@ -71,7 +71,7 @@
    "kind": "debugging or refactoring",
    "title": "Refactor a self-referential design into stable indices",
    "objective": "Replace an invalid self-borrowing layout with a representation Rust can move and reason about safely.",
-   "starterPrompt": "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }`. Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
+   "starterPrompt": "You inherit the shape `struct ParsedLine<'a> { raw: String, first: &'a str }` (this layout cannot be constructed in safe Rust — see why in the chapter, then refactor it away entirely). Refactor it so the type still owns `raw` but can recover the first token later without storing a self-reference.",
    "prompts": [
     "Will you store a byte range, a start/end offset pair, or a typed token ID?",
     "How will the accessor recover `&str` from `&self`?",
@@ -90,7 +90,7 @@
   },
   {
    "number": 5,
-   "kind": "debugging or refactoring",
+   "kind": "design or production scenario",
    "title": "Choose Box, Rc, or Arc intentionally",
    "objective": "Practice mapping pointer types to actual ownership semantics instead of treating them as interchangeable heap wrappers.",
    "starterPrompt": "Choose a field type for each case: a recursive AST node owned by one parent, a read-mostly UI template shared inside one thread, and a schema object shared across worker threads.",
@@ -145,7 +145,7 @@
   "filename": "audit_line_lab.rs",
   "runKey": "ch05_ex_audit_line",
   "expectedOutput": "level = WARN\nraw = WARN: cache miss",
-  "initialCode": "struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(),\n        }\n    }\n\n    fn level(&self) -> &str {\n        \"UNKNOWN\"\n    }\n}\n\nfn main() {\n    let line = AuditLine::new(\"WARN: cache miss\");\n    println!(\"level = {}\", line.level());\n    println!(\"raw = {}\", line.raw);\n}"
+  "initialCode": "struct AuditLine {\n    raw: String,\n}\n\nimpl AuditLine {\n    fn new(raw: &str) -> Self {\n        Self {\n            raw: String::new(), // intentional stub - fix me: store the raw argument\n        }\n    }\n\n    fn level(&self) -> &str {\n        \"UNKNOWN\" // intentional stub - fix me: derive the level from self.raw\n    }\n}\n\nfn main() {\n    let line = AuditLine::new(\"WARN: cache miss\");\n    println!(\"level = {}\", line.level());\n    println!(\"raw = {}\", line.raw);\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 02 and 04",

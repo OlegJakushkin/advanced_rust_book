@@ -16,7 +16,7 @@
    ],
    "acceptanceCriteria": [
     "You explain that the reference points into the vector's current buffer.",
-    "You state that growth may relocate the buffer and therefore invalidate the old address story.",
+    "You state that growth may relocate the buffer and therefore invalidate the old address the reference held.",
     "You propose at least one valid repair such as using an index, ending the borrow sooner, or changing representation."
    ],
    "hints": [
@@ -29,7 +29,7 @@
    "kind": "code reading",
    "title": "Find the hidden shape change",
    "objective": "Read a small loop and identify which operation changes vector shape or element positions.",
-   "starterPrompt": "Review a loop that stores `&sessions[i]` in a temporary, then calls either `reserve`, `insert`, `remove`, or `sort_by_key` later in the same flow. Identify which operations threaten reference validity and why.",
+   "starterPrompt": "Read this snippet and identify which operations threaten the validity of `first` and why:\n\n```\nfn audit(sessions: &mut Vec<Session>) {\n    let first = &sessions[0];        // borrow into the current buffer\n    sessions.reserve(64);            // (a)\n    sessions.insert(0, Session::default()); // (b)\n    sessions.remove(3);              // (c)\n    sessions.sort_by_key(|s| s.score);      // (d)\n    println!(\"{}\", first.score);     // uses the old borrow\n}\n```\n\nClassify (a)-(d) as relocation hazards, position-shift hazards, or both, and say which handle would stay meaningful after each.",
    "prompts": [
     "Which operations may relocate storage?",
     "Which operations may keep the same buffer but still shift positions?",
@@ -137,7 +137,8 @@
   "Why are index handles often the default durable handle for `Vec<T>`?",
   "What is the difference between stable logical identity and stable memory address?",
   "When is `Vec<Box<T>>` a better fit than plain `Vec<T>`?",
-  "Why do two-phase loops often produce the clearest vector mutation code?"
+  "Why do two-phase loops often produce the clearest vector mutation code?",
+  "When is `split_at_mut` preferable to collecting indices for a two-phase pass?"
  ],
  "lab": {
   "title": "Runnable lab · Exercise 3",

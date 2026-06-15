@@ -158,13 +158,13 @@ export function PageCh09SmartPointersAndPinning() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch05-ownership-inside-structs"))}>
                 Chapter 05
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(12)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch07-copying-data-vs-cloning-data"))}>
                 Chapter 07
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(14)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch08-undefined-behavior-and-unsafe-rust"))}>
                 Chapter 08
               </Button>
             </div>
@@ -308,8 +308,12 @@ export function PageCh09SmartPointersAndPinning() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Interior mutability: moving the borrow check somewhere else</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-2">
-              What to look at: all three of the types below let you mutate through a shared handle, which ordinary
-              borrowing forbids. The difference is purely where and how the aliasing rule is enforced. A{" "}
+              What to look at: all three of the types below &mdash;{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cell&lt;T&gt;</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">RefCell&lt;T&gt;</code>, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex&lt;T&gt;</code> &mdash; let you
+              mutate through a shared handle, which ordinary borrowing forbids. The difference is purely where and how the
+              aliasing rule is enforced. A{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cell&lt;T&gt;</code> sidesteps borrowing
               by only swapping whole values, a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">RefCell&lt;T&gt;</code>{" "}
               keeps the same rule but checks it at runtime and panics on violation, and a{" "}
@@ -455,6 +459,13 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
               chart={`flowchart TD\n  Cont[shared mutation needed] --> Rc[shared on one thread, Rc T]\n  Cont --> Arc[shared across threads, Arc T]\n  Rc --> Mut1{Borrow pattern}\n  Mut1 -->|small copy or swap| Cell[wrap in Cell]\n  Mut1 -->|dynamic borrows| RefCell[wrap in RefCell]\n  Arc --> Mut2{Need shared mutation}\n  Mut2 -->|yes| Mutex[wrap in Mutex]`}
               caption="The second half resolves shared mutation: a single-thread Rc reaches for Cell or RefCell depending on the borrow pattern, while a cross-thread Arc reaches for a Mutex."
             />
+            <p className="text-sm text-muted-foreground leading-6">
+              Notice that the Pin branch shows up only on the single-owner Box path. Pinning is orthogonal to shared
+              ownership, so it is not part of the Rc or Arc tree. In practice an address-sensitive value that must stop
+              moving is almost always a future, which is singly owned, so <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin&lt;Rc&lt;T&gt;&gt;</code>{" "}
+              and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin&lt;Arc&lt;T&gt;&gt;</code> are
+              vanishingly rare.
+            </p>
             <div className="grid gap-3 lg:grid-cols-2">
               {selectionGuide.map((item) => (
                 <div key={item.need} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -637,6 +648,8 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Pin&lt;&amp;mut Self&gt;</code> it
               requires. Each poll either reports it is still pending and yields, or returns a ready value and ends the
               loop. Follow that one-future, two-exits cycle in the diagram, then read the same shape in the match arms.
+              The remaining count is printed after each decrement, so the first Pending line reports 1, not the starting
+              value of 2.
             </p>
             <MermaidDiagram
               chart={`stateDiagram-v2\n  [*] --> Pinned: Box pin creates owner\n  Pinned --> Poll: as_mut gives Pin and mut Self\n  Poll --> Pending: not done yet\n  Pending --> Poll: poll again\n  Poll --> Ready: value produced\n  Ready --> [*]: break loop`}
@@ -699,7 +712,7 @@ let counter = Arc::new(Mutex::new(0u64));`}</code>
             <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Mutex</code>, and explain why async
             futures are commonly manipulated through pinned pointers.
           </p>
-          <Button onClick={() => setCurrentPage(17)} className="gap-2">
+          <Button onClick={() => setCurrentPage(getPageIndexById("ch09-smart-pointers-and-pinning-exercises"))} className="gap-2">
             Open Chapter 09 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

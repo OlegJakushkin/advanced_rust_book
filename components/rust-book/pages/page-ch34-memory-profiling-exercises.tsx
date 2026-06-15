@@ -29,6 +29,7 @@ const exercises: Exercise[] = [
       "Classify four symptoms: rising RSS after a burst, stable RSS but rising task count, flat heap snapshots with a high allocation rate, and a graph of `Rc` nodes that never seems to disappear.",
     prompts: [
       "Which symptom points first toward fragmentation or allocator retention?",
+      "Which measurement confirms fragmentation: where does live bytes diverge from RSS, and which one stays high?",
       "Which symptom points first toward async backlog rather than a leak?",
       "Which symptom points first toward churn rather than retained memory?",
       "Which symptom points first toward logical reachability and cycle inspection?",
@@ -45,7 +46,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "code analysis",
     title: "Find clone pressure in a sample workload",
     objective: "Read a request path and identify where deep clones, not Arc clones, are driving memory growth.",
     starterPrompt:
@@ -144,6 +145,7 @@ const exercises: Exercise[] = [
       "Create a checklist for a service that accepts requests, parses them, queues owned work, fans out to async tasks, uses an arena during parsing, and keeps a read-mostly cache.",
     prompts: [
       "Which numbers belong in the first page of the investigation: RSS, live bytes, queue depth, task count, clone count, or all of them?",
+      "Inside the arena-using parsing phase, what is the first number to measure: peak region size and reset cadence, or current live bytes?",
       "Which leak candidates should be named explicitly: Rc or Arc cycles, unbounded queues, non-evicting caches, oversized arenas?",
       "Which OS-specific tools would you choose on Linux, macOS, and Windows?",
       "Which acceptance condition tells you the incident is actually resolved instead of merely masked?",
@@ -323,8 +325,14 @@ export function PageCh34MemoryProfilingExercises() {
           expectedOutput={"selected = 2\nclones = 0"}
           helperText={
             <>
-              Tip: the calm repair is to return borrowed routes, not owned cloned strings. Add a lifetime parameter to the
-              function signature, keep the input borrowed, and push the borrowed route directly into the output.
+              Tip: the calm repair is to return borrowed routes, not owned cloned strings. Change the return type from
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Vec&lt;String&gt;</code>
+              to
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Vec&lt;&amp;str&gt;</code>,
+              add a lifetime parameter to the signature, keep the input borrowed, and push the borrowed route directly
+              into the output. Deleting the
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">track_clone</code>
+              call while still returning owned strings is not the intended fix.
             </>
           }
           initialCode={`use std::sync::atomic::{AtomicUsize, Ordering};

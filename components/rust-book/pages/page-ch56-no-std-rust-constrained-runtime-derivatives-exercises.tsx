@@ -36,7 +36,7 @@ const exercises: Exercise[] = [
     ],
     acceptanceCriteria: [
       "core is described as always available, alloc as requiring a heap, and std as requiring an OS.",
-      "checksum is pinned to core because it takes only a slice and returns an integer; encode_frame to alloc because it returns an owned Vec<u8>; write_diagnostic to std because it produces a String and is meant for host diagnostics.",
+      "checksum is pinned to core because it takes only a slice and returns an integer; encode_frame to alloc because it returns an owned Vec<u8>; write_diagnostic to std because it formats host-facing diagnostics (returns a String) and is meant for an environment with an OS.",
       "The answer states that a crate can be no_std yet still use alloc, so dropping std does not by itself remove the heap.",
       "The target triple is identified as what determines the highest ring a given build is allowed to use.",
     ],
@@ -60,12 +60,13 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "alloc_copy returns None when bytes.len() exceeds BYTES, and otherwise None only when every slot is already used.",
       "The third allocation fails because both of the two slots are occupied, not because of byte capacity.",
-      "in_use is 1 after release, overflow is true, and sent_bytes is 3 (the length of b\"abc\").",
+      "in_use is 1 after release, overflow is true, and sent_bytes is 3 (the length of b\"abc\"); the output is printed in the order in_use, overflow, sent_bytes, matching Example 2's println! order.",
       "release is identified as clearing the used flag and zeroing the recorded length for that slot.",
     ],
     hints: [
       "SLOTS bounds how many buffers exist; BYTES bounds the size of each one.",
       "as_slice reads lens[id], which release sets back to 0.",
+      "Two different rejection paths: here b\"more\" (4 bytes) fails because no slot is free, while the lab's b\"overflowing\" (11 bytes) fails the byte-capacity check. Do not conflate them.",
     ],
   },
   {
@@ -96,7 +97,7 @@ const exercises: Exercise[] = [
     kind: "implementation",
     title: "Transfer slot ownership to a DMA handoff",
     objective: "Use move semantics to encode that a peripheral, not the caller, owns a buffer while a transfer is in flight.",
-    starterPrompt: "Following the chapter's submit_to_dma idea, write fn submit_to_dma(slot: SlotId) -> InFlight that takes the SlotId by value and returns a handle, plus fn complete(token: InFlight) -> SlotId that returns ownership once the transfer finishes. The caller must be unable to read the buffer between submit and complete.",
+    starterPrompt: "Following the chapter's submit_to_dma idea, write fn submit_to_dma(slot: SlotId) -> InFlight that takes the SlotId by value and returns a handle, plus fn complete(token: InFlight) -> SlotId that returns ownership once the transfer finishes. The caller must be unable to read the buffer between submit and complete. Note that the chapter shows only the consuming call (submit_to_dma taking a TxSlot with no return); you must derive InFlight and complete yourself from the prose description of the ownership round-trip.",
     prompts: [
       "Define SlotId and a separate InFlight type that wraps the moved SlotId.",
       "Make submit_to_dma consume the SlotId by value so the caller no longer holds it.",

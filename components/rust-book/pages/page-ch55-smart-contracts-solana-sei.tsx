@@ -184,7 +184,7 @@ export function PageCh55SmartContractsSolanaSei() {
   const pageIndex = getPageIndexById("ch55-smart-contracts-solana-sei")
   const chapter19PageIndex = getPageIndexById("ch19-serialization-and-data-contracts")
   const chapter51PageIndex = getPageIndexById("ch51-zero-knowledge-proofs-rust-engineers")
-  const chapter54PageIndex = getPageIndexById("ch56-no-std-rust-constrained-runtime-derivatives")
+  const chapter56PageIndex = getPageIndexById("ch56-no-std-rust-constrained-runtime-derivatives")
   const exercisesPageIndex = getPageIndexById("ch55-smart-contracts-solana-sei-exercises")
   const page = PAGES[pageIndex]
 
@@ -232,7 +232,7 @@ export function PageCh55SmartContractsSolanaSei() {
               <Button variant="outline" onClick={() => setCurrentPage(chapter19PageIndex)}>
                 Chapter 19
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(chapter54PageIndex)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter56PageIndex)}>
                 Chapter 56
               </Button>
             </div>
@@ -244,8 +244,8 @@ export function PageCh55SmartContractsSolanaSei() {
           <p className="text-sm text-muted-foreground leading-6">
             A team that already ships a Solana program is asked to deploy comparable logic to a Sei (CosmWasm) chain, and
             to keep an eye on an EVM deployment a partner maintains. The question is not "rewrite everything" but "what
-            actually changes." The answer turns out to be small and specific: the boundary format and the entry-point
-            shape change; the owned-domain core does not.
+            actually changes." The answer is specific: the entry-point shape, state model, and serialization format
+            change; the owned-domain handler does not.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">The four questions to ask of any chain</h4>
@@ -475,6 +475,8 @@ export function PageCh55SmartContractsSolanaSei() {
                 <p className="text-sm text-muted-foreground mt-1">
                   A self-contained, crate-free model of how a Solana program works on external account data: stateless
                   code, a mutable byte buffer, a hand-rolled Borsh-style counter, and an instruction that drives it.
+                  The listing deliberately uses the raw account model so the concepts stay visible; production Solana
+                  programs typically layer the Anchor framework on top for account validation and codegen.
                 </p>
               </div>
               {codes.smart_contract_solana_counter !== DEFAULT_CODES.smart_contract_solana_counter && (
@@ -622,17 +624,17 @@ export function PageCh55SmartContractsSolanaSei() {
               <p className="text-sm text-muted-foreground leading-6">
                 A contract runs in a sandbox with no ambient I/O and a metered budget, which is the same world the book's
                 finale lives in. Chapter 56 carries that constrained-runtime thread all the way down into no_std and
-                embedded targets, where you give up the standard library and make every runtime service explicit. If you
-                want to go deeper on the cryptographic side of on-chain systems instead, Chapter 51 on zero-knowledge
-                proofs is the natural companion: proving facts about state without revealing it is increasingly part of
-                how contracts scale and stay private.
+                embedded targets, where you give up the standard library and make every runtime service explicit. Because
+                a contract's state and inputs are public by default, the cryptographic side of this story matters too:
+                Chapter 51 on zero-knowledge proofs shows how proving a fact about state without revealing it is what
+                lets on-chain systems add privacy and scale beyond re-executing everything on every validator.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
               <Button variant="outline" onClick={() => setCurrentPage(chapter51PageIndex)} className="gap-2">
                 Revisit Chapter 51
               </Button>
-              <Button onClick={() => setCurrentPage(chapter54PageIndex)} className="gap-2">
+              <Button onClick={() => setCurrentPage(chapter56PageIndex)} className="gap-2">
                 Continue to Chapter 56
                 <ArrowRight className="h-4 w-4" />
               </Button>

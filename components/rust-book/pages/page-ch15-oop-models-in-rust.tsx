@@ -287,7 +287,7 @@ export function PageCh15OopModelsInRust() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+            <h3 className="text-lg font-semibold text-foreground">Four questions, four separate tools</h3>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -302,7 +302,7 @@ export function PageCh15OopModelsInRust() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">The four tools and when to reach for each</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -499,6 +499,16 @@ export function PageCh15OopModelsInRust() {
                 </div>
               ))}
             </div>
+            <p className="text-sm text-muted-foreground leading-6 mt-3">
+              The typestate column is worth one extra sentence, because the card only shows three empty structs. Because{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">DraftPost</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ReviewPost</code>, and{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">PublishedPost</code> are distinct
+              types, a function that requires a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">PublishedPost</code> cannot
+              accept a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">DraftPost</code>; the invalid
+              transition is rejected at compile time rather than checked at run time. The exercise page builds this out
+              into a working lifecycle.
+            </p>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
                 The practical default is usually enum state or typestate, not boxed state objects. A state object model can
@@ -530,91 +540,6 @@ export function PageCh15OopModelsInRust() {
             </div>
           </div>
 
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Translating instincts from other languages</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-6">
-            The hardest part of OOP in Rust is rarely a missing feature; it is an instinct that no longer pays off. Each
-            card below names the one mental-model shift that trips up engineers from that language, not a table of which
-            crate replaces which library.
-          </p>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {comparisonCallouts.map((comparison) => (
-              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
-                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {productionPatterns.map((pattern) => (
-              <div key={pattern} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pattern}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Bug className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {pitfalls.map((pitfall) => (
-              <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pitfall}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <div className="flex items-start gap-3">
-              <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
-              <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                The most common translation mistake is trying to preserve the old class shape instead of preserving the
-                actual domain rules. Rust rewards re-modeling. It often punishes mechanical porting.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">When Rust improves on traditional OOP</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {improvesCards.map((item) => (
-              <div key={item} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{item}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Bug className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">When Rust makes OOP harder</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {harderCards.map((item) => (
-              <div key={item} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{item}</p>
-              </div>
-            ))}
-          </div>
         </section>
 
         <section className="space-y-5">
@@ -771,6 +696,91 @@ export function PageCh15OopModelsInRust() {
               </code>{" "}
               so the chapter examples can be reviewed as ordinary files outside the in-browser editor.
             </p>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Translating instincts from other languages</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6">
+            The hardest part of OOP in Rust is rarely a missing feature; it is an instinct that no longer pays off. Each
+            card below names the one mental-model shift that trips up engineers from that language, not a table of which
+            crate replaces which library.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {productionPatterns.map((pattern) => (
+              <div key={pattern} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{pattern}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Bug className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {pitfalls.map((pitfall) => (
+              <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{pitfall}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
+              <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
+                The most common translation mistake is trying to preserve the old class shape instead of preserving the
+                actual domain rules. Rust rewards re-modeling. It often punishes mechanical porting.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">When Rust improves on traditional OOP</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {improvesCards.map((item) => (
+              <div key={item} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Bug className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">When Rust makes OOP harder</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {harderCards.map((item) => (
+              <div key={item} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{item}</p>
+              </div>
+            ))}
           </div>
         </section>
 

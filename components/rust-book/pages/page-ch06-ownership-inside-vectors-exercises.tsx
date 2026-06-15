@@ -34,7 +34,7 @@ const exercises: Exercise[] = [
     ],
     acceptanceCriteria: [
       "You explain that the reference points into the vector's current buffer.",
-      "You state that growth may relocate the buffer and therefore invalidate the old address story.",
+      "You state that growth may relocate the buffer and therefore invalidate the old address the reference held.",
       "You propose at least one valid repair such as using an index, ending the borrow sooner, or changing representation.",
     ],
     hints: [
@@ -48,7 +48,7 @@ const exercises: Exercise[] = [
     title: "Find the hidden shape change",
     objective: "Read a small loop and identify which operation changes vector shape or element positions.",
     starterPrompt:
-      "Review a loop that stores `&sessions[i]` in a temporary, then calls either `reserve`, `insert`, `remove`, or `sort_by_key` later in the same flow. Identify which operations threaten reference validity and why.",
+      "Read this snippet and identify which operations threaten the validity of `first` and why:\n\n```\nfn audit(sessions: &mut Vec<Session>) {\n    let first = &sessions[0];        // borrow into the current buffer\n    sessions.reserve(64);            // (a)\n    sessions.insert(0, Session::default()); // (b)\n    sessions.remove(3);              // (c)\n    sessions.sort_by_key(|s| s.score);      // (d)\n    println!(\"{}\", first.score);     // uses the old borrow\n}\n```\n\nClassify (a)-(d) as relocation hazards, position-shift hazards, or both, and say which handle would stay meaningful after each.",
     prompts: [
       "Which operations may relocate storage?",
       "Which operations may keep the same buffer but still shift positions?",
@@ -165,6 +165,7 @@ const reviewQuestions = [
   "What is the difference between stable logical identity and stable memory address?",
   "When is `Vec<Box<T>>` a better fit than plain `Vec<T>`?",
   "Why do two-phase loops often produce the clearest vector mutation code?",
+  "When is `split_at_mut` preferable to collecting indices for a two-phase pass?",
 ]
 
 const workingLoop = [
@@ -208,7 +209,7 @@ export function PageCh06OwnershipInsideVectorsExercises() {
                 index, a typed ID, or a different representation entirely.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(10)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(12)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 06
             </Button>
@@ -302,7 +303,10 @@ export function PageCh06OwnershipInsideVectorsExercises() {
           expectedOutput={"first = billing\ntotal = 3"}
           helperText={
             <>
-              Tip: the correct answer is either the length <em>before</em> the push or{" "}
+              If you run the starter code now, it prints{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">first = search</code> — that is the bug.
+              The handle points at the second task, not the first. The correct answer is either the length{" "}
+              <em>before</em> the push or{" "}
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">len() - 1</code> immediately after it.
               The point is not arithmetic. The point is returning a durable index handle.
             </>
@@ -320,7 +324,7 @@ export function PageCh06OwnershipInsideVectorsExercises() {
         </section>
 
         <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-          <h3 className="text-lg font-semibold text-foreground mb-3">What success looks like</h3>
+          <h3 className="text-lg font-semibold text-foreground mb-3">What you can do after this page</h3>
           <p className="text-sm text-muted-foreground leading-6">
             By the end of this page, you should be able to explain vector reference failures as concrete storage and
             handle problems, switch naturally between references and indices based on mutation shape, and choose

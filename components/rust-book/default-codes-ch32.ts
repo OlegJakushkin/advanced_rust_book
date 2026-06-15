@@ -59,20 +59,34 @@ fn displacements_in_cells(counts: &[usize], cols: usize) -> Vec<usize> {
     out
 }
 
+fn local_sums(matrix: &[f64], counts: &[usize], displs: &[usize], cols: usize) -> Vec<f64> {
+    counts
+        .iter()
+        .zip(displs)
+        .map(|(&rows_for_rank, &start)| {
+            let end = start + rows_for_rank * cols;
+            matrix[start..end].iter().copied().sum()
+        })
+        .collect()
+}
+
 fn main() {
     let rows = 10_usize;
     let cols = 4_usize;
     let ranks = 3_usize;
     let rank = 1_usize;
 
+    let matrix: Vec<f64> = (1..=(rows * cols)).map(|value| value as f64).collect();
     let counts = row_counts(rows, ranks);
     let displs = displacements_in_cells(&counts, cols);
-    let local_norms = [7_u64, 9, 5];
-    let allreduce_sum: u64 = local_norms.iter().copied().sum();
+
+    // Each rank sums its own slice; allreduce folds those partials into one total.
+    let partials = local_sums(&matrix, &counts, &displs, cols);
+    let allreduce_sum: f64 = partials.iter().copied().sum();
 
     println!("counts = {:?}", counts);
     println!("displs = {:?}", displs);
     println!("send cells = {}", counts[rank] * cols);
-    println!("allreduce = {}", allreduce_sum);
+    println!("allreduce = {:.1}", allreduce_sum);
 }`,
 }

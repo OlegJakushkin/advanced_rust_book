@@ -61,6 +61,11 @@ const storageChoices = [
     body: "Choose a vector when data must be accumulated, returned, stored, or resized.",
   },
   {
+    title: "`Box<[T]>`",
+    bestFit: "Fixed-at-runtime heap sequence",
+    body: "Choose a boxed slice when the length is decided at runtime but never changes afterward. It allocates on the heap like a vector but drops the capacity word and the ability to grow, so it cannot accidentally reallocate and is one word smaller than a `Vec<T>`.",
+  },
+  {
     title: "Inline-first small buffer",
     bestFit: "Hot tiny collections after profiling",
     body: "Choose an inline-first pattern only when small typical sizes and allocation pressure are proven to matter enough to justify extra representation complexity.",
@@ -83,10 +88,10 @@ const iteratorNotes = [
 ]
 
 const mutationPatterns = [
-  "Use `copy_from_slice` or `clone_from_slice` for bulk overwrite when the lengths already match.",
-  "Use `split_at_mut` when the algorithm needs two disjoint mutable regions at once.",
-  "Use `chunks`, `chunks_mut`, or `windows` when batch shape is part of the algorithm.",
-  "Use `retain`, `drain`, `truncate`, or rebuild into a fresh `Vec<T>` when structural edits dominate the logic.",
+  "Use copy_from_slice or clone_from_slice for bulk overwrite when the lengths already match.",
+  "Use split_at_mut when the algorithm needs two disjoint mutable regions at once.",
+  "Use chunks, chunks_mut, or windows when batch shape is part of the algorithm.",
+  "Use retain, drain, truncate, or rebuild into a fresh Vec<T> when structural edits dominate the logic.",
 ]
 
 const cacheNotes = [
@@ -495,7 +500,8 @@ export function PageCh10ArraysSlicesAndVectors() {
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   The algorithm wants a contiguous read-only view, so the function accepts a slice and callers keep their
-                  own storage choices.
+                  own storage choices. This is the metric-window scan from the opening scenario: the same reader runs over
+                  a fixed array or a vector borrow without forcing either owner on the caller.
                 </p>
               </div>
               {codes.arrays_slices_vectors_slice_api !== DEFAULT_CODES.arrays_slices_vectors_slice_api && (
@@ -558,7 +564,8 @@ export function PageCh10ArraysSlicesAndVectors() {
                   Example 2: preallocate when a trustworthy upper bound exists
                 </h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The batch size is bounded by the input slice length, so capacity planning is simple and justified.
+                  The batch size is bounded by the input slice length, so capacity planning is simple and justified. This
+                  is the retry-batch path from the opening scenario: an owned vector built once from a real upper bound.
                 </p>
               </div>
               {codes.arrays_slices_vectors_capacity !== DEFAULT_CODES.arrays_slices_vectors_capacity && (

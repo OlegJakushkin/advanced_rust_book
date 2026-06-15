@@ -46,13 +46,14 @@ const exercises: Exercise[] = [
     number: 2,
     kind: "code reading",
     title: "Name the smell by source language instinct",
-    objective: "Read a mixed-style module and classify which parts are C++-style, Go-style, or C#-style carryovers.",
+    objective: "Read a mixed-style module and classify which parts are C++-style, Go-style, C#-style, or Python-style carryovers.",
     starterPrompt:
       "A single file contains `panic!` on bad input, `BaseHandler`-shaped traits with data spread across several structs, clone-heavy read paths, and long explicit lifetimes on every helper.",
     prompts: [
       "Which parts look like Go-style error handling that Rust should express as `Result`?",
       "Which parts look like C#-style hierarchy pressure that Rust should split into traits, enums, and composition?",
       "Which parts look like C++-style identity or pointer pressure that Rust could replace with value returns or clearer ownership?",
+      "Which parts look like Python-style easy mutation that Rust should model with an explicit ownership decision?",
     ],
     acceptanceCriteria: [
       "You classify at least one smell under each relevant background where appropriate.",
@@ -114,7 +115,7 @@ const exercises: Exercise[] = [
     title: "Remove unnecessary clones and narrow unsafe code",
     objective: "Practice two common production cleanups in one review: borrow on read paths and wrap unsafe code behind a checked safe API.",
     starterPrompt:
-      "A helper clones routes only to log them, and another helper exposes a safe raw-pointer write API without documenting the real preconditions. Repair both.",
+      "A helper clones routes only to log them, and another helper exposes a safe raw-pointer write API without documenting the real preconditions. Repair both. These two cleanups are grouped because they share one defect: each hides an implicit contract that the refactor must make explicit, the clone hiding that the caller only needs read access and the unsafe block hiding the precondition that makes the raw write sound.",
     prompts: [
       "Which signature should borrow instead of taking ownership?",
       "Where should the unsafe precondition checks move relative to the raw operation?",
@@ -142,6 +143,7 @@ const exercises: Exercise[] = [
       "Which boundaries should become async because they perform IO or scheduling?",
       "Which values should become owned before an `await` or a spawned task boundary?",
       "Which seams should be traits or generics so tests can provide clocks, repositories, or notifiers?",
+      "Which parts of this pipeline are closed sets that should be enums (a fixed delivery mode) versus open behavior that should be traits (the notifier or repository)?",
     ],
     acceptanceCriteria: [
       "You keep pure parsing or validation synchronous where possible.",
@@ -163,6 +165,7 @@ const reviewQuestions = [
   "How do enums and traits divide closed and open polymorphism during a refactor?",
   "Why should async refactors usually return owned values across `await` boundaries?",
   "What makes a refactor more testable instead of only more abstract?",
+  "What should you measure after a refactor to confirm the ownership and error changes actually improved operational behavior?",
 ]
 
 const workingLoop = [

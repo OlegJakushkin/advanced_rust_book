@@ -56,12 +56,14 @@ const exercises: Exercise[] = [
       "Explain what the where-clause P: RetryPolicy<Decision = bool> lets evaluate assume about decide's return.",
       "Identify which method evaluate calls that FixedLimit overrides and which it inherits unchanged.",
       "Predict the two printed lines for FixedLimit { max: 3 } and evaluate(&policy, 2).",
+      "Explain why Decision is an associated type rather than a generic parameter on the trait, and what would change at call sites if type Decision were replaced with a trait-level <D>.",
     ],
     acceptanceCriteria: [
       "The answer says Self::Decision is bool because the impl declares type Decision = bool.",
       "It explains the where-clause guarantees decide returns bool so format! can use it directly with no turbofish or conversion.",
       "It notes label is overridden by FixedLimit while should_log is inherited from the default method.",
       "It predicts the output lines 'fixed-limit => true' and 'log = true'.",
+      "It explains Decision is an associated type because each policy has one natural output, and that a trait-level generic <D> would force callers to disambiguate the instantiation with turbofish or extra annotations.",
     ],
     hints: [
       "decide(2) for max 3 evaluates 2 < 3.",
@@ -73,7 +75,7 @@ const exercises: Exercise[] = [
     kind: "implementation",
     title: "Add a second RetryPolicy with a default override",
     objective: "Implement a new RetryPolicy that still satisfies the Decision = bool bound while customizing a default method.",
-    starterPrompt: "Add a struct AlwaysRetry that implements RetryPolicy with Decision = bool, returns true from decide regardless of attempts, labels itself 'always', and overrides should_log to return false.",
+    starterPrompt: "Add a unit struct AlwaysRetry (no fields, written without braces) that implements RetryPolicy with Decision = bool, returns true from decide regardless of attempts, labels itself 'always', and overrides should_log to return false.",
     prompts: [
       "Set type Decision = bool so AlwaysRetry can be passed to evaluate unchanged.",
       "Implement decide to ignore attempts and return true.",
@@ -84,7 +86,7 @@ const exercises: Exercise[] = [
       "AlwaysRetry sets type Decision = bool and compiles against fn evaluate without changing evaluate.",
       "decide returns true for any attempts value, ignoring the argument.",
       "label returns 'always' and should_log returns false, overriding the default.",
-      "evaluate(&AlwaysRetry, 99) yields 'always => true' and AlwaysRetry.should_log() yields false.",
+      "evaluate(&AlwaysRetry, 99) yields 'always => true' and AlwaysRetry.should_log() yields false (AlwaysRetry is a unit struct, so it is spelled without braces).",
     ],
     hints: [
       "Because Decision is bool, no change to evaluate's signature is needed.",
@@ -160,6 +162,29 @@ const exercises: Exercise[] = [
       "Object safety is cheap to preserve up front and a breaking change to add back later.",
     ],
   },
+  {
+    number: 7,
+    kind: "code reading",
+    title: "Use a newtype to satisfy the orphan rule",
+    objective: "Explain why a bare foreign-trait-for-foreign-type impl is rejected and how a newtype wrapper makes it legal.",
+    starterPrompt: "You want to give Vec<String> a custom Display that joins the items with commas. Writing impl Display for Vec<String> directly is rejected by the orphan rule because both Display and Vec are foreign to your crate. Wrap the value in a local newtype struct Lines(Vec<String>) and implement Display for that instead.",
+    prompts: [
+      "State the orphan rule: an impl is allowed only when the trait, the type, or both are local to your crate.",
+      "Explain why impl Display for Vec<String> violates it, since neither Display nor Vec belongs to your crate.",
+      "Define a local newtype struct Lines(Vec<String>) and write impl Display for Lines, since Lines is now local.",
+      "Note that you reach the inner value through self.0 inside the impl.",
+    ],
+    acceptanceCriteria: [
+      "The answer states the orphan rule: at least one of the trait or the type must be local to the crate.",
+      "It explains the bare impl Display for Vec<String> is rejected because both Display and Vec are foreign.",
+      "It introduces a local newtype struct Lines(Vec<String>) and implements Display for Lines, which is now allowed.",
+      "The Display body reads the wrapped value through self.0.",
+    ],
+    hints: [
+      "The newtype is local to your crate, so the impl now has a local type even though Display is foreign.",
+      "A tuple struct's single field is reached with self.0.",
+    ],
+  },
 ]
 
 const reviewQuestions = [
@@ -168,6 +193,7 @@ const reviewQuestions = [
   "When should a trait use an associated type instead of a generic type parameter, and what symptom appears at call sites if you choose wrong?",
   "What does object safety require of a trait's methods, and why does each rule exist for a single indirect call through a vtable?",
   "Why is deciding up front whether a trait must work behind dyn important, given that adding a generic method or a by-value Self return later is a breaking change?",
+  "What does a supertrait such as trait Audit: Identify require of every implementer, and what does it let Audit's default methods assume?",
 ]
 
 const workingLoop = [
@@ -178,11 +204,11 @@ const workingLoop = [
 ]
 
 <RustPracticeCard
-  title={"Runnable lab · object-safe stage pipeline with a default method"}
+  title={"Runnable lab · object-safe stage list with a default method"}
   filename="stage_pipeline_lab.rs"
   runKey="ch14_ex_stage"
   expectedOutput={"trim => hi\nwrap => [b]  hi  [/b]\nstages = 2"}
-  helperText={"Two unrelated structs implement one object-safe Stage trait and live together in a Vec<Box<dyn Stage>>. The trait's default describe method drives every stage through the vtable; fill in the two run methods so the pipeline prints correctly."}
+  helperText={"Two unrelated structs implement one object-safe Stage trait and live together in a Vec<Box<dyn Stage>>. Each stage receives the same raw input independently; the stages are not chained, so Wrap sees the untrimmed \"  hi  \", not Trim's output. The trait's default describe method drives every stage through the vtable; fill in the two run methods so the output prints correctly."}
   initialCode={`trait Stage {
     fn name(&self) -> &'static str;
     fn run(&self, input: &str) -> String;
@@ -218,7 +244,9 @@ impl Stage for Wrap {
     }
 }
 
-fn run_pipeline(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {
+// Each stage receives the same raw input independently; this is a fan-out,
+// not a chain, so the output of one stage is never fed into the next.
+fn run_stages(stages: &[Box<dyn Stage>], input: &str) -> Vec<String> {
     stages.iter().map(|s| s.describe(input)).collect()
 }
 
@@ -228,7 +256,7 @@ fn main() {
         Box::new(Wrap { tag: "b" }),
     ];
 
-    for line in run_pipeline(&stages, "  hi  ") {
+    for line in run_stages(&stages, "  hi  ") {
         println!("{}", line);
     }
     println!("stages = {}", stages.len());

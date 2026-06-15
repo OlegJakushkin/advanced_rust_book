@@ -385,7 +385,9 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
               request, such as the path, the query string, the JSON body, and the auth header, into ordinary typed
               function arguments. Typed state hands the handler its dependencies. Middleware runs the cross-cutting work
               that every route needs. And the dependency boundary is the single conversion from transport DTOs into an
-              application call. The five cards below take each piece in turn.
+              application call. The five cards below take each piece in turn. The short code fragment on each card is a
+              schematic sketch of the shape, not a snippet you can paste and compile on its own; the two runnable
+              examples later in the chapter are the compilable versions.
             </p>
             <div className="grid gap-4 lg:grid-cols-5">
               {fastApiExperienceCards.map((card) => (
@@ -576,12 +578,11 @@ export function PageCh46FastApiStyleWebAppsSwaggerOpenapiCodegen() {
           <article className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Testing API contracts and preventing documentation drift</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
-              Documentation drift is rarely a missing description. It is a handler and an OpenAPI document that slowly
-              stopped describing the same system, with no failing test to announce it. The fix is to make the contract
-              part of the build rather than part of code review. Generate the spec in CI and fail when the checked-in copy
-              drifts; rebuild and compile any published clients against the new contract; and run request and response
-              fixtures against the actual server boundary so serialization, auth hooks, and status mapping stay honest.
-              The four cards below are the layers of that safety net, from cheapest to most thorough.
+              The fix for documentation drift is to make the contract part of the build rather than part of code review.
+              Generate the spec in CI and fail when the checked-in copy drifts; rebuild and compile any published clients
+              against the new contract; and run request and response fixtures against the actual server boundary so
+              serialization, auth hooks, and status mapping stay honest. The four cards below are the layers of that
+              safety net, from cheapest to most thorough.
             </p>
             <div className="grid gap-4 lg:grid-cols-4">
               {driftPreventionCards.map((card) => (

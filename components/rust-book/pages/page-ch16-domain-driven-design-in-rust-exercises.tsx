@@ -65,7 +65,7 @@ const exercises: Exercise[] = [
     ],
     hints: [
       "Draft permits add_line; Submitted rejects it. submit is the only transition.",
-      "total_cents folds qty.get() as u64 times unit_price.get() across the lines.",
+      "total_cents folds qty.get() as u64 times the unit price across the lines. In the chapter's ddd_order_aggregate listing unit_price is a MoneyCents value object, so the price is unit_price.get(); in the lab the price is already a plain u64 field, so multiply qty.get() as u64 * unit_price_cents directly.",
     ],
   },
   {
@@ -181,8 +181,8 @@ const workingLoop = [
   title={"Runnable lab · aggregate invariants on an order"}
   filename="order_aggregate_lab.rs"
   runKey="ch16_ex_order_aggregate"
-  expectedOutput={"lines = 2\ntotal cents = 4200\nstate = submitted\nsubmit ok = true\nlocked after submit = true\nzero qty rejected = true"}
-  helperText={"Complete Order::submit so it refuses an empty order and otherwise moves to Submitted, and Order::total_cents so it folds quantity times unit price across the lines. The Quantity value object already rejects zero at construction."}
+  expectedOutput={"lines = 2\ntotal cents = 4200\nstate = submitted\nsubmit ok = true\nlocked after submit = true\nzero qty rejected = true\nempty rejected = true"}
+  helperText={"Complete Order::submit so it refuses an empty order and otherwise moves to Submitted, and Order::total_cents so it folds quantity times unit price across the lines. The Quantity value object already rejects zero at construction. The empty rejected = true line only turns true once submit guards the empty-order case, so it fails until you implement that guard."}
   initialCode={`#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Quantity(u32);
 
@@ -259,6 +259,7 @@ fn main() {
     let submitted = order.submit().is_ok();
     let blocked = order.add_line(Quantity::new(1).unwrap(), 100).is_err();
     let zero_qty = Quantity::new(0).is_err();
+    let empty_rejected = Order::new().submit().is_err();
 
     println!("lines = {}", order.lines.len());
     println!("total cents = {}", order.total_cents());
@@ -266,6 +267,7 @@ fn main() {
     println!("submit ok = {}", submitted);
     println!("locked after submit = {}", blocked);
     println!("zero qty rejected = {}", zero_qty);
+    println!("empty rejected = {}", empty_rejected);
 }`}
 />
 */

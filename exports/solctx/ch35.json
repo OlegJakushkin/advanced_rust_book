@@ -68,7 +68,8 @@
    ],
    "hints": [
     "180 * 100 / 840 truncates to 21; doing the divide first would collapse it to 0.",
-    "A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec."
+    "A single pass for the total and a second map over the slice is enough; no extra allocation per stage is needed beyond the result Vec.",
+    "Shares truncated to integers may not sum to exactly 100 (here 21 + 73 + 4 = 98); that is expected, so do not assert the shares add up to 100."
    ]
   },
   {
@@ -110,7 +111,7 @@
     "Hold time and wait time are stored and reported as two separate fields rather than one combined number.",
     "classify returns \"contention\" for (hold_us=5, wait_us=900) and \"hold\" for (hold_us=900, wait_us=5).",
     "The explanation ties high wait_us with low hold_us to a frequently-acquired short critical section.",
-    "The answer names narrowing shared state, shortening critical sections, or giving a subsystem its own owner before going lock-free."
+    "The answer names narrowing shared state, shortening critical sections, sharding, or giving a subsystem its own owner (read-mostly redesign included) before going lock-free."
    ],
    "hints": [
     "The two halves fail in opposite ways, so a single averaged number erases exactly the signal you need.",
@@ -154,7 +155,7 @@
   "runKey": "ch35_ex_dominant",
   "expectedOutput": "dominant = cpu\nwall us = 800\ndominant share = 51",
   "helperText": "Mirror the chapter's pipeline decomposition: sum the per-layer micros into wall time, find the layer that owns the most time, and report its integer percentage share. Fill in the dominant-layer reduction where marked.",
-  "initialCode": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    // TODO: return the (name, micros) of the layer that owns the most time.\n    // Scan layers(stats) and pick the entry with the largest micros value.\n    (\"none\", 0)\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
+  "initialCode": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).into_iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    // TODO: return the (name, micros) of the layer that owns the most time.\n    // Scan layers(stats) and pick the entry with the largest micros value.\n    (\"none\", 0)\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 25, 27, 28, 29, 33, and 34",
@@ -173,7 +174,7 @@
   "Profiling serialization",
   "Profiling IO pipelines",
   "Profiling boundary crossings: WASM and FFI",
-  "How to think about this coming from another language",
+  "If you are coming from C++, C#, Go, or Python",
   "Production patterns",
   "Pitfalls and tradeoffs",
   "Examples",
@@ -218,5 +219,5 @@
   "performance_profiling_hot_stage_summary": "#[derive(Debug, Clone, Copy)]\nstruct StageSample {\n    name: &'static str,\n    micros: u64,\n}\n\nfn hottest_stage(samples: &[StageSample]) -> (&'static str, u64, u64) {\n    let total: u64 = samples.iter().map(|sample| sample.micros).sum();\n    let hottest = samples\n        .iter()\n        .max_by_key(|sample| sample.micros)\n        .copied()\n        .unwrap();\n\n    (hottest.name, hottest.micros, total)\n}\n\nfn main() {\n    let samples = [\n        StageSample {\n            name: \"parse\",\n            micros: 180,\n        },\n        StageSample {\n            name: \"serialize\",\n            micros: 620,\n        },\n        StageSample {\n            name: \"lock_wait\",\n            micros: 40,\n        },\n    ];\n\n    let (stage, hottest, total) = hottest_stage(&samples);\n\n    println!(\"hottest = {}\", stage);\n    println!(\"stage us = {}\", hottest);\n    println!(\"total us = {}\", total);\n}",
   "performance_profiling_pipeline_bottleneck": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n    serialized_bytes: usize,\n}\n\nfn dominant(stats: &PipelineStats) -> &'static str {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n    .into_iter()\n    .max_by_key(|(_, value)| *value)\n    .map(|(name, _)| name)\n    .unwrap()\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    stats.cpu_us + stats.io_wait_us + stats.lock_wait_us + stats.serialize_us\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n        serialized_bytes: 16_384,\n    };\n\n    println!(\"dominant = {}\", dominant(&stats));\n    println!(\"serialized bytes = {}\", stats.serialized_bytes);\n    println!(\"wall us = {}\", wall_time(&stats));\n}"
  },
- "labReferenceSolution": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    layers(stats)\n        .into_iter()\n        .max_by_key(|(_, value)| *value)\n        .unwrap()\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
+ "labReferenceSolution": "#[derive(Debug)]\nstruct PipelineStats {\n    cpu_us: u64,\n    io_wait_us: u64,\n    lock_wait_us: u64,\n    serialize_us: u64,\n}\n\nfn layers(stats: &PipelineStats) -> [(&'static str, u64); 4] {\n    [\n        (\"cpu\", stats.cpu_us),\n        (\"io\", stats.io_wait_us),\n        (\"lock\", stats.lock_wait_us),\n        (\"serialize\", stats.serialize_us),\n    ]\n}\n\nfn wall_time(stats: &PipelineStats) -> u64 {\n    layers(stats).into_iter().map(|(_, value)| value).sum()\n}\n\nfn dominant(stats: &PipelineStats) -> (&'static str, u64) {\n    layers(stats)\n        .into_iter()\n        .max_by_key(|(_, value)| *value)\n        .unwrap()\n}\n\nfn main() {\n    let stats = PipelineStats {\n        cpu_us: 410,\n        io_wait_us: 120,\n        lock_wait_us: 90,\n        serialize_us: 180,\n    };\n\n    let wall = wall_time(&stats);\n    let (name, micros) = dominant(&stats);\n    let share = micros * 100 / wall;\n\n    println!(\"dominant = {}\", name);\n    println!(\"wall us = {}\", wall);\n    println!(\"dominant share = {}\", share);\n}"
 }

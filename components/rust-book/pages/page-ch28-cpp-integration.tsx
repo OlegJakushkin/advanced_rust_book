@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Network, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
+import { getPageIndexById } from "../page-index"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
@@ -35,7 +36,7 @@ const comparisonCallouts = [
   },
   {
     title: "Go background",
-    body: "The nearest reference point is cgo discipline: the foreign edge wants explicit ownership, clear data movement, and a hard stop on Go- isms leaking across. Rust pushes the same idea further by making aliasing and panic policy part of the type system and the unsafe model, not a convention you remember to follow. There is no garbage collector to keep a pointer alive across the boundary, so a value handed to foreign code must have its lifetime modelled deliberately as a handle or a copied buffer.",
+    body: "The nearest reference point is cgo discipline: the foreign edge wants explicit ownership, clear data movement, and a hard stop on Go-isms leaking across. Rust pushes the same idea further by making aliasing and panic policy part of the type system and the unsafe model, not a convention you remember to follow. There is no garbage collector to keep a pointer alive across the boundary, so a value handed to foreign code must have its lifetime modelled deliberately as a handle or a copied buffer.",
   },
   {
     title: "Python background",
@@ -174,8 +175,12 @@ export function PageCh28CppIntegration() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 54
+  const pageIndex = getPageIndexById("ch28-cpp-integration")
   const page = PAGES[pageIndex]
+  const exercisesPageIndex = getPageIndexById("ch28-cpp-integration-exercises")
+  const chapter08PageIndex = getPageIndexById("ch08-undefined-behavior-and-unsafe-rust")
+  const chapter09PageIndex = getPageIndexById("ch09-smart-pointers-and-pinning")
+  const chapter17PageIndex = getPageIndexById("ch17-refactoring-toward-idiomatic-rust")
 
   useEffect(() => {
     markPageComplete(pageIndex)
@@ -219,13 +224,13 @@ export function PageCh28CppIntegration() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(14)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter08PageIndex)}>
                 Chapter 08
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(16)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter09PageIndex)}>
                 Chapter 09
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(32)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter17PageIndex)}>
                 Chapter 17
               </Button>
             </div>
@@ -548,7 +553,10 @@ export function PageCh28CppIntegration() {
                   if it came from native code. Even a trivial exported function needs a panic policy at the boundary: the
                   body uses <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">wrapping_abs</code> so an
                   <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]"> i32::MIN</code> input cannot panic
-                  across the C ABI seam.
+                  across the C ABI seam (
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">wrapping_abs(i32::MIN)</code> returns{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">i32::MIN</code> rather than
+                  panicking).
                 </p>
               </div>
               {codes.cpp_integration_calling_c_abi !== DEFAULT_CODES.cpp_integration_calling_c_abi && (
@@ -638,9 +646,12 @@ export function PageCh28CppIntegration() {
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ptr</code> and{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">len</code>, compute the sum, write it
               through the out parameter, and return{" "}
-              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">0</code>. The caller owns both buffers;
-              Rust only borrows them for the call. Follow the branches in the diagram, then read them top to bottom in
-              code.
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">0</code>. Each{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">i32</code> is widened to{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">i64</code> before being added, so the
+              output type is deliberately wider than the element type and the sum cannot overflow at the boundary. The
+              caller owns both buffers; Rust only borrows them for the call. Follow the branches in the diagram, then read
+              them top to bottom in code.
             </p>
             <MermaidDiagram
               chart={`flowchart TD\n  Enter[sum_i32s entry] --> NullOut{out_total null?}\n  NullOut -->|yes| R1[return 1]\n  NullOut -->|no| NullPtr{ptr null?}\n  NullPtr -->|yes| R2[return 2]\n  NullPtr -->|no| Build[build slice from ptr and len]\n  Build --> Sum[sum into i64]\n  Sum --> Write[write through out_total]\n  Write --> Ok[return 0]`}
@@ -704,7 +715,7 @@ export function PageCh28CppIntegration() {
             across the seam, build a wrapper around a Rust function, and choose between a C shim, generated bindings, and a
             curated Rust/C++ bridge for a legacy codebase.
           </p>
-          <Button onClick={() => setCurrentPage(55)} className="gap-2">
+          <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 28 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

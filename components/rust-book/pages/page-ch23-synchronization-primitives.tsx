@@ -170,7 +170,7 @@ export function PageCh23SynchronizationPrimitives() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 44
+  const pageIndex = 48
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -214,13 +214,13 @@ export function PageCh23SynchronizationPrimitives() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(6)}>
+              <Button variant="outline" onClick={() => setCurrentPage(8)}>
                 Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(16)}>
+              <Button variant="outline" onClick={() => setCurrentPage(18)}>
                 Chapter 09
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(42)}>
+              <Button variant="outline" onClick={() => setCurrentPage(46)}>
                 Chapter 22
               </Button>
             </div>
@@ -621,7 +621,7 @@ export function PageCh23SynchronizationPrimitives() {
             </p>
             <MermaidDiagram
               chart={`sequenceDiagram\n  participant M as Main thread\n  participant R1 as Reader 1\n  participant R2 as Reader 2\n  participant B as Barrier (3)\n  R1->>B: wait()\n  R2->>B: wait()\n  M->>M: write lock, set version=2, mode=burst\n  M->>B: wait() (third arrival)\n  B-->>R1: release all\n  B-->>R2: release all\n  R1->>R1: read lock, see version 2\n  R2->>R2: read lock, see version 2`}
-              caption="Readers park at the barrier; the writer updates the snapshot and then arrives third. The barrier releasing is the phase gate that makes the write visible to both readers."
+              caption="The write completes before the main thread reaches the barrier, so once all three threads arrive and the barrier releases, both readers see version 2 regardless of the order they arrived in. The barrier releasing is the phase gate that makes the write visible to both readers."
             />
             <RustCodeEditor
               code={codes.synchronization_rwlock_barrier}
@@ -739,7 +739,7 @@ export function PageCh23SynchronizationPrimitives() {
             where it fits, reason about Acquire and Release ordering in a toy publication example, and repair a deadlock-prone
             lock design before it becomes a production incident.
           </p>
-          <Button onClick={() => setCurrentPage(45)} className="gap-2">
+          <Button onClick={() => setCurrentPage(49)} className="gap-2">
             Open Chapter 23 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

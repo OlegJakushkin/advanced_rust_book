@@ -37,7 +37,7 @@ const exercises: Exercise[] = [
     acceptanceCriteria: [
       "You choose at least two different termination strategies across the four cases.",
       "You justify one choice with trust-header policy and one with certificate ownership or packaging policy.",
-      "You avoid pretending one termination strategy is always correct for every service.",
+      "Your choices vary by deployment shape and you explain why each one differs.",
     ],
     hints: [
       "Ask who owns public certificates, who trusts proxy headers, and who needs the peer identity directly.",
@@ -145,7 +145,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 6,
-    kind: "design or production scenario",
+    kind: "testing plan",
     title: "Test HTTPS locally and in CI with realistic trust behavior",
     objective:
       "Build a local and CI test plan that exercises real TLS policy without teaching the team insecure shortcuts.",
@@ -176,6 +176,7 @@ const reviewQuestions = [
   "When is HSTS a safe default, and when is it premature?",
   "Why are local CA and CI trust bundles safer than skip-verification flags for HTTPS testing?",
   "What makes certificate rotation a deployment problem as much as a cryptography problem?",
+  "When would you reach for a Rust-native TLS stack over the platform's native stack, and why is that a topology decision before it is an API decision?",
 ]
 
 const workingLoop = [
@@ -384,6 +385,9 @@ fn main() {
     println!("redirect = {}", policy.redirect_http);
     println!("cookie hardened = {}", cookie.is_hardened());
     println!("cors = {}", policy.cors_mode());
+    // HSTS validity depends only on a non-zero max-age. We check it together
+    // with redirect here because a secure edge wants BOTH to be true; the line
+    // asserts the pair, not that HSTS requires this process to do the redirect.
     println!("hsts = {}", policy.redirect_http && policy.hsts_max_age_secs > 0);
 }`}
         />

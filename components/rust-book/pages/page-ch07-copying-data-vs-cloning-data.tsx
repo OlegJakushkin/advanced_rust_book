@@ -87,7 +87,8 @@ const coreConceptCards = [
   },
   {
     title: "Clone-on-write",
-    body: "Use Cow when a function usually returns borrowed data but occasionally needs an owned, transformed value. The common path stays allocation-free and only the path that actually changes the data pays. Rc::make_mut and Arc::make_mut apply the same idea to shared ownership: clone the inner value only when a writer needs an exclusive copy.",
+    body: "Use Cow when a function usually returns borrowed data but occasionally needs an owned, transformed value. The common path stays allocation-free and only the path that actually changes the data pays. Rc::make_mut and Arc::make_mut apply the same idea to shared ownership: they clone the inner value only when the count is greater than one, so a writer gets an exclusive copy without duplicating data that is not actually shared.",
+    code: `let mut shared = Arc::new(vec![1, 2, 3]);\nlet _other = Arc::clone(&shared); // count is now 2\n// make_mut clones the Vec because it is shared, then writes through it.\nArc::make_mut(&mut shared).push(4);`,
   },
   {
     title: "Reference-counted cloning with Rc and Arc",
@@ -185,13 +186,13 @@ export function PageCh07CopyingDataVsCloningData() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}>
                 Revisit Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(10)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch05-ownership-inside-structs"))}>
                 Revisit Chapter 05
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(12)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch06-ownership-inside-vectors"))}>
                 Revisit Chapter 06
               </Button>
             </div>
@@ -297,7 +298,7 @@ export function PageCh07CopyingDataVsCloningData() {
               whether the duplication is implicit or written down.
             </p>
             <MermaidDiagram
-              chart={`flowchart TD\n  subgraph Copy\n    A2[src small value] -->|let b = src| B2[b is a duplicate]\n    A2 -->|src still usable| C2[src stays valid]\n  end\n  subgraph Clone\n    A3[src owns data] -->|let b = src.clone| B3[b owns a deep copy]\n    A3 -->|src still usable| C3[src stays valid]\n  end`}
+              chart={`flowchart TD\n  subgraph Copy\n    A2[src small value] -->|let b = src| B2[b is a duplicate]\n    A2 -->|src still usable| C2[src stays valid]\n  end\n  subgraph Clone\n    A3[src owns data] -->|"let b = src.clone()"| B3[b owns a deep copy]\n    A3 -->|src still usable| C3[src stays valid]\n  end`}
               caption="Copy and Clone both leave the source valid. Copy is an implicit bitwise duplicate of a small value; Clone is an explicit, possibly expensive duplication you write by hand."
             />
             <div className="grid gap-4 lg:grid-cols-3 mt-4">
@@ -336,7 +337,7 @@ export function PageCh07CopyingDataVsCloningData() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Topics this chapter treats as source of truth</h4>
+            <h4 className="font-semibold text-foreground mb-3">Key concepts</h4>
             <div className="grid gap-4 lg:grid-cols-2">
               {coreConceptCards.map((card) => (
                 <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -611,7 +612,7 @@ export function PageCh07CopyingDataVsCloningData() {
             decide when <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Copy</code> is safe, remove
             unnecessary clones from an API, and choose receiver forms deliberately.
           </p>
-          <Button onClick={() => setCurrentPage(15)} className="gap-2">
+          <Button onClick={() => setCurrentPage(getPageIndexById("ch07-copying-data-vs-cloning-data-exercises"))} className="gap-2">
             Open Chapter 07 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

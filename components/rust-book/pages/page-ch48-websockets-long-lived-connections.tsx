@@ -376,7 +376,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
               <li>Decide who owns read IO, write IO, and protocol state before you write handler code.</li>
               <li>Put a bound on outbound buffering before the first slow client appears.</li>
               <li>Version the message envelope before mixed client releases force the issue.</li>
-              <li>Write reconnect, shutdown, and observability policy as part of the transport design, not after it.</li>
+              <li>Write reconnect and shutdown policy as part of the transport design, not after it; wire observability hooks (queue age, active-connection counts, reconnect rate) per Chapter 43.</li>
             </ol>
           </div>
         </section>
@@ -411,7 +411,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Five concerns, in order</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
             The work divides into five recurring concerns: the lifecycle the connection moves through, who owns which part
@@ -506,7 +506,7 @@ export function PageCh48WebsocketsLongLivedConnections() {
             </h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
               Backpressure is the question of what happens when you produce messages faster than a client can read them.
-              The honest framing is that you are always answering it, even when you never wrote the answer down: an
+              The honest framing is that you are always choosing a slow-consumer policy even when you never wrote it down: an
               unbounded queue is a policy that says grow memory until the process dies. The diagram traces the decision
               every push makes. The fork that matters is the one in the middle, when the per-connection queue is full,
               you are forced to choose between dropping data, coalescing it, or dropping the client, and that choice is a

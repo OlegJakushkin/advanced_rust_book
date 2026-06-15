@@ -144,14 +144,18 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 struct CountingAlloc;
 static ALLOCS: AtomicUsize = AtomicUsize::new(0);
 
+// Register it so every allocation in the program routes through this impl.
+#[global_allocator]
+static COUNTING_ALLOC: CountingAlloc = CountingAlloc;
+
 unsafe impl GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCS.fetch_add(1, Ordering::Relaxed);
-        unsafe { System.alloc(layout) }
+        System.alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe { System.dealloc(ptr, layout) }
+        System.dealloc(ptr, layout)
     }
 }`
 
@@ -309,7 +313,7 @@ export function PageCh34MemoryProfiling() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+            <h3 className="text-lg font-semibold text-foreground">How to frame a memory investigation</h3>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -589,8 +593,9 @@ export function PageCh34MemoryProfiling() {
               before it crosses a queue or task boundary rather than carrying the same large blob everywhere, and flatten
               pointer-heavy intermediate structures where locality matters. Admission control belongs in the same toolbox
               &mdash; channel capacity, semaphore permits, and batch size are memory controls every bit as much as
-              throughput controls, because they cap how much work can be alive at once. And the graph repairs from earlier
-              apply directly: a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Weak&lt;T&gt;</code>{" "}
+              throughput controls, because they cap how much work can be alive at once. And the graph repairs from
+              &ldquo;Detecting leaks with Rc and Arc cycles&rdquo; above apply directly: a{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Weak&lt;T&gt;</code>{" "}
               breaks a non-owning edge, and promptly removing completed entries keeps a registry from quietly becoming a
               cache that never evicts.
             </p>
@@ -816,8 +821,8 @@ export function PageCh34MemoryProfiling() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
             The companion exercise page asks you to find clone pressure in a sample workload, diagnose an `Rc` cycle leak,
-            choose the right OS tools, and prepare a memory profiling checklist another engineer could use under incident
-            pressure.
+            profile async memory growth before calling it a leak, choose the right OS tools, and prepare a memory
+            profiling checklist another engineer could use under incident pressure.
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 34 Exercises

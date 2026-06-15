@@ -72,6 +72,7 @@ impl Encoder for HexPair {
     type Output = [u8; 2];
 
     fn encode(&self, input: &[u8]) -> Self::Output {
+        // input is expected to be non-empty; this encodes the first byte only.
         let byte = input[0];
         [hex_digit(byte >> 4), hex_digit(byte & 0x0F)]
     }
@@ -82,12 +83,14 @@ struct FixedWindow<T, const N: usize> {
     items: [T; N],
 }
 
-impl<const N: usize> FixedWindow<u32, N> {
-    fn sum(&self) -> u32 {
+impl<T: Copy + std::iter::Sum, const N: usize> FixedWindow<T, N> {
+    fn sum(&self) -> T {
         self.items.iter().copied().sum()
     }
+}
 
-    fn last(&self) -> u32 {
+impl<T: Copy, const N: usize> FixedWindow<T, N> {
+    fn last(&self) -> T {
         self.items[N - 1]
     }
 }

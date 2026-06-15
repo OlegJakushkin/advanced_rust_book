@@ -92,7 +92,7 @@
    "number": 5,
    "kind": "debugging or refactoring",
    "title": "Profile communication-heavy HPC work conceptually before rewriting it",
-   "objective": "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic.",
+   "objective": "Practice building a measurement plan for an MPI program whose slowdown may come from imbalance or collectives rather than from arithmetic. This is a diagnostic task: you are measuring an existing run before changing anything, not planning a new deployment.",
    "starterPrompt": "A solver slowed down after a mesh change. Every rank still finishes the same kernel code path, but total runtime rose sharply.",
    "prompts": [
     "Which timers would you place around local compute, halo exchange, and collective convergence steps?",
@@ -113,7 +113,7 @@
    "number": 6,
    "kind": "design or production scenario",
    "title": "Choose hybrid MPI plus threads and cluster deployment policy deliberately",
-   "objective": "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload.",
+   "objective": "Map ranks, local threads, queue budgets, and profiling hooks to one realistic cluster workload. This is a design task: you are planning a deployment before launch, not measuring a run that already exists.",
    "starterPrompt": "You are designing `load block -> local compute -> allreduce convergence -> write checkpoint`, with CPU-heavy kernels, one read-mostly lookup table per rank, and a cluster policy that limits cores per node tightly.",
    "prompts": [
     "Would you run more ranks per node, more threads per rank, or a balanced mix?",
@@ -145,14 +145,14 @@
   "filename": "mpi_block_partition_lab.rs",
   "runKey": "ch32_ex_block_partition",
   "expectedOutput": "rank 0 = 0..3\nrank 1 = 3..6\nrank 2 = 6..9\nrank 3 = 9..11\ncells rank2 = 15",
-  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Partition {\n    start_row: usize,\n    end_row: usize,\n}\n\nfn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {\n    let rows_per_rank = rows / ranks;\n    let start = rank * rows_per_rank;\n    let end = start + rows_per_rank;\n\n    Partition {\n        start_row: start,\n        end_row: end,\n    }\n}\n\nfn main() {\n    let rows = 11_usize;\n    let ranks = 4_usize;\n    let cols = 5_usize;\n\n    for rank in 0..ranks {\n        let part = block_range(rows, ranks, rank);\n        println!(\"rank {} = {}..{}\", rank, part.start_row, part.end_row);\n    }\n\n    let part = block_range(rows, ranks, 2);\n    println!(\"cells rank2 = {}\", (part.end_row - part.start_row) * cols);\n}"
+  "initialCode": "#[derive(Debug, Clone, Copy)]\nstruct Partition {\n    start_row: usize,\n    end_row: usize,\n}\n\nfn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {\n    let rows_per_rank = rows / ranks;\n    let start = rank * rows_per_rank;\n    let end = start + rows_per_rank;\n\n    Partition {\n        start_row: start,\n        end_row: end,\n    }\n}\n\nfn main() {\n    let rows = 11_usize;\n    let ranks = 4_usize;\n\n    for rank in 0..ranks {\n        let part = block_range(rows, ranks, rank);\n        println!(\"rank {} = {}..{}\", rank, part.start_row, part.end_row);\n    }\n\n    let cols = 5_usize;\n    let part = block_range(rows, ranks, 2);\n    println!(\"cells rank2 = {}\", (part.end_row - part.start_row) * cols);\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 12, 22, 26, and 31",
   "Opening scenario",
   "A practical decision order",
   "Mental model",
-  "Core concepts",
+  "MPI building blocks",
   "The three nouns every MPI program starts from",
   "Why ranks and threads are not the same tool",
   "Message passing at HPC scale",
@@ -202,11 +202,11 @@
   "One flat buffer plus one row-major offset keeps both cache behavior and MPI send ranges simple.",
   "The repository example file shows the same idea with real `mpi` crate calls and an allreduce.",
   "A scatter or gather needs two parallel tables: how many elements go to each rank, and at what offset each rank’s slice begins. Most scatter and gather bugs are simply one of these tables computed in the wrong unit. The discipline is to keep counts in the unit the algorithm thinks",
-  "What to look at: row_counts answers the load question in rows (10 rows over 3 ranks becomes 4, 3, 3). Then displacements_in_cells walks those counts once, multiplying by cols to produce the per-rank starting offset a real scatter would consume. The final allreduce is a separate f"
+  "What to look at: row_counts answers the load question in rows (10 rows over 3 ranks becomes 4, 3, 3). Then displacements_in_cells walks those counts once, multiplying by cols to produce the per-rank starting offset a real scatter would consume. Each slice is then summed into one parti"
  ],
  "codeSamples": {
   "mpi_partition_dense_rows": "#[derive(Debug, Clone, Copy)]\nstruct Partition {\n    start_row: usize,\n    end_row: usize,\n}\n\nfn block_range(rows: usize, ranks: usize, rank: usize) -> Partition {\n    let base = rows / ranks;\n    let remainder = rows % ranks;\n    let start = rank * base + rank.min(remainder);\n    let len = base + usize::from(rank < remainder);\n\n    Partition {\n        start_row: start,\n        end_row: start + len,\n    }\n}\n\nfn local_sum(matrix: &[f64], cols: usize, part: Partition) -> f64 {\n    let start = part.start_row * cols;\n    let end = part.end_row * cols;\n    matrix[start..end].iter().copied().sum()\n}\n\nfn main() {\n    let rows = 8_usize;\n    let cols = 3_usize;\n    let ranks = 3_usize;\n    let rank = 1_usize;\n\n    let matrix: Vec<f64> = (1..=(rows * cols)).map(|value| value as f64).collect();\n    let part = block_range(rows, ranks, rank);\n    let subtotal = local_sum(&matrix, cols, part);\n\n    println!(\"rank = {}\", rank);\n    println!(\"rows = {}..{}\", part.start_row, part.end_row);\n    println!(\"local rows = {}\", part.end_row - part.start_row);\n    println!(\"subtotal = {:.1}\", subtotal);\n}",
-  "mpi_collective_counts_and_allreduce": "fn row_counts(rows: usize, ranks: usize) -> Vec<usize> {\n    let base = rows / ranks;\n    let remainder = rows % ranks;\n\n    (0..ranks)\n        .map(|rank| base + usize::from(rank < remainder))\n        .collect()\n}\n\nfn displacements_in_cells(counts: &[usize], cols: usize) -> Vec<usize> {\n    let mut out = Vec::with_capacity(counts.len());\n    let mut offset = 0_usize;\n\n    for &rows_for_rank in counts {\n        out.push(offset);\n        offset += rows_for_rank * cols;\n    }\n\n    out\n}\n\nfn main() {\n    let rows = 10_usize;\n    let cols = 4_usize;\n    let ranks = 3_usize;\n    let rank = 1_usize;\n\n    let counts = row_counts(rows, ranks);\n    let displs = displacements_in_cells(&counts, cols);\n    let local_norms = [7_u64, 9, 5];\n    let allreduce_sum: u64 = local_norms.iter().copied().sum();\n\n    println!(\"counts = {:?}\", counts);\n    println!(\"displs = {:?}\", displs);\n    println!(\"send cells = {}\", counts[rank] * cols);\n    println!(\"allreduce = {}\", allreduce_sum);\n}"
+  "mpi_collective_counts_and_allreduce": "fn row_counts(rows: usize, ranks: usize) -> Vec<usize> {\n    let base = rows / ranks;\n    let remainder = rows % ranks;\n\n    (0..ranks)\n        .map(|rank| base + usize::from(rank < remainder))\n        .collect()\n}\n\nfn displacements_in_cells(counts: &[usize], cols: usize) -> Vec<usize> {\n    let mut out = Vec::with_capacity(counts.len());\n    let mut offset = 0_usize;\n\n    for &rows_for_rank in counts {\n        out.push(offset);\n        offset += rows_for_rank * cols;\n    }\n\n    out\n}\n\nfn local_sums(matrix: &[f64], counts: &[usize], displs: &[usize], cols: usize) -> Vec<f64> {\n    counts\n        .iter()\n        .zip(displs)\n        .map(|(&rows_for_rank, &start)| {\n            let end = start + rows_for_rank * cols;\n            matrix[start..end].iter().copied().sum()\n        })\n        .collect()\n}\n\nfn main() {\n    let rows = 10_usize;\n    let cols = 4_usize;\n    let ranks = 3_usize;\n    let rank = 1_usize;\n\n    let matrix: Vec<f64> = (1..=(rows * cols)).map(|value| value as f64).collect();\n    let counts = row_counts(rows, ranks);\n    let displs = displacements_in_cells(&counts, cols);\n\n    // Each rank sums its own slice; allreduce folds those partials into one total.\n    let partials = local_sums(&matrix, &counts, &displs, cols);\n    let allreduce_sum: f64 = partials.iter().copied().sum();\n\n    println!(\"counts = {:?}\", counts);\n    println!(\"displs = {:?}\", displs);\n    println!(\"send cells = {}\", counts[rank] * cols);\n    println!(\"allreduce = {:.1}\", allreduce_sum);\n}"
  },
  "labReferenceSolution": null
 }

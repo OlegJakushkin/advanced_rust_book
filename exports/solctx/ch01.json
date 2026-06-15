@@ -29,7 +29,7 @@
    "kind": "code reading",
    "title": "Find the zero-cost part and the real runtime cost",
    "objective": "Identify which parts of a Rust abstraction are compile-time structure and which parts still do real work at runtime.",
-   "starterPrompt": "Study an iterator-based function that filters high-priority jobs from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
+   "starterPrompt": "Study the `critical_count` iterator function from the main chapter (Example 1), which filters high-priority readings from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
    "prompts": [
     "Call out which parts are likely monomorphized or optimized as abstraction structure.",
     "List the runtime work that still exists: iteration, branching, cache behavior, and any downstream materialization cost.",
@@ -135,7 +135,7 @@
   "Zero-cost abstractions in practice",
   "The senior-developer Rust learning curve",
   "Rust compared with C++, C#, and Go",
-  "what changes by background",
+  "What changes by background",
   "Why this feels slower before it feels faster",
   "Compile-time guarantees vs runtime checks",
   "Reading compiler errors productively",

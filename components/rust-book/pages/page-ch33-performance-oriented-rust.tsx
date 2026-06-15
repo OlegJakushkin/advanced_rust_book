@@ -640,8 +640,9 @@ cargo bench`}</code>
               What to look at: the return type is{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;&amp;str&gt;</code>, not{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;String&gt;</code>. The function
-              never copies a route; it borrows each label out of the input and hands back views that live exactly as long
-              as the input slice. The one allocation in the whole function is the result vector, and{" "}
+              never copies a route; it borrows each label out of the input and hands back views tied to the route data,
+              with a separate lifetime so the returned strings can outlive the slice borrow itself. The one allocation in
+              the whole function is the result vector, and{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec::with_capacity</code> sizes it once
               up front so the push loop never reallocates. The flow is: size the buffer, then for each request keep or
               skip on a single threshold test.

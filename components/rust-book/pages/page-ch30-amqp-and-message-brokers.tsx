@@ -47,7 +47,7 @@ const comparisonCallouts = [
   },
   {
     title: "Go background",
-    body: "A Go channel is in-process coordination: cheap, ordered within the channel, and gone when the program exits. An AMQP queue looks similar in the small but is a durable, distributed reliability boundary with its own storage, routing, redelivery, and backlog. Treat 'send on a channel' and 'publish to a broker' as different reliability tiers, and give the broker boundary the same care you would give a network RPC.",
+    body: "A Go channel is in-process coordination: cheap, ordered within the channel, and gone when the program exits. An AMQP queue looks similar in the small but is a durable, distributed reliability boundary with its own storage, routing, redelivery, and backlog. Treat 'send on a channel' and 'publish to a broker' as different reliability tiers, and give the broker boundary the same care you would give a network RPC. AMQP ordering is also weaker than Go channel ordering once retries and dead-letter paths are active: the only safe ordering guarantee is the one your workflow still enforces explicitly.",
   },
   {
     title: "Python background",
@@ -202,6 +202,35 @@ const pitfalls = [
   "Treating queue order as global business order once several consumers, retries, and dead-letter paths exist. The only safe ordering guarantee is the one your workflow still enforces explicitly.",
 ]
 
+const lapinSketchSnippet = `// Cargo.toml: lapin = "2", tokio = { version = "1", features = ["full"] }
+use lapin::{options::*, types::FieldTable, BasicProperties, Connection, ConnectionProperties};
+
+// Connect once, then open a channel per task.
+let conn = Connection::connect(&amqp_url, ConnectionProperties::default()).await?;
+let channel = conn.create_channel().await?;
+
+// Publish: producer names the exchange and a routing key, never a queue.
+channel
+    .basic_publish(
+        "orders",            // exchange
+        "orders.created",    // routing key
+        BasicPublishOptions::default(),
+        &payload_bytes,      // the serialized envelope
+        BasicProperties::default(),
+    )
+    .await?
+    .await?;                 // second await waits for the publisher confirm
+
+// Consume: ack only after the durable effect has committed.
+let mut consumer = channel
+    .basic_consume("orders.billing", "billing-worker", BasicConsumeOptions::default(), FieldTable::default())
+    .await?;
+while let Some(delivery) = consumer.next().await {
+    let delivery = delivery?;
+    // ... deserialize, validate, run handler, commit durable effect ...
+    delivery.ack(BasicAckOptions::default()).await?;
+}`
+
 const messageEnvelopeSnippet = `#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum OrderEvent {
@@ -320,7 +349,7 @@ export function PageCh30AmqpAndMessageBrokers() {
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Pick the broker boundary only when producer and consumer should truly decouple in time or failure.</li>
               <li>Design topology second: exchange, routing key, queue boundaries, dead-letter flow.</li>
-              <li>Ack only after the durable effect or durable checkpoint.</li>
+              <li>Design the acknowledgment contract third: the chapter covers exactly when and why to acknowledge below.</li>
               <li>Cap consumer admission both in the broker and in the local worker pool.</li>
             </ol>
           </div>
@@ -402,11 +431,18 @@ export function PageCh30AmqpAndMessageBrokers() {
               ))}
             </div>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-              <p className="text-sm text-muted-foreground leading-6">
+              <p className="text-sm text-muted-foreground leading-6 mb-3">
                 In a real Cargo service, the transport adapter typically holds the AMQP client connection and channel
                 setup, then hands owned envelopes or commands into ordinary Rust handlers. Keep the transport edge narrow so
-                the retry, idempotency, and serialization logic remains testable without a live broker.
+                the retry, idempotency, and serialization logic remains testable without a live broker. The sketch below
+                shows the shape of that edge with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">lapin</code>:
+                a connection, a channel, a confirmed publish keyed by exchange and routing key, and a consume loop that
+                acks only after the work is done. It is illustrative rather than runnable here, but it is the real API
+                surface the runnable examples below simulate in pure std.
               </p>
+              <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+                <code className="font-mono text-foreground">{lapinSketchSnippet}</code>
+              </pre>
             </div>
           </div>
 
@@ -457,7 +493,8 @@ export function PageCh30AmqpAndMessageBrokers() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Dead-letter queues</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
-              Not every failure should be retried. A malformed payload or an unsupported command will fail the same way on
+              Once the retry cap is exhausted, the message needs a final resting place. Not every failure should be
+              retried in the first place: a malformed payload or an unsupported command will fail the same way on
               every attempt, and requeuing it forever just blocks the queue behind a message that can never succeed. A
               dead-letter queue is the escape hatch: the broker moves a message there after it has exhausted its retries
               or been explicitly rejected, so the main queue keeps flowing and a human can inspect the casualties later.
@@ -475,7 +512,8 @@ export function PageCh30AmqpAndMessageBrokers() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Idempotency</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
-              Because delivery is at-least-once, the only way to make duplicates harmless is to make the handler
+              At-least-once delivery makes idempotency a requirement, not a feature. Because the broker can always
+              redeliver, the only way to make duplicates harmless is to make the handler
               idempotent: applying the same message twice must leave the system in the same state as applying it once.
               Sometimes that is free, when the operation is naturally a set-it-to-this upsert. More often you need a
               durable record of which message IDs have already been applied, committed in the same step as the effect, so
@@ -556,64 +594,6 @@ export function PageCh30AmqpAndMessageBrokers() {
             </div>
           </div>
 
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Network className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
-            Most engineers do not arrive at message brokers as a blank slate; they arrive with a mental model from another
-            ecosystem. The useful thing to know is which part of that model transfers and which part will quietly mislead
-            you. The shift is almost never about API names. It is about where reliability and consistency work has to
-            happen now that a durable, distributed boundary sits between your services.
-          </p>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {comparisonCallouts.map((comparison) => (
-              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
-                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
-                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {productionPatterns.map((pattern) => (
-              <div key={pattern} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pattern}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Bug className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {pitfalls.map((pitfall) => (
-              <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pitfall}</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-            <div className="flex items-start gap-3">
-              <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
-              <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A broker can decouple services, but it will not decouple you from consistency. It merely changes where the
-                consistency work must be done.
-              </p>
-            </div>
-          </div>
         </section>
 
         <section className="space-y-5">
@@ -776,6 +756,64 @@ export function PageCh30AmqpAndMessageBrokers() {
               </code>{" "}
               including a small versioned message-envelope example alongside the two runnable worked examples.
             </p>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+          </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            Most engineers do not arrive at message brokers as a blank slate; they arrive with a mental model from another
+            ecosystem. The useful thing to know is which part of that model transfers and which part will quietly mislead
+            you. The shift is almost never about API names. It is about where reliability and consistency work has to
+            happen now that a durable, distributed boundary sits between your services.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {comparisonCallouts.map((comparison) => (
+              <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
+                <div className="font-medium text-foreground mb-2">{comparison.title}</div>
+                <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Production patterns</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {productionPatterns.map((pattern) => (
+              <div key={pattern} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{pattern}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Bug className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Pitfalls and tradeoffs</h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {pitfalls.map((pitfall) => (
+              <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-sm text-muted-foreground leading-6">{pitfall}</p>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
+              <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
+                A broker can decouple services, but it will not decouple you from consistency. It merely changes where the
+                consistency work must be done.
+              </p>
+            </div>
           </div>
         </section>
 

@@ -53,6 +53,8 @@ fn main() {
 
     let command = into_command(request, "acme").unwrap();
     let total_cents: u64 = command.line_totals.iter().copied().sum();
+    // This example extends the runnable lab with an InvoiceService step, so it
+    // prints a fourth "invoice = ..." line the three-line lab does not.
     let service = InvoiceService;
     let invoice_id = service.create(&command);
 

@@ -92,7 +92,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 4,
-    kind: "debugging or refactoring",
+    kind: "design",
     title: "Design a matrix view without copying data",
     objective: "Replace a clone-heavy submatrix helper with a borrowed view that carries enough metadata to interpret the same storage.",
     starterPrompt:
@@ -115,7 +115,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "design",
     title: "Choose between const generics and runtime dimensions honestly",
     objective: "Separate fixed-invariant shapes from merely common shapes.",
     starterPrompt:
@@ -131,7 +131,7 @@ const exercises: Exercise[] = [
       "You explain at least one tradeoff involving API specificity, monomorphization, or call-site simplicity.",
     ],
     hints: [
-      "“Often 4x4” and “must be 4x4” are not the same statement.",
+      "\"Often 4x4\" and \"must be 4x4\" are not the same statement.",
       "Fixed shape in the type is strongest when the invariant is truly global to the API.",
     ],
   },
@@ -191,6 +191,7 @@ export function PageCh12MatricesAndMultidimensionalDataExercises() {
   const mainPageIndex = getPageIndexById("ch12-matrices-and-multidimensional-data")
   const chapter08PageIndex = getPageIndexById("ch08-undefined-behavior-and-unsafe-rust")
   const chapter10PageIndex = getPageIndexById("ch10-arrays-slices-and-vectors")
+  const chapter11PageIndex = getPageIndexById("ch11-hash-maps-and-sets")
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -252,8 +253,9 @@ export function PageCh12MatricesAndMultidimensionalDataExercises() {
               <h3 className="text-lg font-semibold text-foreground mb-2">Relevant refreshers</h3>
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 08 is the right refresher for unsafe and FFI invariants. Chapter 10 is the right refresher for
-                contiguous storage and slice-first APIs. Revisit them before the interop and view exercises if the layout
-                boundary still feels fuzzy.
+                contiguous storage and slice-first APIs. Chapter 11 is the right refresher for workload-aware
+                data-structure choice, which the dense-versus-sparse decisions build on. Revisit them before the interop
+                and view exercises if the layout boundary still feels fuzzy.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
@@ -262,6 +264,9 @@ export function PageCh12MatricesAndMultidimensionalDataExercises() {
               </Button>
               <Button variant="outline" onClick={() => setCurrentPage(chapter10PageIndex)}>
                 Chapter 10
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter11PageIndex)}>
+                Chapter 11
               </Button>
             </div>
           </div>
@@ -342,14 +347,14 @@ export function PageCh12MatricesAndMultidimensionalDataExercises() {
           }
           filename="row_major_matrix_lab.rs"
           runKey="ch12_ex_row_major_matrix"
-          expectedOutput={"a01 = 7\nrow1 sum = 11\ncells = 4"}
+          expectedOutput={"a01 = 7\nrow1 sum = 16\ncells = 6"}
           helperText={
             <>
-              Tip: the starter intentionally mixes up row-major and column-major thinking. Fix the offset first, then fix
-              the row-slice start calculation.
+              Tip: the starter intentionally mixes up row-major and column-major thinking. The matrix is 2x3, so a
+              column-major formula gives the wrong answer. Fix the offset first, then fix the row-slice start calculation.
             </>
           }
-          initialCode={`#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 2, 0_i32);\n    m.set(0, 0, 5);\n    m.set(0, 1, 7);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}`}
+          initialCode={`#[derive(Debug)]\nstruct Matrix<T> {\n    rows: usize,\n    cols: usize,\n    data: Vec<T>,\n}\n\nimpl<T: Clone> Matrix<T> {\n    fn from_elem(rows: usize, cols: usize, value: T) -> Self {\n        Self {\n            rows,\n            cols,\n            data: vec![value; rows * cols],\n        }\n    }\n}\n\nimpl<T> Matrix<T> {\n    fn offset(&self, row: usize, col: usize) -> usize {\n        col * self.rows + row\n    }\n\n    fn get(&self, row: usize, col: usize) -> Option<&T> {\n        if row < self.rows && col < self.cols {\n            Some(&self.data[self.offset(row, col)])\n        } else {\n            None\n        }\n    }\n\n    fn set(&mut self, row: usize, col: usize, value: T) {\n        let index = self.offset(row, col);\n        self.data[index] = value;\n    }\n\n    fn row(&self, row: usize) -> Option<&[T]> {\n        if row < self.rows {\n            let start = row * self.rows;\n            Some(&self.data[start..start + self.cols])\n        } else {\n            None\n        }\n    }\n}\n\nfn main() {\n    let mut m = Matrix::from_elem(2, 3, 0_i32);\n    m.set(0, 0, 10);\n    m.set(0, 1, 7);\n    m.set(0, 2, 30);\n    m.set(1, 0, 3);\n    m.set(1, 1, 8);\n    m.set(1, 2, 5);\n\n    let row1_sum: i32 = m.row(1).unwrap().iter().copied().sum();\n\n    println!(\"a01 = {}\", m.get(0, 1).copied().unwrap());\n    println!(\"row1 sum = {}\", row1_sum);\n    println!(\"cells = {}\", m.data.len());\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

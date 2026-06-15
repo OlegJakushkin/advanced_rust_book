@@ -115,7 +115,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "design",
     title: "Parallelize the wide levels, not the whole idea blindly",
     objective: "Choose where parallelism helps and where it only adds scheduler cost.",
     starterPrompt:
@@ -140,7 +140,7 @@ const exercises: Exercise[] = [
   {
     number: 6,
     kind: "design or production scenario",
-    title: "Choose challenge tracks for content-addressed storage, game integrity, and distributed verification",
+    title: "Design three Merkle-backed production systems",
     objective: "Turn the chapter topics into three production-shaped challenge designs with explicit budgets and replay policy.",
     starterPrompt:
       "Design three systems: a chunk store keyed by hash, a tamper-evident game checkpoint feed, and a verifier service that checks remote proofs before downloading full payloads.",
@@ -199,6 +199,7 @@ const reviewQuestions = [
   "What makes sibling orientation part of the proof itself?",
   "When is level-wise parallelism worth the overhead, and when should it stop?",
   "Why should a proof envelope carry more than only the sibling hashes?",
+  "When would a copy-on-write path update be preferable to rebuilding all levels, and what ownership primitive makes that safe in Rust?",
 ]
 
 const workingLoop = [
@@ -241,7 +242,7 @@ export function PageCh38MerkleTreeGamesAndChallengesExercises() {
               <p className="text-sm text-muted-foreground leading-6">
                 Treat each exercise as a commitment-system review. The strongest answer explains which bytes are committed,
                 how proofs are reproduced, where the root becomes durable, and which queue or parallel boundary is really worth
-                proof handling, and challenge tracks with visible scoring.
+                the proof overhead.
               </p>
             </div>
             <Button variant="outline" onClick={() => setCurrentPage(mainPageIndex)} className="gap-2 shrink-0">
@@ -348,7 +349,9 @@ export function PageCh38MerkleTreeGamesAndChallengesExercises() {
           description={
             <>
               Repair the verifier so it recomputes the root with the correct sibling orientation. The checker expects the
-              real proof to validate for the good leaf and fail for a tampered leaf.
+              real proof to validate for the good leaf and fail for a tampered leaf. This lab uses an even four-leaf tree, so
+              the odd-leaf duplication policy never fires here — once the verifier works, revisit Exercise 1 and trace what a
+              three-leaf tree would change about the proof.
             </>
           }
           filename="merkle_proof_verify_lab.rs"

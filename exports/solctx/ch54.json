@@ -6,7 +6,7 @@
   {
    "number": 1,
    "kind": "warm-up comprehension",
-   "title": "Name what the session owns and what you own",
+   "title": "Identify what the session owns and what you own",
    "objective": "Restate the three-stage inference pipeline and identify which stage the ONNX runtime is responsible for.",
    "starterPrompt": "The chapter frames inference as a three-stage pipeline with the session in the middle: raw input becomes a tensor, the session turns that tensor into output tensors, and post-processing turns those into a domain decision. In your own words, describe each stage and assign ownership of correctness.",
    "prompts": [
@@ -100,7 +100,7 @@
    "kind": "debugging or refactoring",
    "title": "Diagnose a shape and dtype mismatch",
    "objective": "Reason about why a tensor whose shape or dtype disagrees with the graph either errors or silently returns wrong answers.",
-   "starterPrompt": "A colleague's session run sometimes errors and sometimes returns confident nonsense after they changed the input builder. The graph declares a named input of shape [4] with dtype f32, but their code now passes a length-3 vector in one path and an i64 buffer in another. Explain each failure and fix the contract.",
+   "starterPrompt": "A colleague's session run sometimes errors and sometimes returns confident nonsense because they changed the input builder. The graph declares a named input of shape [4] with dtype f32, but their code now passes a length-3 vector in one path and an i64 buffer in another. Explain each failure and fix the contract.",
    "prompts": [
     "Explain what happens when the input length is 3 but the graph fixed the input dimension at 4.",
     "Explain why passing an i64 buffer where the graph expects f32 is a different class of bug.",

@@ -94,7 +94,7 @@
   },
   {
    "number": 5,
-   "kind": "debugging or refactoring",
+   "kind": "design",
    "title": "Parallelize the wide levels, not the whole idea blindly",
    "objective": "Choose where parallelism helps and where it only adds scheduler cost.",
    "starterPrompt": "You want faster tree construction for large batches. Sketch a level-wise parallel build with Rayon or another worker strategy, then decide when the build should fall back to serial work near the root.",
@@ -118,7 +118,7 @@
   {
    "number": 6,
    "kind": "design or production scenario",
-   "title": "Choose challenge tracks for content-addressed storage, game integrity, and distributed verification",
+   "title": "Design three Merkle-backed production systems",
    "objective": "Turn the chapter topics into three production-shaped challenge designs with explicit budgets and replay policy.",
    "starterPrompt": "Design three systems: a chunk store keyed by hash, a tamper-evident game checkpoint feed, and a verifier service that checks remote proofs before downloading full payloads.",
    "prompts": [
@@ -144,7 +144,8 @@
   "Why are flat levels usually calmer than pointer trees for Merkle workloads?",
   "What makes sibling orientation part of the proof itself?",
   "When is level-wise parallelism worth the overhead, and when should it stop?",
-  "Why should a proof envelope carry more than only the sibling hashes?"
+  "Why should a proof envelope carry more than only the sibling hashes?",
+  "When would a copy-on-write path update be preferable to rebuilding all levels, and what ownership primitive makes that safe in Rust?"
  ],
  "lab": {
   "title": "Runnable lab · Verify one inclusion proof",

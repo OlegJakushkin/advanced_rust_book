@@ -312,6 +312,15 @@ export function PageCh45CapstoneDistributedRustSystem() {
               <Button variant="outline" onClick={() => setCurrentPage(chapter31PageIndex)}>
                 Chapter 31
               </Button>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter32PageIndex)}>
+                Chapter 32
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter36PageIndex)}>
+                Chapter 36
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter37PageIndex)}>
+                Chapter 37
+              </Button>
               <Button variant="outline" onClick={() => setCurrentPage(chapter38PageIndex)}>
                 Chapter 38
               </Button>
@@ -397,7 +406,7 @@ export function PageCh45CapstoneDistributedRustSystem() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Pipeline walkthrough</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
             The sections below walk the same pipeline left to right: the domain model that defines the unit of work, the

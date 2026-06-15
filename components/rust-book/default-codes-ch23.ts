@@ -121,7 +121,7 @@ fn main() {
                 thread::yield_now();
             }
 
-            println!("ready = {}", true);
+            println!("ready = {}", ready.load(Ordering::Acquire));
             println!("value = {}", value.load(Ordering::Relaxed));
         });
     });

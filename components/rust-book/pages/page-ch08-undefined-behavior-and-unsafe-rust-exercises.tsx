@@ -48,7 +48,7 @@ const exercises: Exercise[] = [
     title: "Find the UB risks in a raw-pointer copy helper",
     objective: "Practice spotting the real missing proof obligations in a pointer-based routine.",
     starterPrompt:
-      "Review a function that takes `dst: *mut u8`, `src: *const u8`, and `len: usize`, loops with pointer arithmetic, and is exposed as a safe public function with no checks.",
+      "Review a function that takes `dst: *mut u8`, `src: *const u8`, and `len: usize`, loops with pointer arithmetic, and is exposed as a safe public function that performs no validation of its raw-pointer arguments before use.",
     prompts: [
       "Which caller obligations are currently undocumented?",
       "Should the function stay safe, become `unsafe fn`, or be redesigned around slices?",
@@ -80,6 +80,7 @@ const exercises: Exercise[] = [
       "Short buffers return `Err(\"buffer too small\")` exactly.",
       "Long enough buffers return `Ok(())` and contain the marker `RST!`.",
       "The unsafe region stays small and depends on an explicit length check.",
+      "Your unsafe block is preceded by a `// SAFETY:` comment that names the precondition the length check established.",
     ],
     hints: [
       "The unsafe block should begin only after the precondition is already true.",
@@ -92,7 +93,7 @@ const exercises: Exercise[] = [
     title: "Move `assume_init` to the only valid place",
     objective: "Repair a `MaybeUninit` design that treats uninitialized storage as a finished value too early.",
     starterPrompt:
-      "You inherit code that creates `MaybeUninit<[u32; 4]>`, calls `assume_init()` immediately, and then writes only some elements afterward. Refactor the flow so initialization becomes explicit and ordered correctly.",
+      "You inherit code that creates `MaybeUninit<[u32; 4]>`, calls `assume_init()` immediately after declaring the storage (or casts the result to a mutable pointer to write through it), leaving some elements uninitialized. Refactor the flow so initialization becomes explicit and ordered correctly. Note: this exercise uses `[u32; 4]` rather than the `[u8; 4]` from the chapter example; the discipline is identical, only the element type and stride change.",
     prompts: [
       "Where should writes occur relative to `assume_init`?",
       "What must be true before the final array exists as a real `[u32; 4]`?",
@@ -203,7 +204,11 @@ export function PageCh08UndefinedBehaviorAndUnsafeRustExercises() {
                 who enforces it, and chooses an API shape that makes the truth visible to callers.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(14)} className="gap-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(getPageIndexById("ch08-undefined-behavior-and-unsafe-rust"))}
+              className="gap-2 shrink-0"
+            >
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 08
             </Button>

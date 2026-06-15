@@ -11,6 +11,7 @@ struct WindowStats {
 }
 
 fn end_to_end_p95_ms(stats: &WindowStats) -> u64 {
+    // approximation: sums two p95 values; accurate only when queue and run times are co-monotone
     stats.queue_p95_ms + stats.run_p95_ms
 }
 
@@ -63,6 +64,7 @@ fn critical_path(stages: &[Stage]) -> (u64, &'static str) {
 
         totals[id] = upstream + stage.queue_ms + stage.run_ms;
 
+        // ties: last-processed stage wins; deterministic but arbitrary
         if totals[id] >= best {
             best = totals[id];
             tail = stage.name;

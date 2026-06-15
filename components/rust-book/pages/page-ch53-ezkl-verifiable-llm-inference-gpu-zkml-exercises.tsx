@@ -205,8 +205,8 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkmlExercises() {
         </div>
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
-          Practice EZKL-style ZKML design the way it survives production review: artifact classification, queue-backed
-          proving lanes, witness-free verifier requests, and profiling that keeps GPU claims honest.
+          Practice EZKL-style ZKML design as it would hold up in a production review: artifact classification,
+          queue-backed proving lanes, witness-free verifier requests, and profiling that keeps GPU claims honest.
         </p>
       </div>
 
@@ -315,9 +315,9 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkmlExercises() {
           helperText={
             <>
               Tip: the proving lane and verification lane are different contracts. Keep{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">witness_included</code> false, count the
-              public outputs with <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">len()</code>, and copy
-              the proof path rather than the witness path into the verifier request.
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">witness_included</code> false, call{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">job.public_outputs.len()</code> to count
+              the public outputs, and copy the proof path rather than the witness path into the verifier request.
             </>
           }
           initialCode={`#[derive(Debug, Clone)]

@@ -153,14 +153,14 @@ export function PageCh06OwnershipInsideVectors() {
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 04 explained borrowing and lifetime relationships. Chapter 05 moved those rules into struct field
                 design. This chapter applies the same discipline to collections, where growth, reordering, and temporary
-                views make ownership mistakes especially easy to import from C++, C#, or Go.
+                views expose the ownership habits engineers coming from C++, C#, or Go tend to carry in.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(6)}>
+              <Button variant="outline" onClick={() => setCurrentPage(8)}>
                 Revisit Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(10)}>
                 Revisit Chapter 05
               </Button>
             </div>
@@ -258,7 +258,7 @@ export function PageCh06OwnershipInsideVectors() {
               Rust rejects the code at the second step rather than letting the third one happen at runtime.
             </p>
             <MermaidDiagram
-              chart={`flowchart TD\n  A["take r = &vec[0]"] --> B["call vec.push(x)"]\n  B --> C{"len > cap?"}\n  C -->|no| D["same buffer, r still valid"]\n  C -->|yes| E["allocate new buffer, move elements"]\n  E --> F["r points at freed memory"]\n  F --> G["compile error: cannot borrow vec as mutable while borrowed"]`}
+              chart={`flowchart TD\n  A["take r = &vec[0]"] --> B["call vec.push(x)"]\n  B --> C{"len > cap?"}\n  C -->|no| D["same buffer, r still valid"]\n  C -->|yes| E["allocate new buffer, move elements"]\n  E --> F["r points at freed memory"]\n  F --> G["compile error: cannot borrow as mutable while immutably borrowed"]`}
               caption="Growth past capacity relocates the buffer, which would dangle the earlier borrow. Rust forbids the conflicting mutable access at compile time."
             />
             <div className="mt-4 rounded-lg border border-border bg-card p-4">
@@ -593,7 +593,7 @@ export function PageCh06OwnershipInsideVectors() {
             index-based ones, choose between plain vectors and stable-address patterns, and implement safe mutation while
             iterating.
           </p>
-          <Button onClick={() => setCurrentPage(11)} className="gap-2">
+          <Button onClick={() => setCurrentPage(13)} className="gap-2">
             Open Chapter 06 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

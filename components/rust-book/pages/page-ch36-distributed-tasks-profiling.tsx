@@ -274,10 +274,8 @@ export function PageCh36DistributedTasksProfiling() {
           <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="text-lg font-semibold text-foreground mb-3">At a glance</h3>
             <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
-              <li>Profile distributed work from enqueue to durable completion, not only inside the handler body.</li>
-              <li>Treat queue wait, retry amplification, worker saturation, and graph fan-in as first-class latency layers.</li>
-              <li>Use critical-path thinking for DAG workloads instead of trusting stage-local averages.</li>
-              <li>Count retries as real traffic before sizing queues, workers, or accelerators.</li>
+              <li>The latency a user feels is a sum of layers; this chapter is about attributing it to the right one.</li>
+              <li>Handler time is the layer that most often looks fine while the queue, retries, or fan-in are the problem.</li>
             </ul>
           </div>
 
@@ -569,7 +567,7 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
               <TriangleAlert className="h-5 w-5 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
                 The fastest way to misprofile a distributed worker system is to measure only handler CPU and call the rest
-                “overhead.” Queue age, retries, fan-in, and replay often are the system.
+                &ldquo;overhead.&rdquo; Queue age, retries, fan-in, and replay often are the system.
               </p>
             </div>
           </div>
@@ -617,15 +615,8 @@ in_flight ≈ arrival_rate * time_in_system`}</code>
               <span className="text-foreground"> same</span> sample window, which is what lets you compare them honestly.
             </p>
             <MermaidDiagram
-              chart={`flowchart TD\n  Samples[(task samples)] --> E2E[p95 end-to-end]\n  Samples --> Q[p95 queue wait]\n  Samples --> Sat[busy / total]\n  Samples --> Retry[retried / claimed]\n  E2E --> Cont[four reductions, continue below]\n  Q --> Cont\n  Sat --> Cont\n  Retry --> Cont`}
-              caption="Fan-out: one sample window splits into four independent reductions — percentiles for the latencies, a ratio for saturation, a rate for retries."
-            />
-            <p className="text-sm text-muted-foreground leading-6">
-              The four reductions then converge back into a single operator window:
-            </p>
-            <MermaidDiagram
-              chart={`flowchart TD\n  Cont[four reductions] --> E2E[p95 end-to-end]\n  Cont --> Q[p95 queue wait]\n  Cont --> Sat[busy / total]\n  Cont --> Retry[retried / claimed]\n  E2E --> Win[[operator window]]\n  Q --> Win\n  Sat --> Win\n  Retry --> Win`}
-              caption="Fan-in: the four numbers fold back into one summary. Read together, they say whether the cost is waiting, running, capacity, or replay."
+              chart={`flowchart TD\n  Samples[(task samples)] --> E2E[p95 end-to-end]\n  Samples --> Q[p95 queue wait]\n  Samples --> Sat[busy / total]\n  Samples --> Retry[retried / claimed]\n  E2E --> Win[[operator window]]\n  Q --> Win\n  Sat --> Win\n  Retry --> Win`}
+              caption="One sample window splits into four independent reductions — percentiles for the latencies, a ratio for saturation, a rate for retries — and they fold back into one summary. Read together, the four numbers say whether the cost is waiting, running, capacity, or replay."
             />
             <RustCodeEditor
               code={codes.distributed_profiling_latency_window}

@@ -56,7 +56,7 @@ const comparisons = [
 const borrowingRules = [
   "At any point, you may have any number of shared references (`&T`) or exactly one mutable reference (`&mut T`).",
   "A reference must never outlive the owner it points into.",
-  "The compiler reasons about when a borrow is last used, not only where the lexical block ends.",
+  "The compiler reasons about when a borrow is last used, not only where the lexical block ends (non-lexical lifetimes).",
   "If mutation and aliasing are both required, the design usually needs a narrower scope, a split data structure, interior mutability with explicit tradeoffs, or a different ownership boundary.",
 ]
 
@@ -148,10 +148,16 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(2)}>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))}
+              >
                 Revisit Chapter 02
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(4)}>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentPage(getPageIndexById("ch03-project-structure-and-tooling"))}
+              >
                 Revisit Chapter 03
               </Button>
             </div>
@@ -554,7 +560,10 @@ export function PageCh04OwnershipBorrowingAndLifetimes() {
             The exercise page asks you to repair borrow-checker failures without cloning by reflex, decide when explicit
             lifetime annotations are required, and design APIs that take borrowed input while returning owned output.
           </p>
-          <Button onClick={() => setCurrentPage(7)} className="gap-2">
+          <Button
+            onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes-exercises"))}
+            className="gap-2"
+          >
             Open Chapter 04 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

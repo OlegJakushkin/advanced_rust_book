@@ -10,6 +10,22 @@ import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
 import { Button } from "@/components/ui/button"
 
+// Render a plain string that uses `backticks` for inline code as a JSX fragment
+// with real <code> spans, since these strings are placed directly in the DOM
+// with no Markdown processor between them and the browser.
+function renderInlineCode(text: string) {
+  const parts = text.split("`")
+  return parts.map((part, index) =>
+    index % 2 === 1 ? (
+      <code key={index} className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">
+        {part}
+      </code>
+    ) : (
+      <span key={index}>{part}</span>
+    ),
+  )
+}
+
 const mentalModelPoints = [
   {
     title: "Rust answers type identity, not open-ended object inspection",
@@ -53,7 +69,7 @@ const anyTypeIdCards = [
   },
   {
     title: "`'static` matters",
-    body: "`Any` is usually about `'static` concrete types. Borrowed data with shorter lifetimes is usually the wrong fit for long-lived erased storage.",
+    body: "`Any` requires `'static` concrete types. Borrowed data with shorter lifetimes cannot be erased into a long-lived `Box<dyn Any>`.",
     code: `fn insert<T: 'static>(&mut self, value: T)`,
   },
 ]
@@ -240,7 +256,8 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <h2 className="text-3xl font-bold text-foreground mb-2">{page.title}</h2>
         <p className="text-muted-foreground max-w-3xl mx-auto">
           Runtime introspection is limited in Rust, so production systems need explicit metadata and generated
-          descriptors. This chapter covers trait-based inspection, registries, and schema surfaces.
+          descriptors. This chapter covers trait-based inspection, registries, compile-time code generation, and schema
+          surfaces.
         </p>
       </div>
 
@@ -280,7 +297,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
             <h4 className="font-semibold text-foreground mb-2">A practical decision order</h4>
             <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
               <li>Start with ordinary structs, enums, and trait methods.</li>
-              <li>If one container truly must store heterogeneous values, consider `Any` plus `TypeId`.</li>
+              <li>{renderInlineCode("If one container truly must store heterogeneous values, consider `Any` plus `TypeId`.")}</li>
               <li>If the source code already knows the shape, prefer macros or schema generation at compile time.</li>
               <li>If operators or plugins need metadata, make that metadata an explicit API.</li>
             </ol>
@@ -290,7 +307,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+            <h3 className="text-lg font-semibold text-foreground">What Rust answers at runtime, and what it does not</h3>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -305,7 +322,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">The four introspection tools, and when to use each</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -389,8 +406,9 @@ export function PageCh21ReflectionAndTypeIntrospection() {
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-900 dark:text-amber-200 leading-6">
-                A key correction for reflection-heavy backgrounds: `TypeId` is runtime type identity, not a schema, not a
-                field list, and not a stable public protocol key.
+                {renderInlineCode(
+                  "A key correction for reflection-heavy backgrounds: `TypeId` is runtime type identity, not a schema, not a field list, and not a stable public protocol key.",
+                )}
               </p>
             </div>
           </div>
@@ -465,6 +483,25 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <Button variant="outline" onClick={() => setCurrentPage(chapter20PageIndex)} className="shrink-0">
                 Revisit Chapter 20
               </Button>
+            </div>
+            <div className="mt-5">
+              <p className="text-sm text-muted-foreground leading-6 mb-3">
+                {renderInlineCode(
+                  "Here is the one compiler-built label in action. `type_name::<T>()` returns a human-readable string that includes the module path, which is handy in a log line and useless as a contract key. Notice that the printed label carries the crate and module names, so it can change when you rename or move a type.",
+                )}
+              </p>
+              <RustCodeEditor
+                code={codes.reflection_type_name_labels}
+                onChange={(newCode) => updateCode("reflection_type_name_labels", newCode)}
+                onRun={() => runCode("reflection_type_name_labels")}
+                output={outputs.reflection_type_name_labels ?? null}
+                isRunning={isRunning === "reflection_type_name_labels"}
+                filename="type_name_labels.rs"
+                expectedOutput={"retries = 3\ntype label = type_name_labels::RetryBudget\nu32 label = u32"}
+                showResultComparison={true}
+                originalCode={DEFAULT_CODES.reflection_type_name_labels}
+                onRevert={() => resetCode("reflection_type_name_labels")}
+              />
             </div>
           </div>
 
@@ -561,7 +598,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <div className="grid gap-3 lg:grid-cols-2">
             {productionPatterns.map((pattern) => (
               <div key={pattern} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pattern}</p>
+                <p className="text-sm text-muted-foreground leading-6">{renderInlineCode(pattern)}</p>
               </div>
             ))}
           </div>
@@ -575,7 +612,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <div className="grid gap-3 lg:grid-cols-2">
             {pitfalls.map((pitfall) => (
               <div key={pitfall} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-muted-foreground leading-6">{pitfall}</p>
+                <p className="text-sm text-muted-foreground leading-6">{renderInlineCode(pitfall)}</p>
               </div>
             ))}
           </div>
@@ -599,7 +636,9 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h4 className="font-semibold text-foreground">Example 1: a small `TypeId` + `Any` registry</h4>
+                <h4 className="font-semibold text-foreground">
+                  Example 1: a small {renderInlineCode("`TypeId`")} + {renderInlineCode("`Any`")} registry
+                </h4>
                 <p className="text-sm text-muted-foreground mt-1">
                   The container is erased, but recovery is still type-checked and explicit.
                 </p>
@@ -646,7 +685,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Registry key</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `TypeId` keys the erased store by concrete type, not by string name.
+                  {renderInlineCode("`TypeId` keys the erased store by concrete type, not by string name.")}
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -723,7 +762,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Downcast escape hatch</div>
                 <p className="text-xs text-muted-foreground leading-5">
-                  `as_any()` is there for one narrow specialized query, not for every call.
+                  {renderInlineCode("`as_any()` is there for one narrow specialized query, not for every call.")}
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -749,8 +788,9 @@ export function PageCh21ReflectionAndTypeIntrospection() {
         <section className="rounded-xl border border-border bg-card p-5">
           <h3 className="text-lg font-semibold text-foreground mb-3">Exercises</h3>
           <p className="text-sm text-muted-foreground leading-6 mb-4">
-            The companion exercise page asks you to build a small `TypeId` registry, downcast safely from erased values,
-            and design explicit metadata for a plugin boundary instead of leaning on broad runtime reflection.
+            {renderInlineCode(
+              "The companion exercise page asks you to build a small `TypeId` registry, downcast safely from erased values, and design explicit metadata for a plugin boundary instead of leaning on broad runtime reflection.",
+            )}
           </p>
           <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 21 Exercises
@@ -762,7 +802,7 @@ export function PageCh21ReflectionAndTypeIntrospection() {
           <h3 className="text-lg font-semibold text-foreground mb-3">Summary</h3>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>Rust has limited runtime reflection on purpose. It offers narrow tools, not broad object inspection.</li>
-            <li>`Any` and `TypeId` are useful for erased storage and checked recovery inside one process.</li>
+            <li>{renderInlineCode("`Any` and `TypeId` are useful for erased storage and checked recovery inside one process.")}</li>
             <li>Downcasting is an edge tool. Common behavior should stay on traits, enums, and explicit descriptors.</li>
             <li>Compile-time macros and schema generation cover many reflection-like needs more cleanly than runtime inspection.</li>
             <li>Plugin systems, admin surfaces, and public protocols are usually best served by explicit metadata systems.</li>

@@ -77,8 +77,8 @@ const workflowCommands = [
     why: "Fast structural feedback while you are still moving modules, traits, and boundaries around.",
   },
   {
-    command: "cargo test --workspace --all-targets",
-    why: "Covers unit tests, integration tests, examples, and other defined targets from one command entry point.",
+    command: "cargo test --workspace --all-targets --all-features",
+    why: "Covers unit tests, integration tests, examples, and other defined targets from one command entry point, with every feature-gated path compiled so optional code cannot rot.",
   },
   {
     command: "cargo fmt --all --check",
@@ -166,7 +166,7 @@ export function PageCh03ProjectStructureAndTooling() {
                 and explains the Cargo layouts you would create in a real Rust repository.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(2)} className="shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(3)} className="shrink-0">
               Revisit Chapter 02
             </Button>
           </div>
@@ -265,8 +265,8 @@ export function PageCh03ProjectStructureAndTooling() {
                 <p className="text-sm text-muted-foreground leading-6">
                   Modules are how you hide detail inside a crate. The default visibility is private, which is a strong
                   default to keep. Reach first for{" "}
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(crate)</code>, then{" "}
-                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(super)</code>, and only then
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(super)</code>, then{" "}
+                  <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub(crate)</code>, and only then
                   full <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub</code> when you truly
                   mean external callers.
                 </p>
@@ -283,7 +283,7 @@ export function PageCh03ProjectStructureAndTooling() {
             </div>
 
             <p className="mt-4 text-sm text-muted-foreground leading-6">
-              What to look at: visibility is a ladder, not a switch. Each rung widens who can reach an item, and each
+              Visibility is a ladder, not a switch. Each rung widens who can reach an item, and each
               rung up is harder to walk back later because more callers can depend on it. Climb only as far as a real
               caller forces you to, and shape the public path with a deliberate{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">pub use</code> at the crate root.
@@ -326,7 +326,7 @@ export function PageCh03ProjectStructureAndTooling() {
             </div>
 
             <p className="mt-4 text-sm text-muted-foreground leading-6">
-              What to look at in the diagram: the feature is decided once, on the left, before the compiler runs, and
+              In the diagram, the feature is decided once, on the left, before the compiler runs, and
               everything downstream is fixed for that whole build. A runtime decision sits on the opposite side — it
               branches per request inside a single binary. Choosing the wrong side is the classic feature-flag mistake.
             </p>
@@ -367,7 +367,10 @@ export function PageCh03ProjectStructureAndTooling() {
                 <p className="text-sm text-muted-foreground leading-6">
                   Commit <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Cargo.lock</code> for
                   binaries and services so production resolution stays reproducible. Library crates also keep a lockfile
-                  in the repository for CI sanity, but downstream consumers still resolve their own graph.
+                  in the repository for CI sanity, but downstream consumers still resolve their own graph. A library
+                  cannot pin its consumers&apos; versions because each consumer resolves the full dependency graph from
+                  its own set of dependencies, so the library&apos;s lockfile only governs its own CI build, never the
+                  builds that depend on it.
                 </p>
               </div>
             </div>
@@ -509,10 +512,12 @@ export function PageCh03ProjectStructureAndTooling() {
               )}
             </div>
             <p className="text-sm text-muted-foreground leading-6 mb-1">
-              What to look at: <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">service_name</code> is
+              Here <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">service_name</code> is
               public, but <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">bind_addr</code> is a
-              private field reached only through a method. Callers get the value without getting the right to depend on
-              how it is stored, which is exactly the seam the diagram traces.
+              private field reached only through a method. The public field is kept here on purpose so the two paths sit
+              side by side: a real service usually hides both behind accessors, but exposing one and gating the other
+              makes the contrast visible. Callers read <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">bind_addr</code>{" "}
+              without getting the right to depend on how it is stored, which is exactly the seam the diagram traces.
             </p>
             <MermaidDiagram
               chart={`flowchart TD\n  C[main caller] -->|new| K[AppConfig::new constructor]\n  K --> S[(private bind_addr field)]\n  C -->|read| A[bind_addr accessor]\n  A --> S\n  C -.->|cannot touch directly| S`}
@@ -560,7 +565,7 @@ export function PageCh03ProjectStructureAndTooling() {
               )}
             </div>
             <p className="text-sm text-muted-foreground leading-6 mb-1">
-              What to look at: the example uses a plain{" "}
+              The example uses a plain{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">const</code> so it runs in one file,
               but read it as the right-hand runtime branch in the diagram below. The exercise is to decide whether this
               choice should instead move left, to a compile-time feature, so the unused backend never enters the binary
@@ -598,7 +603,7 @@ export function PageCh03ProjectStructureAndTooling() {
             dependency policy, and write the baseline test/lint/benchmark commands you would expect in a
             production Rust workspace.
           </p>
-          <Button onClick={() => setCurrentPage(5)} className="gap-2">
+          <Button onClick={() => setCurrentPage(6)} className="gap-2">
             Open Chapter 03 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

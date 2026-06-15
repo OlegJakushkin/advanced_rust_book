@@ -79,11 +79,9 @@ impl<'a, T> MatrixView<'a, T> {
 
 fn trace<const N: usize>(matrix: [[i32; N]; N]) -> i32 {
     let mut sum = 0;
-    let mut i = 0;
 
-    while i < N {
+    for i in 0..N {
         sum += matrix[i][i];
-        i += 1;
     }
 
     sum

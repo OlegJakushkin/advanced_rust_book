@@ -100,7 +100,7 @@
    "kind": "debugging or refactoring",
    "title": "Fix a manual future that never yields",
    "objective": "Diagnose and repair a poll implementation whose state transitions are wrong so the executor spins or completes too early.",
-   "starterPrompt": "A colleague's Handshake-style future returns Poll::Ready on its very first poll even though it should pass through a Waiting stage first, and a second variant accidentally returns Pending forever. Repair the match arms so it yields Pending a bounded number of times and then completes.",
+   "starterPrompt": "Repair this colleague's Handshake-style future. Its poll body is: match self.stage { Stage::Start => Poll::Ready(\"connected\"), Stage::Waiting => Poll::Pending, Stage::Done => Poll::Ready(\"connected\") }. The Start arm returns Poll::Ready on the very first poll even though it should pass through a Waiting stage first, and the Waiting arm returns Pending forever without changing any state. Fix the match arms so the future yields Pending a bounded number of times and then completes.",
    "prompts": [
     "Identify the arm that returns Ready before any Pending and explain why that defeats the point of the future.",
     "Identify the arm that never advances the Stage and would make block_on loop forever.",
@@ -140,6 +140,29 @@
     "The chapter's rule: cancel usually means drop the future, and the ownership rule stays the same across runtimes.",
     "Structured concurrency makes the parent own the whole fan-out and wait for or drop every child."
    ]
+  },
+  {
+   "number": 7,
+   "kind": "debugging or refactoring",
+   "title": "Repair a future that fails the Send bound at a spawn boundary",
+   "objective": "Diagnose why a future captured into a spawn-style boundary is rejected as not Send, and fix it by owning thread-safe data instead of an Rc.",
+   "starterPrompt": "A spawn-style function require_send_spawn<F>(future: F) where F: Future<Output = String> + Send + 'static accepts a future from async fn render(config: Rc<String>). The compiler reports that the future is not Send. Explain the error and convert render so its future satisfies Send + 'static.",
+   "prompts": [
+    "Read the compiler error and name the exact captured value that makes the future non-Send.",
+    "Explain why the Send bound applies to the whole future rather than only to data held across an .await.",
+    "Change Rc<String> to a thread-safe owned type so the future becomes Send + 'static.",
+    "Confirm the corrected future is accepted by require_send_spawn and can be driven to its String result."
+   ],
+   "acceptanceCriteria": [
+    "The diagnosis names Rc<String> as the captured value that is not Send, which is why the whole future is rejected.",
+    "The answer explains that a spawn boundary needs the entire future to be Send + 'static, because the runtime may move it across worker threads.",
+    "render is changed to take Arc<String> (or another Send + 'static owned type) so the generated future is Send.",
+    "The corrected future passes require_send_spawn and produces \"rendered with prod-config\" when driven to completion."
+   ],
+   "hints": [
+    "Rc<T> is not Send; Arc<T> is the thread-safe shared owner with the same clone-on-share shape.",
+    "The future stores its captured argument as a field, so a non-Send argument makes the whole future non-Send even with no .await between captures."
+   ]
   }
  ],
  "reviewQuestions": [
@@ -147,7 +170,8 @@
   "What does the compiler build from an async function, and what determines which locals become fields of that state machine?",
   "Why does Future::poll take a Pin<&mut Self> receiver rather than a plain &mut Self?",
   "What are the two cooperating parts of an async runtime, and what does each one do?",
-  "In async Rust, what does cancelling a future mean operationally, and what is the future author still responsible for?"
+  "In async Rust, what does cancelling a future mean operationally, and what is the future author still responsible for?",
+  "Why does a future fail the Send bound at a spawn boundary, and how do async fn in traits force the same Send question back into the design?"
  ],
  "lab": {
   "title": "Runnable lab · a hand-written handshake future",
@@ -155,14 +179,13 @@
   "runKey": "ch24_ex_handshake",
   "expectedOutput": "poll = pending\npoll = pending\nresult = session-open\npending count = 2",
   "helperText": "Implement the poll state machine so the Handshake future advances one Stage per poll and yields Poll::Pending until it reaches Ready. The driver block_on counts how many times it had to poll while pending.",
-  "initialCode": "use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\n#[derive(Debug, Clone, Copy, PartialEq)]\nenum Stage {\n    Connect,\n    Authenticate,\n    Ready,\n}\n\nstruct Handshake {\n    stage: Stage,\n    polls: u32,\n}\n\nimpl Future for Handshake {\n    type Output = &'static str;\n\n    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        self.polls += 1;\n        // TODO: advance `self.stage` one step per poll:\n        //   Connect      -> Authenticate, return Poll::Pending\n        //   Authenticate -> Ready,        return Poll::Pending\n        //   Ready        -> return Poll::Ready(\"session-open\")\n        // The placeholder below completes immediately and never yields.\n        Poll::Ready(\"not-implemented\")\n    }\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn block_on<F: Future>(future: F) -> (F::Output, u32) {\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut future = Box::pin(future);\n    let mut pending = 0u32;\n    loop {\n        match future.as_mut().poll(&mut cx) {\n            Poll::Ready(value) => return (value, pending),\n            Poll::Pending => {\n                pending += 1;\n                println!(\"poll = pending\");\n            }\n        }\n    }\n}\n\nfn main() {\n    let handshake = Handshake {\n        stage: Stage::Connect,\n        polls: 0,\n    };\n    let (result, pending_count) = block_on(handshake);\n    println!(\"result = {}\", result);\n    println!(\"pending count = {}\", pending_count);\n}\n"
+  "initialCode": "use std::future::Future;\nuse std::pin::Pin;\nuse std::sync::Arc;\nuse std::task::{Context, Poll, Wake, Waker};\n\n#[derive(Debug, Clone, Copy, PartialEq)]\nenum Stage {\n    Connect,\n    Authenticate,\n    Ready,\n}\n\nstruct Handshake {\n    stage: Stage,\n    // Optional internal counter for your own debugging. It is never printed,\n    // so it does not affect the expected output; remove it if you prefer.\n    polls: u32,\n}\n\nimpl Future for Handshake {\n    type Output = &'static str;\n\n    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {\n        self.polls += 1;\n        // TODO: advance `self.stage` one step per poll:\n        //   Connect      -> Authenticate, return Poll::Pending\n        //   Authenticate -> Ready,        return Poll::Pending\n        //   Ready        -> return Poll::Ready(\"session-open\")\n        // The placeholder below completes immediately and never yields.\n        Poll::Ready(\"not-implemented\")\n    }\n}\n\nstruct NoopWake;\n\nimpl Wake for NoopWake {\n    fn wake(self: Arc<Self>) {}\n}\n\nfn block_on<F: Future>(future: F) -> (F::Output, u32) {\n    let waker = Waker::from(Arc::new(NoopWake));\n    let mut cx = Context::from_waker(&waker);\n    let mut future = Box::pin(future);\n    let mut pending = 0u32;\n    loop {\n        match future.as_mut().poll(&mut cx) {\n            Poll::Ready(value) => return (value, pending),\n            Poll::Pending => {\n                pending += 1;\n                println!(\"poll = pending\");\n            }\n        }\n    }\n}\n\nfn main() {\n    let handshake = Handshake {\n        stage: Stage::Connect,\n        polls: 0,\n    };\n    let (result, pending_count) = block_on(handshake);\n    println!(\"result = {}\", result);\n    println!(\"pending count = {}\", pending_count);\n}\n"
  },
  "proseHeadings": [
   "Builds on Chapters 09, 14, 22, and 23",
-  "Repository note",
   "The problem async is solving",
   "A practical decision order",
-  "Three ideas to anchor the rest of the chapter",
+  "Three core ideas",
   "Coming from another language",
   "Core concepts",
   "Coroutines are the intuition, futures are the mechanism",
@@ -177,6 +200,7 @@
   "Production patterns",
   "Pitfalls and tradeoffs",
   "Examples",
+  "Repository note",
   "Example 1: `async fn`, `.await`, and a tiny `block_on`",
   "Example 2: a manual `Future` that looks like a state machine",
   "Exercises",
@@ -188,14 +212,14 @@
   "The in-browser editor uses tiny std-only examples so the poll model stays visible without pulling in a full runtime. In production, you will usually pair these ideas with an ecosystem executor and reactor such as Tokio or another async runtime.",
   "You are refactoring a service that performs request parsing, several outbound RPCs, cache lookups, and a final database write. Most of that wall-clock time is spent waiting on sockets, not burning CPU. The threads chapter already taught you not to dedicate one OS thread to every ",
   "That efficiency is not free, and the price is paid in questions the runtime makes you answer explicitly. Which values stay borrowed only locally, and which must become owned before a task is spawned? What happens to the other outbound requests if one of them times out and the fan",
-  "If you keep only three things in mind, keep these. Everything later in the chapter is a consequence of them.",
+  "If you keep only three things in mind, keep these. Everything later in the chapter follows from them.",
   "Async exists in C++, C#, Go, and Python too, so you already have an instinct for it. Each of those instincts is right about something and wrong about something else when applied to Rust. The corrections below are the mental-model shifts that matter most before you write any code.",
   "The thread that runs through all four: in Rust, calling an async function produces a value and starts nothing. Execution, thread placement, and cancellation are decisions made by the executor and visible in your types, not conveniences supplied by an ambient runtime.",
   "&ldquo;Coroutine&rdquo; is a fine word for the shape of the code: a function that can pause in the middle and pick up later. But coroutine is not what Rust actually exposes. What you get is a plain value that implements the Future trait, and the only way it ever runs is for an ex",
   "An async fn is sugar for a function that returns an opaque future. Inside that future, each .await is a place where the current future may hand control back to the executor instead of blocking the thread. Read the listing below as three phases: the call builds a future, the execu",
   "The operational point is simple: no thread is blocked by the syntax itself. At .await the current future yields Pending, the executor is free to run other tasks, and it polls this one again only after a waker signals that fetch_row can make progress.",
   "The single most useful model of async Rust is this: the compiler rewrites your function into one enum-shaped state machine. Each .await becomes a variant, the variant holds exactly the locals that must survive that suspension, and poll is a match that advances from one variant to",
-  "A useful senior-level translation is this: an async function is ordinary Rust control flow lowered into one enum-like state machine plus the locals it must keep alive between polls. Once you see it that way, the lifetime and Send rules later in this chapter stop being surprises a",
+  "In plain terms: an async function is ordinary Rust control flow lowered into one enum-like state machine plus the locals it must keep alive between polls. Once you see it that way, the lifetime and Send rules later in this chapter stop being surprises a",
   "Here is the one subtle part. The state machine the compiler generates can hold a reference into itself, for example a borrow of one local that lives across an .await. Such a self-referential value would be corrupted if it were moved in memory, because the internal pointer would s",
   "Many everyday futures are effectively movable and implement Unpin. The runtime boundary still has to respect the general pinned case, which is why the poll signature stays as strong as it does.",
   "A future is inert, so something has to drive it. In production that something is a runtime, and a runtime is really two cooperating parts. The executor is the scheduler that decides which ready task to poll next; the reactor (or IO driver) is the part that watches the operating s",

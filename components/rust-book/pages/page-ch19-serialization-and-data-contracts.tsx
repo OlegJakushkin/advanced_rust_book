@@ -251,7 +251,10 @@ export function PageCh19SerializationAndDataContracts() {
           <p className="mt-3 text-sm text-muted-foreground leading-6">
             Look at where each contract lives in the diagram below: the domain model stays in the center, and each edge
             translates it into a format chosen for that consumer. The point is that no single edge dictates the shape of
-            the core.
+            the core. The two runnable examples later in the chapter cover the first two boundaries, the JSON API and the
+            internal event stream; the WASM and FFI edges are discussed in prose and cards, because illustrating them
+            faithfully needs a real Cargo project with <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">wasm-bindgen</code> or
+            a C ABI rather than the in-browser editor.
           </p>
           <MermaidDiagram
             chart={`flowchart TD\n  D[Order domain model] --> P[Public API DTO]\n  D --> E[Internal event DTO]\n  P -->|JSON| Api[External clients]\n  E -->|compact binary| Stream[Event consumers]`}
@@ -277,7 +280,7 @@ export function PageCh19SerializationAndDataContracts() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+            <h3 className="text-lg font-semibold text-foreground">Three design principles</h3>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -314,7 +317,7 @@ export function PageCh19SerializationAndDataContracts() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Format choices, schema evolution, and boundary contracts</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">

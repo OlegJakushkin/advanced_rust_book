@@ -333,8 +333,8 @@ export function PageCh56NoStdRustConstrainedRuntimeDerivatives() {
           </p>
           <div className="mt-3">
             <MermaidDiagram
-              chart={`flowchart TD\n  MCU["thumbv7em-none-eabihf<br/>microcontroller"] -.stops at.-> Core["core"]\n  Bare["x86_64-unknown-none<br/>freestanding / kernel"] -.stops at.-> Alloc["alloc"]\n  Wasm["wasm32-unknown-unknown<br/>wasm guest"] -.stops at.-> Alloc\n  Linux["aarch64-unknown-linux-gnu<br/>full userspace"] -.reaches.-> Std["std"]`}
-              caption="The target triple decides how far up the stack you may reach: firmware stops at core, kernel and wasm reach alloc, a Linux userspace reaches std."
+              chart={`flowchart TD\n  MCU["thumbv7em-none-eabihf<br/>microcontroller"] -.stops at.-> Core["core"]\n  Bare["x86_64-unknown-none<br/>freestanding / kernel"] -.stops at.-> Core\n  Wasm["wasm32-unknown-unknown<br/>wasm guest"] -.stops at.-> Core\n  Bare -.alloc once an allocator is wired.-> Alloc["alloc"]\n  Wasm -.alloc once an allocator is wired.-> Alloc\n  Linux["aarch64-unknown-linux-gnu<br/>full userspace"] -.reaches.-> Std["std"]`}
+              caption="The target triple decides how far up the stack you may reach: every freestanding triple stops at core by default. x86_64-unknown-none and wasm32-unknown-unknown reach alloc only once a custom #[global_allocator] is wired in; a Linux userspace gets alloc and std for free."
             />
           </div>
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
@@ -411,13 +411,13 @@ aarch64-unknown-linux-gnu // full std userspace`}</code>
                 the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">std</code> feature. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">checksum</code> takes
                 only a slice and so compiles everywhere. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">encode_frame</code> returns
                 an owned <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;u8&gt;</code> and is therefore behind the alloc
-                door. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">write_diagnostic</code> touches the OS and lives behind the std door. A
+                door. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">write_diagnostic</code> formats a host-facing diagnostic string for an environment with an OS and lives behind the std door. A
                 firmware build enables nothing extra and sees only the first function; a server build enables std and sees
                 all three. The diagram traces those three paths before you read the code.
               </p>
               <div className="mt-3">
                 <MermaidDiagram
-                  chart={`flowchart TD\n  Caller["downstream crate"] --> Feat{enabled features?}\n  Feat -->|none| C["checksum(&[u8]) -> u32<br/>core only"]\n  Feat -->|alloc| A["encode_frame -> Vec&lt;u8&gt;<br/>owned helper"]\n  Feat -->|std| S["write_diagnostic -> io::Result<br/>host adapter"]\n  C --> Cont["each door has a target requirement, continues below"]\n  A --> Cont\n  S --> Cont`}
+                  chart={`flowchart TD\n  Caller["downstream crate"] --> Feat{enabled features?}\n  Feat -->|none| C["checksum(&[u8]) -> u32<br/>core only"]\n  Feat -->|alloc| A["encode_frame -> Vec&lt;u8&gt;<br/>owned helper"]\n  Feat -->|std| S["write_diagnostic -> String<br/>host adapter"]\n  C --> Cont["each door has a target requirement, continues below"]\n  A --> Cont\n  S --> Cont`}
                   caption="One crate, three feature-gated doors. The smallest contract (checksum) is the only one every target must support."
                 />
               </div>
@@ -445,7 +445,7 @@ pub fn checksum(bytes: &[u8]) -> u32 { /* core only */ }
 pub fn encode_frame(bytes: &[u8]) -> alloc::vec::Vec<u8> { /* owned helper */ }
 
 #[cfg(feature = "std")]
-pub fn write_diagnostic(line: &str) -> std::io::Result<()> { /* host adapter */ }`}</code>
+pub fn write_diagnostic(service: &str, checksum: u32) -> String { /* host adapter */ }`}</code>
                 </pre>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
@@ -630,7 +630,7 @@ impl Register {
         unsafe { read_volatile(self.0) }
     }
 
-    fn write(&self, value: u32) {
+    fn write(&mut self, value: u32) {
         unsafe { write_volatile(self.0, value) }
     }
 }`}</code>

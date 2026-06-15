@@ -253,9 +253,11 @@ export function PageCh18GenericsInsteadOfTemplates() {
               <p className="text-sm text-muted-foreground leading-6">
                 These four features form a ladder. A bare type parameter such as{" "}
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Vec&lt;T&gt;</code> says nothing
-                about <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T</code>. Adding a bound (
-                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T: Keyed</code>) lets the body call
-                methods. A <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">where</code> clause keeps
+                about <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T</code>. Adding a bound (here{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">T: Keyed</code>, a trait Example 1
+                defines as a type that can return a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">key()</code>)
+                lets the body call methods. A{" "}
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">where</code> clause keeps
                 the bound legible as it grows. An associated type fixes a trait&apos;s one natural related type so callers
                 do not repeat it, and a const parameter like{" "}
                 <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">const N: usize</code> lets the type

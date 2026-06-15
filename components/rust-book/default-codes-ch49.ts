@@ -8,7 +8,7 @@ enum TlsTermination {
 
 #[derive(Debug, Clone, Copy)]
 enum PeerAuth {
-    Off,
+    ServerOnly,
     Mtls,
 }
 
@@ -31,7 +31,7 @@ impl ServiceEdge {
 
     fn internal_mode(&self) -> &'static str {
         match self.internal_peer_auth {
-            PeerAuth::Off => "tls-only",
+            PeerAuth::ServerOnly => "tls-only",
             PeerAuth::Mtls => "mtls",
         }
     }

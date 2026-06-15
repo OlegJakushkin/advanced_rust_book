@@ -79,7 +79,7 @@ const exercises: Exercise[] = [
     prompts: [
       "Keep the target set explicit with an enum.",
       "Name the native output with a target triple suffix.",
-      "Name the container output like a registry tag.",
+      "Name the container output like a registry tag, using the format `ghcr.io/acme/<app>:<version>`.",
       "Name the wasm output like a wasm artifact rather than a native binary.",
     ],
     acceptanceCriteria: [
@@ -94,7 +94,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 4,
-    kind: "debugging or refactoring",
+    kind: "design or analysis",
     title: "Design a feature-gated release workflow",
     objective:
       "Replace one catch-all default build with an explicit feature policy that matches real deployment shapes.",
@@ -329,8 +329,9 @@ export function PageCh44PackagingAndDeploymentExercises() {
           helperText={
             <>
               Tip: use a small target enum and a <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">match</code>{" "}
-              expression. The exercise is about naming explicit release artifacts, not about hiding the difference
-              between them.
+              expression. For the container target, use the registry-tag format{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">ghcr.io/acme/&lt;app&gt;:&lt;version&gt;</code>.
+              The exercise is about naming explicit release artifacts, not about hiding the difference between them.
             </>
           }
           initialCode={`#[derive(Debug, Clone, Copy)]

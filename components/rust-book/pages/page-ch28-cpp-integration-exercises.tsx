@@ -58,7 +58,7 @@ const exercises: Exercise[] = [
       "Explain what would go wrong at the boundary if the body used abs instead of wrapping_abs on i32::MIN.",
     ],
     acceptanceCriteria: [
-      "The answer identifies the foreign declaration, the unsafe wrapper safe_abs, and the safe main, with only safe_abs holding unsafe.",
+      "The answer identifies the foreign unsafe extern \"C\" declaration, the unsafe { } call site inside safe_abs, and the safe main, noting that the only unsafe block executing the actual call is inside safe_abs.",
       "It states that the declaration asserts the symbol and signature exist elsewhere but the compiler cannot check the foreign side honors them.",
       "It explains the seam is plain i32 -> i32, so nothing is allocated or freed across it.",
       "It explains that abs on i32::MIN panics, and a panic unwinding across a C ABI boundary is undefined behavior, which wrapping_abs avoids.",
@@ -119,7 +119,7 @@ const exercises: Exercise[] = [
     kind: "debugging or refactoring",
     title: "Stop an unwind from crossing the boundary",
     objective: "Find and fix an exported function that can let a Rust panic unwind across a C ABI boundary.",
-    starterPrompt: "An exported extern \"C\" function parses a caller buffer with code that can panic (an indexing operation and an unwrap on a parse), then returns the parsed value. Reviewers flagged that a panic here is undefined behavior because it would unwind through the foreign caller's frames.",
+    starterPrompt: "Imagine an exported extern \"C\" function that parses a caller buffer with code that can panic (an indexing operation and an unwrap on a parse), then returns the parsed value. Write that function yourself as the starting point, keeping in mind that a panic here is undefined behavior because it would unwind through the foreign caller's frames.",
     prompts: [
       "Identify every operation in the body that can panic and explain why each is a boundary hazard.",
       "Refactor the panicking operations into checked forms that return a status instead of panicking.",
@@ -168,6 +168,8 @@ const reviewQuestions = [
   "What does no_mangle and the extern \"C\" calling convention each contribute when exporting a Rust function to C or C++?",
   "Why is an in-flight unwind, a Rust panic or a C++ exception, more dangerous to let cross the seam than a bad value?",
   "Which two questions drive the choice between a hand-written C shim, bindgen, cxx, and autocxx?",
+  "When must a struct shared across an FFI boundary carry #[repr(C)], and what can go wrong if it does not?",
+  "Name three classes of hostile inputs every exported FFI function should be tested against.",
 ]
 
 const workingLoop = [
@@ -182,7 +184,7 @@ const workingLoop = [
   filename="cpp_integration_status_seam_lab.rs"
   runKey="ch28_ex_status_seam"
   expectedOutput={"status = 0\ntotal = 12\nnull input status = 2\nnull out status = 1"}
-  helperText={"Model the exported sum_i32s seam from Example 2 in plain std Rust: the caller owns the input buffer and the output slot, you only borrow both, and every failure is reported as a distinct integer status rather than a Result."}
+  helperText={"Model the exported sum_i32s seam from Example 2 in plain std Rust: the caller owns the input buffer and the output slot, you only borrow both, and every failure is reported as a distinct integer status rather than a Result. Run this only after implementing the function body; the expected output shown is the target, so the unmodified stub will not match it."}
   initialCode={`// Status codes mirror the C ABI seam from the chapter: 0 = success,
 // nonzero = a distinct failure the caller can branch on without a Result.
 const STATUS_OK: i32 = 0;

@@ -111,7 +111,7 @@
   },
   {
    "number": 6,
-   "kind": "design or production scenario",
+   "kind": "tooling and CI scenario",
    "title": "Write the CI command pack for the chapter examples",
    "objective": "Define the baseline commands a serious Rust workspace should run for formatting, linting, testing, and benchmarking.",
    "starterPrompt": "Pretend the chapter examples live inside a real Cargo workspace. Write the command sequence you would put into CI and explain what each command protects against.",
@@ -137,7 +137,8 @@
   "When should you create a new crate instead of a new module?",
   "Why is `pub(crate)` often a better default than `pub`?",
   "What kinds of choices belong in Cargo features, and what kinds usually belong in runtime configuration?",
-  "Why should benchmarking be explicit rather than assumed?"
+  "Why should benchmarking be explicit rather than assumed?",
+  "When should `Cargo.lock` be committed, and what does `workspace.dependencies` centralize?"
  ],
  "lab": {
   "title": "Runnable lab · Feature matrix repair",
@@ -198,5 +199,5 @@
   "project_structure_module_visibility": "mod config {\n    pub struct AppConfig {\n        pub service_name: String,\n        bind_addr: String,\n    }\n\n    impl AppConfig {\n        pub fn new(service_name: &str, bind_addr: &str) -> Self {\n            Self {\n                service_name: service_name.to_string(),\n                bind_addr: bind_addr.to_string(),\n            }\n        }\n\n        pub fn bind_addr(&self) -> &str {\n            &self.bind_addr\n        }\n    }\n}\n\nfn main() {\n    let config = config::AppConfig::new(\"api\", \"127.0.0.1:8080\");\n    println!(\"{}@{}\", config.service_name, config.bind_addr());\n}",
   "project_structure_feature_flags": "// In a real crate, a Cargo feature would usually select this at compile time.\nconst METRICS_ENABLED: bool = false;\n\nfn metrics_backend() -> &'static str {\n    if METRICS_ENABLED {\n        \"prometheus\"\n    } else {\n        \"disabled\"\n    }\n}\n\nfn main() {\n    println!(\"metrics backend = {}\", metrics_backend());\n}"
  },
- "labReferenceSolution": null
+ "labReferenceSolution": "fn selected_backend(s3: bool, local: bool) -> Result<&'static str, &'static str> {\n    // Check the both-on case first, then single selections, then the default\n    // error. Neither-on and both-on share the same explicit error.\n    match (s3, local) {\n        (true, false) => Ok(\"s3\"),\n        (false, true) => Ok(\"local\"),\n        _ => Err(\"choose exactly one backend\"),\n    }\n}\n\nfn main() {\n    println!(\"none = {:?}\", selected_backend(false, false));\n    println!(\"s3 = {:?}\", selected_backend(true, false));\n    println!(\"local = {:?}\", selected_backend(false, true));\n    println!(\"both = {:?}\", selected_backend(true, true));\n}"
 }

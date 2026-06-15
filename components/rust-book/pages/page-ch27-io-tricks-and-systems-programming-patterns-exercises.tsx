@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
+import { getPageIndexById } from "../page-index"
 import { PAGES } from "../types"
 import { Button } from "@/components/ui/button"
 import { RustPracticeCard } from "../rust-practice-card"
@@ -51,7 +52,7 @@ const exercises: Exercise[] = [
     prompts: [
       "Where is the double-close or use-after-close risk hiding?",
       "Which path should move the handle instead of borrowing or rebuilding ownership from a raw integer?",
-      "When would `try_clone` be the honest design, and what semantic cost would it introduce?",
+      "When would `try_clone` be the right design, and what semantic cost would it introduce?",
     ],
     acceptanceCriteria: [
       "You explain the single-owner close invariant concretely.",
@@ -93,7 +94,7 @@ const exercises: Exercise[] = [
     title: "Repair a scatter/gather write path that assumes too much",
     objective: "Fix a vectored write design that assumes one syscall always transmits the whole logical response.",
     starterPrompt:
-      "A handler builds two `IoSlice` values, calls `write_vectored` once, and assumes the entire header and body are gone forever.",
+      "You have a handler that builds two `IoSlice` values, calls `write_vectored` once, and assumes the entire header and body are gone forever.",
     prompts: [
       "Why is one successful vectored write call still not a full-response guarantee?",
       "Would you loop until the logical message is complete, or switch to a different buffering strategy?",
@@ -112,7 +113,7 @@ const exercises: Exercise[] = [
   {
     number: 5,
     kind: "design or production scenario",
-    title: "Choose memory mapping, buffered reads, or owned copies honestly",
+    title: "Choose memory mapping, buffered reads, or owned copies deliberately",
     objective: "Map three different file workloads to the right boundary tool instead of reaching for mmap by reflex.",
     starterPrompt:
       "You are designing a search service with a large read-only term index, a one-pass log replayer, and a retry queue that stores small file-derived records for later async work.",
@@ -161,6 +162,7 @@ const reviewQuestions = [
   "When is moving a handle calmer than duplicating it?",
   "Why can one vectored write still be only a partial logical response?",
   "What signals tell you a queue needs a bound or a smaller bound?",
+  "When does a blocking read in a dedicated worker thread outperform an async task, and how would you measure the difference?",
   "Why should mmap, async rewrites, and socket tuning all be justified by measured behavior rather than by taste?",
 ]
 
@@ -173,7 +175,8 @@ const workingLoop = [
 
 export function PageCh27IoTricksAndSystemsProgrammingPatternsExercises() {
   const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 53
+  const pageIndex = getPageIndexById("ch27-io-tricks-and-systems-programming-patterns-exercises")
+  const chapterPageIndex = getPageIndexById("ch27-io-tricks-and-systems-programming-patterns")
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -204,7 +207,7 @@ export function PageCh27IoTricksAndSystemsProgrammingPatternsExercises() {
                 policy, and the measurement plan before it reaches for a technique name.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(52)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(chapterPageIndex)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 27
             </Button>
@@ -298,12 +301,14 @@ export function PageCh27IoTricksAndSystemsProgrammingPatternsExercises() {
           helperText={
             <>
               Tip: switch from <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">channel()</code> to{" "}
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">sync_channel(1)</code>, change the batch
-              threshold to <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">2</code>, and remember to
-              flush the leftover batch after the receive loop ends.
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">sync_channel(1)</code> so the{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">CAPACITY</code> constant is the real bound,
+              change the batch threshold to{" "}
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">2</code>, and remember to flush the leftover
+              batch after the receive loop ends.
             </>
           }
-          initialCode={`use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Write};\nuse std::sync::mpsc;\nuse std::thread;\n\nfn main() -> io::Result<()> {\n    let input = Cursor::new(\"red\\nblue\\ngreen\\n\".as_bytes());\n    let mut reader = BufReader::new(input);\n    let (tx, rx) = mpsc::channel::<String>();\n\n    let producer = thread::spawn(move || {\n        let mut line = String::new();\n        while reader.read_line(&mut line).unwrap() != 0 {\n            let owned = line.trim_end().to_string();\n            tx.send(owned).unwrap();\n            line.clear();\n        }\n    });\n\n    let mut out = Vec::new();\n    let mut writer = BufWriter::new(&mut out);\n    let mut received = 0usize;\n    let mut batches = 0usize;\n    let mut pending = Vec::new();\n\n    while let Ok(line) = rx.recv() {\n        pending.push(line);\n\n        if pending.len() == 0 {\n            for item in pending.drain(..) {\n                writeln!(writer, \"{}\", item)?;\n            }\n            batches += 1;\n        }\n\n        received += 1;\n    }\n\n    producer.join().unwrap();\n    writer.flush()?;\n\n    println!(\"capacity = {}\", 1);\n    println!(\"received = {}\", received);\n    println!(\"batches = {}\", batches);\n    println!(\"bytes = {}\", out.len());\n    Ok(())\n}`}
+          initialCode={`use std::io::{self, BufRead, BufReader, BufWriter, Cursor, Write};\nuse std::sync::mpsc;\nuse std::thread;\n\nfn main() -> io::Result<()> {\n    const CAPACITY: usize = 1;\n\n    let input = Cursor::new(\"red\\nblue\\ngreen\\n\".as_bytes());\n    let mut reader = BufReader::new(input);\n    let (tx, rx) = mpsc::channel::<String>();\n\n    let producer = thread::spawn(move || {\n        let mut line = String::new();\n        while reader.read_line(&mut line).unwrap() != 0 {\n            let owned = line.trim_end().to_string();\n            tx.send(owned).unwrap();\n            line.clear();\n        }\n    });\n\n    let mut out = Vec::new();\n    let mut writer = BufWriter::new(&mut out);\n    let mut received = 0usize;\n    let mut batches = 0usize;\n    let mut pending = Vec::new();\n\n    while let Ok(line) = rx.recv() {\n        pending.push(line);\n\n        if pending.len() == 0 {\n            for item in pending.drain(..) {\n                writeln!(writer, \"{}\", item)?;\n            }\n            batches += 1;\n        }\n\n        received += 1;\n    }\n\n    producer.join().unwrap();\n    writer.flush()?;\n\n    println!(\"capacity = {}\", CAPACITY);\n    println!(\"received = {}\", received);\n    println!(\"batches = {}\", batches);\n    println!(\"bytes = {}\", out.len());\n    Ok(())\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

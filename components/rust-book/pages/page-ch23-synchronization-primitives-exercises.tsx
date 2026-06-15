@@ -33,6 +33,7 @@ const exercises: Exercise[] = [
       "Which case is small enough for atomics?",
       "Which case is a phase boundary rather than a state container?",
       "Which case wants ownership transfer rather than shared mutation?",
+      "For the start-gun case, how does a barrier's phase-gate semantics differ from a condvar's predicate-wait, and why does that difference matter?",
     ],
     acceptanceCriteria: [
       "You map each case to a plausible primitive and justify the choice with state shape.",
@@ -168,8 +169,8 @@ const reviewQuestions = [
   "Why is `RwLock` not automatically better than `Mutex`?",
   "Why should a condvar wait happen in a loop instead of a one-shot `if`?",
   "What does `Release` on a store and `Acquire` on a load actually buy you?",
-  "When is a barrier the right tool, and when is it just the wrong primitive for state propagation?",
-  "Why are lock-free structures hard even for experienced engineers?",
+  "When is a barrier the right tool, and when does it become the wrong primitive for state propagation?",
+  "From the pitfalls section, why are lock-free structures hard even for experienced engineers?",
 ]
 
 const workingLoop = [
@@ -182,7 +183,7 @@ const workingLoop = [
 
 export function PageCh23SynchronizationPrimitivesExercises() {
   const { markPageComplete, setCurrentPage } = useBook()
-  const pageIndex = 45
+  const pageIndex = 49
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -214,7 +215,7 @@ export function PageCh23SynchronizationPrimitivesExercises() {
                 matches that story.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(44)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(48)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 23
             </Button>
@@ -316,7 +317,7 @@ export function PageCh23SynchronizationPrimitivesExercises() {
               <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs mx-1">Ordering::Acquire</code>.
             </>
           }
-          initialCode={`use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    publish(&value, &ready, 42);\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", try_consume(&value, &ready).unwrap_or(0));\n}`}
+          initialCode={`use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};\nuse std::thread;\n\nfn publish(value: &AtomicUsize, ready: &AtomicBool, next: usize) {\n    value.store(next, Ordering::Relaxed);\n    ready.store(true, Ordering::Relaxed);\n}\n\nfn try_consume(value: &AtomicUsize, ready: &AtomicBool) -> Option<usize> {\n    if ready.load(Ordering::Relaxed) {\n        Some(value.load(Ordering::Relaxed))\n    } else {\n        None\n    }\n}\n\nfn main() {\n    let value = AtomicUsize::new(0);\n    let ready = AtomicBool::new(false);\n\n    // The publisher and consumer run on two threads, so the Relaxed orderings\n    // above are a real bug: upgrade them to Release/Acquire to publish safely.\n    let consumed = thread::scope(|scope| {\n        scope.spawn(|| publish(&value, &ready, 42));\n        scope\n            .spawn(|| loop {\n                if let Some(found) = try_consume(&value, &ready) {\n                    break found;\n                }\n                thread::yield_now();\n            })\n            .join()\n            .unwrap()\n    });\n\n    println!(\"ready = {}\", ready.load(Ordering::Relaxed));\n    println!(\"value = {}\", consumed);\n}`}
         />
 
         <section className="rounded-xl border border-border bg-card p-5">

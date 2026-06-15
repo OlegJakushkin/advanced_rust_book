@@ -32,7 +32,7 @@ const mentalModelPoints = [
     body: "Strip away the tooling and a forward pass is arithmetic: matrix multiplies, bias adds, activations, and a final reduction such as argmax or softmax. The weights are just a large, fixed lookup table baked into the graph. The runnable listings in this chapter make that concrete by hand-coding one dense layer, because the shape of the work is identical whether the numbers come from a 4-by-3 array or a 400-million-parameter transformer.",
   },
   {
-    title: "The hard part is the edges, not the matmul",
+    title: "The hard part is the boundary code, not the matmul",
     body: "The runtime owns the math. What you own is everything around it: turning bytes, text, or pixels into a tensor of exactly the right shape and dtype, naming inputs to match the graph, and turning raw output tensors back into a decision your domain understands. Most inference bugs in production are shape mismatches, dtype surprises, and pre/post-processing drift, not the model being wrong.",
   },
 ]
@@ -571,8 +571,12 @@ export function PageCh54OnnxRuntimeModelInference() {
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{"[rows, features]"}</code> tensor in
               memory. The loop slices one row at a time with{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">{"r * IN..(r + 1) * IN"}</code> and runs
-              the same layer per row, which is why one session run over a batch beats running the model once per row. The
-              diagram shows the layout; the output is one line per row.
+              the same layer per row, which is why one session run over a batch beats running the model once per row.{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">forward_row</code> takes a slice rather
+              than a fixed-size array reference because each row is sliced out of the flat buffer, and the stride
+              computation guarantees the slice is always exactly{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">IN</code> elements long. The diagram
+              shows the layout; the output is one line per row.
             </p>
             <MermaidDiagram
               chart={`flowchart TB\n  Flat["flat buffer: row0 (4) then row1 (4)"] --> R0["slice 0..4 = row 0"]\n  Flat --> R1["slice 4..8 = row 1"]\n  R0 -->|forward + argmax| O0["row 0: class + score"]\n  R1 -->|forward + argmax| O1["row 1: class + score"]`}

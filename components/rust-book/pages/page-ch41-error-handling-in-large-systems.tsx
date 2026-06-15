@@ -49,7 +49,8 @@ const resultOptionCards = [
     title: "Result and Option",
     body: "Option models ordinary absence. Result models actionable failure. The common repair is to keep Option local, then promote it to Result at the boundary where missing data stops being routine and starts being a contract violation.",
     code: `let raw = ports.get(service);
-let port = raw.ok_or(StoreError::MissingService { service: service.into() })?;`,
+// service: &str -> String for the owned MissingService { service: String } field
+let port = raw.ok_or(StoreError::MissingService { service: service.to_string() })?;`,
   },
   {
     title: "Error enums",
@@ -247,8 +248,10 @@ export function PageCh41ErrorHandlingInLargeSystems() {
               <p className="text-sm text-muted-foreground leading-6">
                 Chapter 16 established domain invariants and domain errors. Chapter 17 introduced Result-first refactoring.
                 Chapter 24 explained async state machines and await boundaries. Chapter 28 covered FFI translation. Chapter
-                30 covered retries and dead-letter policy at broker boundaries. Chapter 40 reminded us that even specialist
-                subsystems still need clear operational contracts when they fail.
+                30 covered retries and dead-letter policy at broker boundaries. Chapter 40 is the concrete reminder that
+                even a specialist numeric subsystem fails in ways a caller must act on: a singular matrix or a
+                non-converging solve is a typed Result the caller can fall back from, not a panic, and that is the same
+                contract thinking this chapter applies across every boundary.
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
@@ -347,6 +350,21 @@ export function PageCh41ErrorHandlingInLargeSystems() {
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {mentalModelPoints.map((point) => (
+              <div key={point.title} className="rounded-lg border border-border bg-card p-4">
+                <h4 className="font-semibold text-foreground mb-2">{point.title}</h4>
+                <p className="text-sm text-muted-foreground leading-6">{point.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">How to think about this coming from another language</h3>
           </div>
@@ -361,21 +379,6 @@ export function PageCh41ErrorHandlingInLargeSystems() {
               <div key={comparison.title} className="rounded-lg border border-border bg-card p-4">
                 <div className="font-semibold text-foreground mb-2">{comparison.title}</div>
                 <p className="text-sm text-muted-foreground leading-6">{comparison.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Mental model</h3>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {mentalModelPoints.map((point) => (
-              <div key={point.title} className="rounded-lg border border-border bg-card p-4">
-                <h4 className="font-semibold text-foreground mb-2">{point.title}</h4>
-                <p className="text-sm text-muted-foreground leading-6">{point.body}</p>
               </div>
             ))}
           </div>
@@ -546,6 +549,13 @@ export function PageCh41ErrorHandlingInLargeSystems() {
               out-parameters. In the code below, look at the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Status</code>{" "}
               enum: each variant is an integer the other runtime can switch on, and the detailed Rust reason never leaves
               the wrapper.
+            </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              One requirement is not optional: wrap the inner work in{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">std::panic::catch_unwind</code> and map a
+              caught panic to a generic status code. If any inner function can panic, letting that unwind escape across the
+              C ABI is undefined behavior, so the wrapper must catch it at the boundary and turn it into an ordinary
+              status. The diagram shows that catch step explicitly.
             </p>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">

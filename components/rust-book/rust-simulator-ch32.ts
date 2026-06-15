@@ -2,22 +2,6 @@ function parseNumber(code: string, pattern: RegExp, fallback: number): number {
   return Number(code.match(pattern)?.[1] ?? String(fallback))
 }
 
-function parseNumericList(source?: string): number[] {
-  if (!source) return []
-
-  return source
-    .split(",")
-    .map((part) =>
-      part
-        .trim()
-        .replace(/_/g, "")
-        .replace(/(?:i|u)(?:8|16|32|64|128|size)$/i, "")
-    )
-    .filter((part) => part.length > 0)
-    .map((part) => Number(part))
-    .filter((value) => !Number.isNaN(value))
-}
-
 function hasBalancedBlockRange(code: string): boolean {
   const hasRemainder = /remainder\s*=\s*rows\s*%\s*ranks/.test(code)
   const hasBalancedStart =
@@ -98,7 +82,6 @@ export function simulateCh32Output(code: string, key?: string): string | null {
     const cols = parseNumber(code, /let\s+cols\s*=\s*(\d+)/, 4)
     const ranks = parseNumber(code, /let\s+ranks\s*=\s*(\d+)/, 3)
     const rank = parseNumber(code, /let\s+rank\s*=\s*(\d+)/, 1)
-    const norms = parseNumericList(code.match(/let\s+local_norms\s*=\s*\[([^\]]+)\]/)?.[1])
 
     const balanced =
       /row_counts\(/.test(code) &&
@@ -106,11 +89,19 @@ export function simulateCh32Output(code: string, key?: string): string | null {
 
     const counts = rowCounts(rows, ranks, balanced)
     const displs = displacementsInCells(counts, cols)
-    const allreduce = sum(norms.length > 0 ? norms : [7, 9, 5])
+
+    // Each rank sums its own slice of the dense matrix; the allreduce folds
+    // those partials into one total. This mirrors local_sums in the snippet.
+    const matrix = denseSequence(rows, cols)
+    const allreduce = counts.reduce((total, rowsForRank, index) => {
+      const start = displs[index]
+      const end = start + rowsForRank * cols
+      return total + sum(matrix.slice(start, end))
+    }, 0)
 
     return `counts = [${counts.join(", ")}]\ndispls = [${displs.join(", ")}]\nsend cells = ${
       counts[rank] * cols
-    }\nallreduce = ${allreduce}`
+    }\nallreduce = ${allreduce.toFixed(1)}`
   }
 
   if (key === "ch32_ex_block_partition") {

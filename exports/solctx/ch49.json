@@ -18,7 +18,7 @@
    "acceptanceCriteria": [
     "You choose at least two different termination strategies across the four cases.",
     "You justify one choice with trust-header policy and one with certificate ownership or packaging policy.",
-    "You avoid pretending one termination strategy is always correct for every service."
+    "Your choices vary by deployment shape and you explain why each one differs."
    ],
    "hints": [
     "Ask who owns public certificates, who trusts proxy headers, and who needs the peer identity directly.",
@@ -118,7 +118,7 @@
   },
   {
    "number": 6,
-   "kind": "design or production scenario",
+   "kind": "testing plan",
    "title": "Test HTTPS locally and in CI with realistic trust behavior",
    "objective": "Build a local and CI test plan that exercises real TLS policy without teaching the team insecure shortcuts.",
    "starterPrompt": "You need browser-facing HTTPS tests, one service-to-service mTLS test, and one CI lane that verifies secure cookies, redirects, and HSTS.",
@@ -145,20 +145,21 @@
   "Why should proxy-header trust be tied to a known network boundary instead of accepted from arbitrary callers?",
   "When is HSTS a safe default, and when is it premature?",
   "Why are local CA and CI trust bundles safer than skip-verification flags for HTTPS testing?",
-  "What makes certificate rotation a deployment problem as much as a cryptography problem?"
+  "What makes certificate rotation a deployment problem as much as a cryptography problem?",
+  "When would you reach for a Rust-native TLS stack over the platform's native stack, and why is that a topology decision before it is an API decision?"
  ],
  "lab": {
   "title": "Runnable lab · Harden one API edge policy",
   "filename": "harden_edge_policy_lab.rs",
   "runKey": "ch49_ex_harden_api_defaults",
   "expectedOutput": "redirect = true\ncookie hardened = true\ncors = locked-down\nhsts = true",
-  "initialCode": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"session\",\n        secure: false,\n        http_only: false,\n        same_site: \"None\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: false,\n        hsts_max_age_secs: 0,\n        allowed_origin: \"*\",\n    };\n\n    println!(\"redirect = {}\", policy.redirect_http);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    println!(\"hsts = {}\", policy.redirect_http && policy.hsts_max_age_secs > 0);\n}"
+  "initialCode": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"session\",\n        secure: false,\n        http_only: false,\n        same_site: \"None\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: false,\n        hsts_max_age_secs: 0,\n        allowed_origin: \"*\",\n    };\n\n    println!(\"redirect = {}\", policy.redirect_http);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    // HSTS validity depends only on a non-zero max-age. We check it together\n    // with redirect here because a secure edge wants BOTH to be true; the line\n    // asserts the pair, not that HSTS requires this process to do the redirect.\n    println!(\"hsts = {}\", policy.redirect_http && policy.hsts_max_age_secs > 0);\n}"
  },
  "proseHeadings": [
   "Builds on Chapters 19, 25, 30, 43, 46, 47, and 48",
   "Opening scenario",
   "Mental model",
-  "Core concepts",
+  "TLS handshake, termination topology, and HTTP-layer defaults",
   "What HTTPS actually checks: chains, hostnames, ALPN, and whose trust store",
   "Where TLS ends: load balancer, reverse proxy, sidecar, or your own process",
   "Picking a TLS library: Rust-native or the platform's stack",
@@ -209,7 +210,7 @@
   "A typed config surface is much easier to diff and test in CI than scattered string settings."
  ],
  "codeSamples": {
-  "https_tls_topology_policy": "#[derive(Debug, Clone, Copy)]\nenum TlsTermination {\n    LoadBalancer,\n    ReverseProxy,\n    InProcess,\n}\n\n#[derive(Debug, Clone, Copy)]\nenum PeerAuth {\n    Off,\n    Mtls,\n}\n\n#[derive(Debug)]\nstruct ServiceEdge {\n    external_tls: TlsTermination,\n    internal_peer_auth: PeerAuth,\n    trusted_proxy_hops: u8,\n    app_protocol: &'static str,\n}\n\nimpl ServiceEdge {\n    fn external_mode(&self) -> &'static str {\n        match self.external_tls {\n            TlsTermination::LoadBalancer => \"load-balancer\",\n            TlsTermination::ReverseProxy => \"reverse-proxy\",\n            TlsTermination::InProcess => \"in-process\",\n        }\n    }\n\n    fn internal_mode(&self) -> &'static str {\n        match self.internal_peer_auth {\n            PeerAuth::Off => \"tls-only\",\n            PeerAuth::Mtls => \"mtls\",\n        }\n    }\n\n    fn forwarded_proto_policy(&self) -> &'static str {\n        if self.trusted_proxy_hops > 0 {\n            \"trusted-proxy-only\"\n        } else {\n            \"ignore-forwarded-proto\"\n        }\n    }\n\n    fn alpn(&self) -> &'static str {\n        self.app_protocol\n    }\n}\n\nfn main() {\n    let edge = ServiceEdge {\n        external_tls: TlsTermination::LoadBalancer,\n        internal_peer_auth: PeerAuth::Mtls,\n        trusted_proxy_hops: 1,\n        app_protocol: \"h2\",\n    };\n\n    println!(\"external = {}\", edge.external_mode());\n    println!(\"internal = {}\", edge.internal_mode());\n    println!(\"forwarded proto = {}\", edge.forwarded_proto_policy());\n    println!(\"alpn = {}\", edge.alpn());\n}",
+  "https_tls_topology_policy": "#[derive(Debug, Clone, Copy)]\nenum TlsTermination {\n    LoadBalancer,\n    ReverseProxy,\n    InProcess,\n}\n\n#[derive(Debug, Clone, Copy)]\nenum PeerAuth {\n    ServerOnly,\n    Mtls,\n}\n\n#[derive(Debug)]\nstruct ServiceEdge {\n    external_tls: TlsTermination,\n    internal_peer_auth: PeerAuth,\n    trusted_proxy_hops: u8,\n    app_protocol: &'static str,\n}\n\nimpl ServiceEdge {\n    fn external_mode(&self) -> &'static str {\n        match self.external_tls {\n            TlsTermination::LoadBalancer => \"load-balancer\",\n            TlsTermination::ReverseProxy => \"reverse-proxy\",\n            TlsTermination::InProcess => \"in-process\",\n        }\n    }\n\n    fn internal_mode(&self) -> &'static str {\n        match self.internal_peer_auth {\n            PeerAuth::ServerOnly => \"tls-only\",\n            PeerAuth::Mtls => \"mtls\",\n        }\n    }\n\n    fn forwarded_proto_policy(&self) -> &'static str {\n        if self.trusted_proxy_hops > 0 {\n            \"trusted-proxy-only\"\n        } else {\n            \"ignore-forwarded-proto\"\n        }\n    }\n\n    fn alpn(&self) -> &'static str {\n        self.app_protocol\n    }\n}\n\nfn main() {\n    let edge = ServiceEdge {\n        external_tls: TlsTermination::LoadBalancer,\n        internal_peer_auth: PeerAuth::Mtls,\n        trusted_proxy_hops: 1,\n        app_protocol: \"h2\",\n    };\n\n    println!(\"external = {}\", edge.external_mode());\n    println!(\"internal = {}\", edge.internal_mode());\n    println!(\"forwarded proto = {}\", edge.forwarded_proto_policy());\n    println!(\"alpn = {}\", edge.alpn());\n}",
   "https_tls_security_defaults": "#[derive(Debug)]\nstruct SessionCookiePolicy {\n    name: &'static str,\n    secure: bool,\n    http_only: bool,\n    same_site: &'static str,\n}\n\nimpl SessionCookiePolicy {\n    fn is_hardened(&self) -> bool {\n        self.secure && self.http_only && self.same_site != \"None\"\n    }\n}\n\n#[derive(Debug)]\nstruct HttpSecurityPolicy {\n    redirect_http: bool,\n    hsts_max_age_secs: u64,\n    allowed_origin: &'static str,\n    renew_before_days: u16,\n}\n\nimpl HttpSecurityPolicy {\n    fn cors_mode(&self) -> &'static str {\n        if self.allowed_origin == \"*\" {\n            \"wildcard\"\n        } else {\n            \"locked-down\"\n        }\n    }\n\n    fn hsts_enabled(&self) -> bool {\n        self.hsts_max_age_secs > 0\n    }\n\n    fn rotate_now(&self, days_left: u16) -> bool {\n        days_left <= self.renew_before_days\n    }\n}\n\nfn main() {\n    let cookie = SessionCookiePolicy {\n        name: \"__Host-session\",\n        secure: true,\n        http_only: true,\n        same_site: \"Lax\",\n    };\n\n    let policy = HttpSecurityPolicy {\n        redirect_http: true,\n        hsts_max_age_secs: 63_072_000,\n        allowed_origin: \"https://app.example.com\",\n        renew_before_days: 14,\n    };\n\n    println!(\"cookie = {}\", cookie.name);\n    println!(\"cookie hardened = {}\", cookie.is_hardened());\n    println!(\"cors = {}\", policy.cors_mode());\n    println!(\"hsts = {}\", policy.hsts_enabled());\n    println!(\"rotate now = {}\", policy.rotate_now(21));\n}"
  },
  "labReferenceSolution": null

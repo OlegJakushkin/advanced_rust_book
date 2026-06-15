@@ -1,12 +1,11 @@
-//! Chapter 54 — real ONNX inference from Rust, on the GPU.
+//! Chapter 54 — real ONNX inference from Rust, on the GPU (CHALLENGE / starter).
 //!
-//! Loads model.onnx (a 4-layer MLP), runs the same batch through ONNX Runtime
-//! twice — once on the CPU execution provider, once on the CUDA execution
-//! provider — checks the outputs agree, and reports the per-inference speedup.
-//!
-//! This is genuine GPU work: ONNX Runtime dispatches the Gemm/Relu kernels to
-//! the CUDA EP. Run it with the GPU Docker setup in this folder.
+//! The whole harness is here: model loading, the CPU/GPU sessions, timing, and
+//! the output-agreement check. One thing is left for you — register the CUDA
+//! execution provider in `build()` so the "gpu" session actually runs on the
+//! device. As shipped, both sessions run on the CPU, so the speedup is ~1x.
 
+#![allow(unused_imports)]
 use ort::execution_providers::CUDAExecutionProvider;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
@@ -18,7 +17,11 @@ const DIN: usize = 1024;
 fn build(cuda: bool) -> ort::Result<Session> {
     let builder = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
     let builder = if cuda {
-        builder.with_execution_providers([CUDAExecutionProvider::default().build().error_on_failure()])?
+        // TODO: register the CUDA execution provider so this session runs on the GPU:
+        //     builder.with_execution_providers(
+        //         [CUDAExecutionProvider::default().build().error_on_failure()])?
+        // Until you do, the "gpu" session falls back to the CPU and speedup stays ~1x.
+        builder
     } else {
         builder
     };
@@ -33,7 +36,7 @@ fn run_once(s: &mut Session, input: &[f32]) -> ort::Result<Vec<f32>> {
 }
 
 fn bench(label: &str, s: &mut Session, input: &[f32], iters: usize) -> ort::Result<(f64, Vec<f32>)> {
-    let out = run_once(s, input)?; // warm up (allocations, kernel selection, etc.)
+    let out = run_once(s, input)?;
     let t = Instant::now();
     for _ in 0..iters {
         let _ = run_once(s, input)?;
@@ -62,5 +65,8 @@ fn main() -> ort::Result<()> {
     println!("batch      = {BATCH}, model = 1024->4096->4096->4096->10 (f32)");
     println!("speedup    = {:.1}x", cpu_ms / gpu_ms);
     println!("agree      = {}", max_abs / max_val < 1e-3);
+    if cpu_ms / gpu_ms < 2.0 {
+        println!("note       = both sessions are on CPU — add the CUDA EP in build()");
+    }
     Ok(())
 }

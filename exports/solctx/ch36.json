@@ -6,7 +6,7 @@
   {
    "number": 1,
    "kind": "warm-up comprehension",
-   "title": "Design metrics for worker saturation on purpose",
+   "title": "Design metrics for worker saturation",
    "objective": "Choose a small metric set that distinguishes healthy throughput from hidden backlog and retry amplification.",
    "starterPrompt": "You run three worker pools: fast CPU tasks, slow GPU tasks, and a reducer pool. Decide which counters, gauges, and histograms each pool should expose.",
    "prompts": [
@@ -27,7 +27,7 @@
   },
   {
    "number": 2,
-   "kind": "code reading",
+   "kind": "incident reconstruction",
    "title": "Trace a tail-latency incident across logs, metrics, and traces",
    "objective": "Practice reconstructing one slow path when mean handler time still looks calm.",
    "starterPrompt": "Metrics show queue age rising. Handler p50 is flat. A trace shows one task waited 900 ms before claim and only 70 ms in the handler. Logs show the same task retried twice before success.",
@@ -62,7 +62,7 @@
    "acceptanceCriteria": [
     "The helper computes saturation and retry rate correctly.",
     "The storm rule is visible in code rather than hidden in prose.",
-    "The runnable lab prints the expected saturation, retry rate, and storm flag."
+    "When you implement the three helpers, running the program prints saturation = 0.90, retry rate = 0.40, and storm = true."
    ],
    "hints": [
     "This is a metric and policy drill, not a transport drill.",
@@ -93,7 +93,7 @@
   },
   {
    "number": 5,
-   "kind": "debugging or refactoring",
+   "kind": "design",
    "title": "Profile a task graph by critical path instead of average stage time",
    "objective": "Replace stage-local averages with graph-aware signals that reveal reducer lag and join bottlenecks.",
    "starterPrompt": "A DAG pipeline shows acceptable mean time in every worker stage, yet end-to-end time keeps growing as fan-out width increases.",
@@ -207,8 +207,8 @@
   "What to look at: this is the graph from the concepts section above, but now each stage carries two costs instead of one — the time it waited in its queue plus the time it actually ran. The algorithm walks the DAG and, for every node, keeps the longest finishing time among its par"
  ],
  "codeSamples": {
-  "distributed_profiling_latency_window": "#[derive(Debug, Clone, Copy)]\nstruct WindowStats {\n    claimed: u32,\n    completed: u32,\n    retried: u32,\n    queue_p95_ms: u64,\n    run_p95_ms: u64,\n    busy_workers: u32,\n    total_workers: u32,\n}\n\nfn end_to_end_p95_ms(stats: &WindowStats) -> u64 {\n    stats.queue_p95_ms + stats.run_p95_ms\n}\n\nfn worker_saturation(stats: &WindowStats) -> f64 {\n    stats.busy_workers as f64 / stats.total_workers as f64\n}\n\nfn retry_rate(stats: &WindowStats) -> f64 {\n    stats.retried as f64 / stats.claimed as f64\n}\n\nfn main() {\n    let stats = WindowStats {\n        claimed: 120,\n        completed: 110,\n        retried: 18,\n        queue_p95_ms: 140,\n        run_p95_ms: 320,\n        busy_workers: 17,\n        total_workers: 20,\n    };\n\n    println!(\"e2e p95 = {}\", end_to_end_p95_ms(&stats));\n    println!(\"queue p95 = {}\", stats.queue_p95_ms);\n    println!(\"worker saturation = {:.2}\", worker_saturation(&stats));\n    println!(\"retry rate = {:.2}\", retry_rate(&stats));\n}",
-  "distributed_profiling_task_graph": "type StageId = usize;\n\n#[derive(Debug)]\nstruct Stage {\n    name: &'static str,\n    deps: Vec<StageId>,\n    queue_ms: u64,\n    run_ms: u64,\n}\n\nfn critical_path(stages: &[Stage]) -> (u64, &'static str) {\n    let mut totals = vec![0_u64; stages.len()];\n    let mut best = 0_u64;\n    let mut tail = \"none\";\n\n    for (id, stage) in stages.iter().enumerate() {\n        let upstream = stage\n            .deps\n            .iter()\n            .map(|&dep| totals[dep])\n            .max()\n            .unwrap_or(0);\n\n        totals[id] = upstream + stage.queue_ms + stage.run_ms;\n\n        if totals[id] >= best {\n            best = totals[id];\n            tail = stage.name;\n        }\n    }\n\n    (best, tail)\n}\n\nfn main() {\n    let stages = vec![\n        Stage {\n            name: \"fetch\",\n            deps: vec![],\n            queue_ms: 20,\n            run_ms: 70,\n        },\n        Stage {\n            name: \"parse\",\n            deps: vec![0],\n            queue_ms: 30,\n            run_ms: 90,\n        },\n        Stage {\n            name: \"enrich\",\n            deps: vec![1],\n            queue_ms: 40,\n            run_ms: 120,\n        },\n        Stage {\n            name: \"store\",\n            deps: vec![1],\n            queue_ms: 10,\n            run_ms: 60,\n        },\n        Stage {\n            name: \"notify\",\n            deps: vec![2, 3],\n            queue_ms: 15,\n            run_ms: 30,\n        },\n    ];\n\n    let (critical_path_ms, tail_stage) = critical_path(&stages);\n    let total_queued: u64 = stages.iter().map(|stage| stage.queue_ms).sum();\n\n    println!(\"critical path ms = {}\", critical_path_ms);\n    println!(\"tail stage = {}\", tail_stage);\n    println!(\"queued ms = {}\", total_queued);\n}"
+  "distributed_profiling_latency_window": "#[derive(Debug, Clone, Copy)]\nstruct WindowStats {\n    claimed: u32,\n    completed: u32,\n    retried: u32,\n    queue_p95_ms: u64,\n    run_p95_ms: u64,\n    busy_workers: u32,\n    total_workers: u32,\n}\n\nfn end_to_end_p95_ms(stats: &WindowStats) -> u64 {\n    // approximation: sums two p95 values; accurate only when queue and run times are co-monotone\n    stats.queue_p95_ms + stats.run_p95_ms\n}\n\nfn worker_saturation(stats: &WindowStats) -> f64 {\n    stats.busy_workers as f64 / stats.total_workers as f64\n}\n\nfn retry_rate(stats: &WindowStats) -> f64 {\n    stats.retried as f64 / stats.claimed as f64\n}\n\nfn main() {\n    let stats = WindowStats {\n        claimed: 120,\n        completed: 110,\n        retried: 18,\n        queue_p95_ms: 140,\n        run_p95_ms: 320,\n        busy_workers: 17,\n        total_workers: 20,\n    };\n\n    println!(\"e2e p95 = {}\", end_to_end_p95_ms(&stats));\n    println!(\"queue p95 = {}\", stats.queue_p95_ms);\n    println!(\"worker saturation = {:.2}\", worker_saturation(&stats));\n    println!(\"retry rate = {:.2}\", retry_rate(&stats));\n}",
+  "distributed_profiling_task_graph": "type StageId = usize;\n\n#[derive(Debug)]\nstruct Stage {\n    name: &'static str,\n    deps: Vec<StageId>,\n    queue_ms: u64,\n    run_ms: u64,\n}\n\nfn critical_path(stages: &[Stage]) -> (u64, &'static str) {\n    let mut totals = vec![0_u64; stages.len()];\n    let mut best = 0_u64;\n    let mut tail = \"none\";\n\n    for (id, stage) in stages.iter().enumerate() {\n        let upstream = stage\n            .deps\n            .iter()\n            .map(|&dep| totals[dep])\n            .max()\n            .unwrap_or(0);\n\n        totals[id] = upstream + stage.queue_ms + stage.run_ms;\n\n        // ties: last-processed stage wins; deterministic but arbitrary\n        if totals[id] >= best {\n            best = totals[id];\n            tail = stage.name;\n        }\n    }\n\n    (best, tail)\n}\n\nfn main() {\n    let stages = vec![\n        Stage {\n            name: \"fetch\",\n            deps: vec![],\n            queue_ms: 20,\n            run_ms: 70,\n        },\n        Stage {\n            name: \"parse\",\n            deps: vec![0],\n            queue_ms: 30,\n            run_ms: 90,\n        },\n        Stage {\n            name: \"enrich\",\n            deps: vec![1],\n            queue_ms: 40,\n            run_ms: 120,\n        },\n        Stage {\n            name: \"store\",\n            deps: vec![1],\n            queue_ms: 10,\n            run_ms: 60,\n        },\n        Stage {\n            name: \"notify\",\n            deps: vec![2, 3],\n            queue_ms: 15,\n            run_ms: 30,\n        },\n    ];\n\n    let (critical_path_ms, tail_stage) = critical_path(&stages);\n    let total_queued: u64 = stages.iter().map(|stage| stage.queue_ms).sum();\n\n    println!(\"critical path ms = {}\", critical_path_ms);\n    println!(\"tail stage = {}\", tail_stage);\n    println!(\"queued ms = {}\", total_queued);\n}"
  },
  "labReferenceSolution": null
 }

@@ -32,6 +32,10 @@ message InvoiceEvent {
   string kind = 2;
 }
 
+message UploadSummary {
+  uint32 count = 1;
+}
+
 service BillingService {
   rpc CreateInvoice(CreateInvoiceRequest) returns (CreateInvoiceResponse);
   rpc StreamInvoices(StreamInvoicesRequest) returns (stream InvoiceEvent);
@@ -43,7 +47,7 @@ const buildScriptSnippet = `fn main() -> Result<(), Box<dyn std::error::Error>> 
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile_protos(&["proto/billing.proto"], &["proto"])?;
+        .compile(&["proto/billing.proto"], &["proto"])?;
 
     println!("cargo:rerun-if-changed=proto/billing.proto");
     Ok(())

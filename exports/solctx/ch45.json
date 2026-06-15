@@ -27,7 +27,7 @@
   },
   {
    "number": 2,
-   "kind": "code reading",
+   "kind": "scenario analysis",
    "title": "Review a flawed capstone delivery path",
    "objective": "Spot the production mistakes that appear when a distributed design compiles but its ownership and failure model are still wrong.",
    "starterPrompt": "You inherit an API handler that borrows request data into spawned work, publishes to one shared queue for all workloads, acks broker delivery before durable result storage, and records no trace or dedupe key in the envelope.",
@@ -97,7 +97,7 @@
    "kind": "design or production scenario",
    "title": "Profile and refactor the capstone from evidence",
    "objective": "Turn one latency incident into a measurement-first refactoring plan instead of a guess-driven rewrite.",
-   "starterPrompt": "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 0.25, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
+   "starterPrompt": "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 25% of deliveries, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
    "prompts": [
     "Which layer is the dominant bottleneck right now?",
     "Which metric should have paged first, and which trace should you inspect next?",
@@ -156,7 +156,7 @@
   "At a glance",
   "Capstone review questions",
   "Mental model",
-  "Core concepts",
+  "Pipeline walkthrough",
   "How this lands depending on where you came from",
   "Production patterns",
   "Pitfalls and tradeoffs",

@@ -434,7 +434,9 @@ export function PageCh43Observability() {
               </Button>
             </div>
             <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{`let worker = tracing::info_span!("worker", worker = "gpu-a");
+              <code className="font-mono text-foreground">{`use tracing::Instrument; // required for .instrument()
+
+let worker = tracing::info_span!("worker", worker = "gpu-a");
 
 tokio::spawn(async move {
     handle_batch(job).instrument(worker).await

@@ -46,7 +46,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "architecture review",
     title: "Refactor an API workflow so proving and verification are isolated",
     objective:
       "Read one service path and explain why the prover boundary should not look like the verifier boundary.",
@@ -174,7 +174,7 @@ const reviewQuestions = [
   "What makes transcript domain separation a protocol rule instead of one local implementation detail?",
   "Why is a proof artifact not the same thing as a witness or proving key?",
   "What does zero knowledge fail to protect if public inputs or metadata are already too revealing?",
-  "Why should large proof systems still be reviewed for ordinary Rust concerns such as queues, logging, unsafe wrappers, and resource limits?",
+  "Why should proof-backed systems still be reviewed for ordinary Rust concerns such as queues, logging, unsafe wrappers, and resource limits?",
 ]
 
 const workingLoop = [
@@ -263,9 +263,6 @@ export function PageCh51ZeroKnowledgeProofsRustEngineersExercises() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">{exercise.title}</h3>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  ZKP drill
-                </span>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
@@ -328,7 +325,7 @@ export function PageCh51ZeroKnowledgeProofsRustEngineersExercises() {
           }
           filename="proof_boundary_lab.rs"
           runKey="ch51_ex_proof_boundary"
-          expectedOutput={"verified = true\npublic total = 45\nproof bytes = 96"}
+          expectedOutput={"public total = 45\nproof bytes = 96\nverified = true"}
           helperText={
             <>
               Tip: the verification function should not need the witness at all. Compare the statement against the proof
@@ -382,9 +379,9 @@ fn main() {
     let witness = Witness { left: 20, right: 25 };
     let proof = prove(statement, witness).unwrap();
 
-    println!("verified = {}", verify(statement, proof));
     println!("public total = {}", statement.public_total);
     println!("proof bytes = {}", proof.proof_bytes_len);
+    println!("verified = {}", verify(statement, proof));
 }`}
         />
 

@@ -383,8 +383,8 @@ export function PageCh14InterfacesInRustTraits() {
               you reach for a trait object.
             </p>
             <MermaidDiagram
-              chart={`flowchart TD\n  Start[Use trait as dyn] --> Q1{Methods take self receiver}\n  Q1 -->|no| Fail[Not object safe]\n  Q1 -->|yes| Q2{No generic method params}\n  Q2 -->|no| Fail\n  Q2 -->|yes| Q3{No Self return by value}\n  Q3 -->|no| Fail\n  Q3 -->|yes| Ok[Object safe: vtable buildable]`}
-              caption="Object safety is a checklist: a self receiver, no generic methods, and no by-value Self return. Fail any one and dyn is rejected."
+              chart={`flowchart TD\n  Start[Use trait as dyn] --> Q1{Every method takes a self receiver}\n  Q1 -->|no| Fail[Not object safe]\n  Q1 -->|yes| Q2{Any method has generic params}\n  Q2 -->|yes| Fail\n  Q2 -->|no| Q3{Any method returns Self by value}\n  Q3 -->|yes| Fail\n  Q3 -->|no| Ok[Object safe: vtable buildable]`}
+              caption="Object safety is a checklist: every method takes a self receiver, none is generic, and none returns Self by value. Fail any one and dyn is rejected."
             />
             <div className="grid gap-4 lg:grid-cols-3 mt-4">
               {objectSafetyCards.map((card) => (

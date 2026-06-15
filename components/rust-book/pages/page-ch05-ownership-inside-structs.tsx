@@ -96,7 +96,7 @@ const safeAlternatives = [
   },
   {
     title: "Store stable IDs or indices",
-    body: "If one field conceptually points at another owned collection, use an index or typed ID. This is often the cleanest replacement for a tempting self-reference.",
+    body: "If one field conceptually points at another owned collection, use an index or typed ID. This is often the cleanest replacement for a tempting self-reference. Exercise 4 works through this pattern in code.",
   },
   {
     title: "Separate owner from view",
@@ -198,10 +198,10 @@ export function PageCh05OwnershipInsideStructs() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(2)}>
+              <Button variant="outline" onClick={() => setCurrentPage(3)}>
                 Revisit Chapter 02
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(6)}>
+              <Button variant="outline" onClick={() => setCurrentPage(8)}>
                 Revisit Chapter 04
               </Button>
             </div>
@@ -213,7 +213,9 @@ export function PageCh05OwnershipInsideStructs() {
           <p className="text-sm text-muted-foreground leading-6">
             A command-processing service converts request text into normalized records, stores selected data, and sends
             background work to processors. The business requirement is to classify every struct as a transient view or
-            owned state, so lifetimes stay local and durable data remains easy to store, test, and move.
+            owned state, so lifetimes stay local and durable data remains easy to store, test, and move. The
+            thread-handoff part of that pipeline is what decides which smart pointer you need, covered in the{" "}
+            <em>Interior ownership using Box, Rc, and Arc</em> section below.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">A durable design order</h4>
@@ -407,8 +409,13 @@ export function PageCh05OwnershipInsideStructs() {
                     pointer aims at. For{" "}
                     <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">String</code>{" "}
                     or <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">Vec</code>{" "}
-                    the bytes live on the heap and survive moves, so it is the construction rule, not the move, that
-                    rules this layout out.
+                    the bytes live on the heap and survive moves, so a heap-backed field is not unsafe to move. The
+                    layout is still ruled out by the construction rule alone: you cannot borrow{" "}
+                    <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">self.raw</code>{" "}
+                    to fill the reference field while moving{" "}
+                    <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">raw</code>{" "}
+                    into the same value, so a <code className="px-1 py-0.5 rounded bg-amber-100/80 dark:bg-amber-950/40 font-mono text-[11px]">String</code>-backed
+                    self-reference is no more constructible than any other.
                   </p>
                 </div>
               </div>
@@ -636,7 +643,7 @@ export function PageCh05OwnershipInsideStructs() {
             self-referential design into stable indices, select between `Box`, `Rc`, and `Arc`, and build a struct that
             owns data while exposing safe read-only views.
           </p>
-          <Button onClick={() => setCurrentPage(9)} className="gap-2">
+          <Button onClick={() => setCurrentPage(11)} className="gap-2">
             Open Chapter 05 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

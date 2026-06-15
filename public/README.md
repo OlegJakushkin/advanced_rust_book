@@ -47,6 +47,28 @@ need a specific toolchain, flagged per file in `CODE_MANIFEST.json` (`status`):
   runner compiles these with `--edition 2024`.
 * `needs-nightly` — opts into an unstable std feature.
 
+## Real-GPU examples (NVIDIA hardware)
+
+Three chapters ship a **real GPU example** in its own folder, each with a
+GPU-enabled Docker setup (needs an NVIDIA GPU + the NVIDIA Container Toolkit).
+Unlike the std-only corpus above (which *models* GPU/zk concepts so it runs
+anywhere), these actually use the device:
+
+| Folder | Chapter | What runs on the GPU |
+|---|---|---|
+| `cuda/`     | 37 — CUDA | a `cudarc` matrix-multiply kernel, vs a CPU baseline (~40x kernel speedup) |
+| `onnx-gpu/` | 54 — ONNX | ONNX Runtime inference via `ort` + the CUDA execution provider, vs CPU (~15x) |
+| `ezkl-gpu/` | 53 — EZKL | GPU inference (CUDA EP) **plus a real EZKL zero-knowledge proof** of the model (`verified: true`) |
+
+```bash
+cd public/cuda     && docker compose build && docker compose run --rm cuda
+cd public/onnx-gpu && docker compose build && docker compose run --rm onnx
+cd public/ezkl-gpu && docker compose build && docker compose run --rm ezkl
+```
+
+In the corpus, the ch37/ch54 lab files are flagged `needs-cuda` and the std runner
+points you here instead of trying to build them without a GPU.
+
 ## Running anything (Docker)
 
 You need Docker with the Compose plugin. From **this `public/` folder**:

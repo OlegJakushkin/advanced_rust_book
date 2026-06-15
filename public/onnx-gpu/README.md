@@ -30,15 +30,16 @@ docker compose run --rm onnx
 Times vary by GPU; correctness does not. On an RTX 3080 Laptop GPU:
 
 ```
-cpu        = 6.80 ms / inference
-gpu (cuda) = 0.85 ms / inference
+cpu        = 20.41 ms / inference
+gpu (cuda) = 1.25 ms / inference
 batch      = 128, model = 1024->4096->4096->4096->10 (f32)
-speedup    = 8.0x
+speedup    = 16.3x
 agree      = true
 ```
 
 `agree = true` confirms the GPU and CPU produce the same outputs to f32 precision;
-the speedup is real GPU acceleration of the matmul-heavy layers. If the CUDA EP
-could not load (missing driver / GPU not passed through), ONNX Runtime falls back
-to CPU and the speedup collapses to ~1x — a quick way to tell the GPU is actually
-being used.
+the ~16x speedup is real GPU acceleration of the matmul-heavy layers. The CUDA
+session is built with `.error_on_failure()`, so if the GPU EP cannot load (no
+driver, GPU not passed through, version mismatch) the program **errors instead of
+silently falling back to CPU** — the speedup you see is genuine device execution,
+not a CPU number in disguise.

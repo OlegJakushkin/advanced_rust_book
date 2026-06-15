@@ -99,6 +99,7 @@ fn main() {
         attempt: 1,
     });
 
+    // on_delivery may re-push to retry_queue; the attempt cap ensures this terminates.
     while let Some(delivery) = consumer.retry_queue.pop_front() {
         consumer.on_delivery(delivery);
     }

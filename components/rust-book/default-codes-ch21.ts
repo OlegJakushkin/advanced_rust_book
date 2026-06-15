@@ -121,4 +121,21 @@ fn main() {
     println!("json pretty = {}", pretty);
     println!("first kind = {}", plugins[0].metadata().kind);
 }`,
+  reflection_type_name_labels: `use std::any::type_name;
+
+struct RetryBudget(u32);
+
+fn label_of<T>(_value: &T) -> &'static str {
+    // type_name returns a best-effort, human-readable string for diagnostics.
+    // The exact text is not guaranteed stable across compiler versions, so it
+    // is fine in a log line but must never become a schema or protocol key.
+    type_name::<T>()
+}
+
+fn main() {
+    let budget = RetryBudget(3);
+    println!("retries = {}", budget.0);
+    println!("type label = {}", label_of(&budget));
+    println!("u32 label = {}", label_of(&budget.0));
+}`,
 }

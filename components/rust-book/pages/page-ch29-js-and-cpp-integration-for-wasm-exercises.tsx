@@ -84,7 +84,7 @@ const exercises: Exercise[] = [
       "The signature is exactly fn mask_bytes(bytes: &[u8], key: u8) -> Vec<u8>.",
       "Each output byte equals the corresponding input byte XORed with key.",
       "The input slice is read but never mutated, and no ownership of the caller's buffer is taken.",
-      "For input [1, 2, 3, 4] with key 1 the function returns [0, 3, 2, 5].",
+      "For input [1, 2, 3, 4] with key 1 the function returns [0, 3, 2, 5] (1^1=0, 2^1=3, 3^1=2, 4^1=5).",
     ],
     hints: [
       "bytes.iter().map(...).collect() builds the owned Vec in one expression.",
@@ -110,7 +110,7 @@ const exercises: Exercise[] = [
       "The answer states the batch makes one crossing instead of one per route.",
     ],
     hints: [
-      "routes.iter().map(|r| route_score(r)).collect() keeps the batch in one expression.",
+      "routes.iter().map(|r| route_score(*r)).collect() keeps the batch in one expression; r is a &&str, so *r dereferences it to the &str route_score expects.",
       "The cost you are removing is the per-call boundary overhead, not the arithmetic.",
     ],
   },
@@ -168,6 +168,7 @@ const reviewQuestions = [
   "On the cost ladder of boundary representations, how do a number, a byte array, a serialized struct, and a resident handle differ in per-crossing cost?",
   "How do the outer Rust-to-JavaScript seam and the inner Rust-to-C-shim seam differ in how data and safety are managed?",
   "Why is the WebAssembly performance discussion almost always about the boundary rather than the arithmetic inside the module?",
+  "What does WASI provide that the browser sandbox does not, and why does the same module behave differently under each?",
 ]
 
 const workingLoop = [

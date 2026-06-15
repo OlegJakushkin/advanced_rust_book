@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Languages, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
+import { getPageIndexById } from "../page-index"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
@@ -209,7 +210,7 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 46
+  const pageIndex = getPageIndexById("ch24-coroutines-futures-and-async-rust")
   const page = PAGES[pageIndex]
 
   useEffect(() => {
@@ -265,14 +266,6 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
               </Button>
             </div>
           </div>
-          <div className="mt-4 rounded-lg border border-border bg-card p-4">
-            <h4 className="font-semibold text-foreground mb-2">Repository note</h4>
-            <p className="text-sm text-muted-foreground leading-6">
-              The in-browser editor uses tiny std-only examples so the poll model stays visible without pulling in a full
-              runtime. In production, you will usually pair these ideas with an ecosystem executor and reactor such as Tokio
-              or another async runtime.
-            </p>
-          </div>
         </section>
 
         <section className="rounded-xl border border-border bg-card p-5">
@@ -307,10 +300,10 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Three ideas to anchor the rest of the chapter</h3>
+            <h3 className="text-lg font-semibold text-foreground">Three core ideas</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
-            If you keep only three things in mind, keep these. Everything later in the chapter is a consequence of them.
+            If you keep only three things in mind, keep these. Everything later in the chapter follows from them.
           </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {mentalModelPoints.map((point) => (
@@ -437,7 +430,7 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
             </ul>
             <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
               <p className="text-sm text-muted-foreground leading-6">
-                A useful senior-level translation is this: an async function is ordinary Rust control flow lowered into one
+                In plain terms: an async function is ordinary Rust control flow lowered into one
                 enum-like state machine plus the locals it must keep alive between polls. Once you see it that way, the
                 lifetime and Send rules later in this chapter stop being surprises and start being consequences.
               </p>
@@ -593,7 +586,7 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
               and therefore lives as long as the future does; a future handed to{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">spawn</code> may be moved across threads and
               must be <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Send + &apos;static</code>. The
-              recurring fix is the same one from Chapter 1: own the data before it crosses the boundary.
+              recurring fix is the same one from Chapter 4: own the data before it crosses the boundary.
             </p>
             <div className="grid gap-4 lg:grid-cols-2">
               {lifetimeIssueCards.map((card) => (
@@ -647,6 +640,15 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Examples</h3>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h4 className="font-semibold text-foreground mb-2">Repository note</h4>
+            <p className="text-sm text-muted-foreground leading-6">
+              The in-browser editor uses tiny std-only examples so the poll model stays visible without pulling in a full
+              runtime. In production, you will usually pair these ideas with an ecosystem executor and reactor such as Tokio
+              or another async runtime.
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

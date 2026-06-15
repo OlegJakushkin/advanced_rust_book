@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
+import { getPageIndexById } from "../page-index"
 import { RustCodeEditor } from "@/components/rust-code-editor"
 import { MermaidDiagram } from "@/components/rust-book/mermaid-diagram"
 import { simulateRustExecution } from "../rust-simulator"
@@ -233,8 +234,13 @@ export function PageCh22MultithreadingInRust() {
     markPageComplete,
     setCurrentPage,
   } = useBook()
-  const pageIndex = 42
+  const pageIndex = getPageIndexById("ch22-multithreading-in-rust")
   const page = PAGES[pageIndex]
+  const chapter04PageIndex = getPageIndexById("ch04-ownership-borrowing-and-lifetimes")
+  const chapter07PageIndex = getPageIndexById("ch07-copying-data-vs-cloning-data")
+  const chapter09PageIndex = getPageIndexById("ch09-smart-pointers-and-pinning")
+  const chapter14PageIndex = getPageIndexById("ch14-interfaces-in-rust-traits")
+  const exercisesPageIndex = getPageIndexById("ch22-multithreading-in-rust-exercises")
 
   useEffect(() => {
     markPageComplete(pageIndex)
@@ -277,16 +283,16 @@ export function PageCh22MultithreadingInRust() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(6)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter04PageIndex)}>
                 Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(12)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter07PageIndex)}>
                 Chapter 07
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(16)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter09PageIndex)}>
                 Chapter 09
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(26)}>
+              <Button variant="outline" onClick={() => setCurrentPage(chapter14PageIndex)}>
                 Chapter 14
               </Button>
             </div>
@@ -306,9 +312,9 @@ export function PageCh22MultithreadingInRust() {
             the threads can <em>borrow</em> instead of clone.
           </p>
           <p className="mt-3 text-sm text-muted-foreground leading-6">
-            That is the spine of the chapter. Each of those four moves, move, share, synchronize, and borrow-in-scope, is
-            a distinct primitive with a distinct cost, and the skill is matching the primitive to the workload rather than
-            defaulting to whichever one compiled first.
+            That is the spine of the chapter. Each of those four patterns, move, share, synchronize, and borrow-in-scope,
+            is a distinct primitive with a distinct cost, and the skill is matching the primitive to the workload rather
+            than defaulting to whichever one compiled first.
           </p>
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
             <h4 className="font-semibold text-foreground mb-2">One distinction to hold onto: this is about OS threads</h4>
@@ -364,6 +370,12 @@ export function PageCh22MultithreadingInRust() {
               chart={`flowchart TD\n  OS[OS thread] -->|scheduled by| Kernel[OS scheduler]\n  AT[Async task] -->|polled by| Exec[Executor in-process]\n  DP[Data parallel job] -->|balanced by| Pool[Work-stealing pool]\n  DW[Distributed worker] -->|carried by| Net[Network and serialization]\n  AT -.drives.-> Fut[Future state machine]`}
               caption="Four schedulers for the four models. This chapter is the OS-thread branch; the others have their own contracts and costs."
             />
+            <p className="text-sm text-muted-foreground leading-6">
+              The cards below add two items the diagram folds into one branch: the async task model breaks down further
+              into a <strong className="text-foreground">Future</strong> (the state machine that describes the work) and
+              an <strong className="text-foreground">Executor</strong> (the scheduler that polls it forward). They are not
+              separate execution models; they are the two parts of the async branch above.
+            </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {executionKinds.map((kind) => (
                 <div key={kind.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -468,6 +480,22 @@ let answer = handle.join().unwrap();`}</code>
                   when thread names, stack size, or clearer diagnostics matter. Thread names are cheap observability.
                 </p>
               </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-card p-4">
+              <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+                <code className="font-mono text-foreground">{`let handle = std::thread::Builder::new()
+    .name("worker".into())
+    .spawn(move || {
+        // work here
+    })
+    .unwrap();`}</code>
+              </pre>
+              <p className="mt-3 text-sm text-muted-foreground leading-6">
+                The named thread shows up in panic messages and most debuggers, so a crash points at &quot;worker&quot;
+                rather than an anonymous thread id. <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Builder::spawn</code>{" "}
+                returns a <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">Result</code> because
+                creating the OS thread can fail, which is the other reason to prefer it in production paths.
+              </p>
             </div>
           </div>
 
@@ -663,6 +691,13 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
               tuples over the channel, and only the main thread builds the final map. No worker ever touches that map, so
               there is nothing to lock.
             </p>
+            <p className="text-sm text-muted-foreground leading-6 mb-3">
+              The companion exercise lab uses the same shape with a smaller dataset and shorter labels, so its totals
+              read <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ingest = 5</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">index = 4</code>,{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">grand = 9</code> rather than the
+              numbers below. The pattern is identical; only the job costs differ.
+            </p>
             <MermaidDiagram
               chart={`flowchart TD\n  M[main] -->|move ingest jobs| W1[ingest worker]\n  M -->|move index jobs| W2[index worker]\n  W1 -->|send worker total| Ch[(mpsc channel)]\n  W2 -->|send worker total| Ch\n  M -->|join both| J[handles joined]\n  Ch -->|drain rx| Agg[main aggregates totals]`}
               caption="Jobs move out to the workers; totals come back over one channel; aggregation happens in a single owner. Move out, message back."
@@ -854,7 +889,7 @@ let (tx_bounded, rx_bounded) = std::sync::mpsc::sync_channel(1024);`}</code>
             captures, compare channel-based and shared-state designs, and choose among scoped threads, work stealing,
             async tasks, and distributed workers from the shape of a workload.
           </p>
-          <Button onClick={() => setCurrentPage(43)} className="gap-2">
+          <Button onClick={() => setCurrentPage(exercisesPageIndex)} className="gap-2">
             Open Chapter 22 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

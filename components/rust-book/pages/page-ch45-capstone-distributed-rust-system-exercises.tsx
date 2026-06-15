@@ -46,7 +46,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "scenario analysis",
     title: "Review a flawed capstone delivery path",
     objective:
       "Spot the production mistakes that appear when a distributed design compiles but its ownership and failure model are still wrong.",
@@ -124,7 +124,7 @@ const exercises: Exercise[] = [
     objective:
       "Turn one latency incident into a measurement-first refactoring plan instead of a guess-driven rewrite.",
     starterPrompt:
-      "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 0.25, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
+      "One production window shows queue p95 at 800 ms, worker run time at 70 ms, retry rate at 25% of deliveries, and one saturated accelerator lane while CPU graph workers remain mostly idle.",
     prompts: [
       "Which layer is the dominant bottleneck right now?",
       "Which metric should have paged first, and which trace should you inspect next?",

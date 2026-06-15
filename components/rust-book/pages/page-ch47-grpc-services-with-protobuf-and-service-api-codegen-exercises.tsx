@@ -119,7 +119,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 5,
-    kind: "debugging or refactoring",
+    kind: "testing or ci design",
     title: "Test generated APIs and prevent breaking protobuf changes",
     objective:
       "Design the CI and test surface that catches schema drift before partner teams regenerate or deploy stale code.",
@@ -321,7 +321,8 @@ export function PageCh47GrpcServicesWithProtobufAndServiceApiCodegenExercises() 
           description={
             <>
               Repair the starter so the generated request type is translated into a separate command type, not passed
-              inward unchanged. The checker expects the exact output below.
+              inward unchanged. Unlike Example 1 in the chapter, this lab omits the <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">InvoiceService</code>{" "}
+              call, so three output lines are expected. The checker expects the exact output below.
             </>
           }
           filename="grpc_transport_mapping_lab.rs"

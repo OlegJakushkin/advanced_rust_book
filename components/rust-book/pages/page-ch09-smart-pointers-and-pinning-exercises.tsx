@@ -73,7 +73,7 @@ const exercises: Exercise[] = [
     kind: "implementation",
     title: "Build a single-thread cache with Rc plus interior mutability",
     objective: "Compose shared ownership with the smallest sufficient interior-mutability tool instead of reaching for RefCell by reflex.",
-    starterPrompt: "Implement a single-thread counter cache shared by several handles: a struct Stats holding hits: Cell<u32> and a label: String, wrapped as Rc<Stats>. Provide fn record_hit(stats: &Rc<Stats>) that increments the count and fn snapshot(stats: &Rc<Stats>) -> u32 that reads it.",
+    starterPrompt: "Implement a single-thread counter cache shared by several handles: a struct Stats holding count: Cell<u32> and a label: String, wrapped as Rc<Stats>. Provide fn record_hit(stats: &Rc<Stats>) that increments the count and fn snapshot(stats: &Rc<Stats>) -> u32 that reads it.",
     prompts: [
       "Choose Cell<u32> rather than RefCell<u32> and justify the choice in one sentence.",
       "Implement record_hit using get and set (or a single update of the copied value), without handing out an interior reference.",
@@ -100,7 +100,7 @@ const exercises: Exercise[] = [
     prompts: [
       "Give poll the exact signature fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>.",
       "Recover a mutable reference to the fields with self.get_mut() and explain why that is permitted here.",
-      "Build a no-op Waker and Context, pin the future with Box::pin, and poll via Future::poll(task.as_mut(), &mut cx).",
+      "Build a no-op Waker and Context, pin the future with Box::pin, and poll via Future::poll(task.as_mut(), &mut cx). (Note: Wake::wake takes Arc<Self>, so std::sync::Arc is needed even in this single-thread exercise.)",
       "Count how many Pending results precede the single Ready for remaining = 3.",
     ],
     acceptanceCriteria: [
@@ -142,7 +142,7 @@ const exercises: Exercise[] = [
     kind: "design or production scenario",
     title: "Choose pointer types for a mixed-ownership service",
     objective: "Translate a service's ownership, threading, and mutation requirements into concrete composite pointer types.",
-    starterPrompt: "Design the storage types for the service in the opening scenario: recursive parser state with a single owner, planning data shared on one thread, a schema shared read-only across worker threads, retry coordination mutated by several threads, and a future stored to be polled later.",
+    starterPrompt: "A service has five storage concerns: recursive parser state with a single owner, planning data shared on one thread, a schema shared read-only across worker threads, retry coordination mutated by several threads, and a future stored to be polled later. (These come from the chapter's opening scenario.) Design the storage type for each concern.",
     prompts: [
       "Assign a pointer type to each of the five concerns and justify owner count and thread boundary for each.",
       "For each shared-and-mutable concern, name the enforcement model and read the composite type literally (for example, what Arc<Mutex<T>> means).",
@@ -172,6 +172,7 @@ const reviewQuestions = [
 
 const workingLoop = [
   "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
+  "Answer the pointer questions in order before writing any type: how many owners, which thread boundary, which mutation model, and must the value stop moving.",
   "Write the smallest version that compiles, then make it correct.",
   "Check each acceptance criterion explicitly before moving on.",
   "Name one tradeoff or failure mode your solution accepts.",

@@ -7,6 +7,8 @@ struct Quota {
 
 impl Quota {
     fn try_reserve(&mut self, qty: u32) -> bool {
+        // Plain addition is fine for these small demo values; in production
+        // use self.used.saturating_add(qty) so a huge qty cannot overflow.
         if self.used + qty > self.limit {
             return false;
         }

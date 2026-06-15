@@ -54,6 +54,8 @@ fn main() {
     println!("model = {}", request.claim.model_id);
     println!("public tokens = {}", request.claim.token_count);
     println!("proof bytes = {}", request.proof.proof_bytes_len);
+    // The witness was never passed to build_verification_request, so it cannot
+    // reach this point. The type boundary, not this literal, is the enforcement.
     println!("witness kept private = {}", true);
 }`,
   zkml_proving_queue_profile: `#[derive(Debug, Clone)]

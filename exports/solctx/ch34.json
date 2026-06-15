@@ -11,6 +11,7 @@
    "starterPrompt": "Classify four symptoms: rising RSS after a burst, stable RSS but rising task count, flat heap snapshots with a high allocation rate, and a graph of `Rc` nodes that never seems to disappear.",
    "prompts": [
     "Which symptom points first toward fragmentation or allocator retention?",
+    "Which measurement confirms fragmentation: where does live bytes diverge from RSS, and which one stays high?",
     "Which symptom points first toward async backlog rather than a leak?",
     "Which symptom points first toward churn rather than retained memory?",
     "Which symptom points first toward logical reachability and cycle inspection?"
@@ -27,7 +28,7 @@
   },
   {
    "number": 2,
-   "kind": "code reading",
+   "kind": "code analysis",
    "title": "Find clone pressure in a sample workload",
    "objective": "Read a request path and identify where deep clones, not Arc clones, are driving memory growth.",
    "starterPrompt": "A route filter clones owned strings into an output list, then later formats another owned label per selected item before queueing work.",
@@ -121,6 +122,7 @@
    "starterPrompt": "Create a checklist for a service that accepts requests, parses them, queues owned work, fans out to async tasks, uses an arena during parsing, and keeps a read-mostly cache.",
    "prompts": [
     "Which numbers belong in the first page of the investigation: RSS, live bytes, queue depth, task count, clone count, or all of them?",
+    "Inside the arena-using parsing phase, what is the first number to measure: peak region size and reset cadence, or current live bytes?",
     "Which leak candidates should be named explicitly: Rc or Arc cycles, unbounded queues, non-evicting caches, oversized arenas?",
     "Which OS-specific tools would you choose on Linux, macOS, and Windows?",
     "Which acceptance condition tells you the incident is actually resolved instead of merely masked?"
@@ -155,7 +157,7 @@
   "Builds on Chapters 07, 09, 13, 25, and 33",
   "Opening scenario",
   "A practical triage order",
-  "Mental model",
+  "How to frame a memory investigation",
   "Core concepts",
   "Measuring allocations",
   "Heap profiling: who allocated, and how much is still live",

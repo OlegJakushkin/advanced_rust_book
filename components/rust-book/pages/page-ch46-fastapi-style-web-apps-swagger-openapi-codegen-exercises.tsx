@@ -88,7 +88,7 @@ const exercises: Exercise[] = [
       "The handler translates request DTO into a separate command type.",
       "The service boundary does not accept HTTP request DTOs directly.",
       "The handler performs at least one authorization or edge validation check before the service call.",
-      "The runnable lab prints the expected created status, invoice ID, and tenant.",
+      "The handler returns a deterministic `(u16, String, String)` tuple the caller can assert.",
     ],
     hints: [
       "A create handler should be boring: authorize, map, call, translate.",
@@ -97,7 +97,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 4,
-    kind: "debugging or refactoring",
+    kind: "design or workflow decision",
     title: "Choose code-first, spec-first, or mixed OpenAPI workflow honestly",
     objective:
       "Pick the workflow that matches team boundaries and generated-code obligations instead of choosing by fashion.",
@@ -179,6 +179,7 @@ const reviewQuestions = [
   "When is code-first OpenAPI the calm default, and when does spec-first become more honest?",
   "Why should generated clients stay in the transport layer rather than in the domain layer?",
   "What CI checks keep Swagger UI and generated SDKs from silently drifting away from handler behavior?",
+  "Why are transport validation at the edge and domain invariants in the service complementary rather than interchangeable?",
 ]
 
 const workingLoop = [

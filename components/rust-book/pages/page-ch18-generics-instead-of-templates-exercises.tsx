@@ -88,7 +88,7 @@ const exercises: Exercise[] = [
     ],
     hints: [
       "The chapter's rule is to generalize only after a second real case proves the abstraction.",
-      "An iterator over the slice plus map(|i| i.key()).max() is one expression.",
+      "An iterator over the slice plus map(|i| i.key()).max() is one expression. Since u64 implements Ord, .max() returns Option<u64> directly without an extra bound on T.",
     ],
   },
   {
@@ -96,7 +96,7 @@ const exercises: Exercise[] = [
     kind: "implementation",
     title: "Replace a type parameter with an associated type",
     objective: "Move a trait's natural related type from a free parameter into an associated type so callers stop spelling it out.",
-    starterPrompt: "Start from a trait Encoder<O> { fn encode(&self, input: &[u8]) -> O; } where every implementor really has exactly one output type. Rewrite it as the chapter's Encoder with type Output, and reimplement HexPair so its Output is [u8; 2].",
+    starterPrompt: "Start from a trait Encoder<O> { fn encode(&self, input: &[u8]) -> O; } where every implementor really has exactly one output type. Rewrite it as the chapter's Encoder with type Output (see Example 2 in the chapter), and reimplement HexPair so its Output is [u8; 2].",
     prompts: [
       "Change the trait so the result type is type Output rather than a generic parameter O.",
       "Implement Encoder for HexPair with type Output = [u8; 2] and the two-nibble encode body.",

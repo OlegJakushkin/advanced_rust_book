@@ -133,7 +133,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 6,
-    kind: "design or production scenario",
+    kind: "tooling and CI scenario",
     title: "Write the CI command pack for the chapter examples",
     objective: "Define the baseline commands a serious Rust workspace should run for formatting, linting, testing, and benchmarking.",
     starterPrompt:
@@ -162,11 +162,12 @@ const reviewQuestions = [
   "Why is `pub(crate)` often a better default than `pub`?",
   "What kinds of choices belong in Cargo features, and what kinds usually belong in runtime configuration?",
   "Why should benchmarking be explicit rather than assumed?",
+  "When should `Cargo.lock` be committed, and what does `workspace.dependencies` centralize?",
 ]
 
 const commandPack = [
   "cargo check --workspace",
-  "cargo test --workspace --all-targets",
+  "cargo test --workspace --all-targets --all-features",
   "cargo fmt --all --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings",
   "cargo bench  # when the workspace defines benchmark targets",
@@ -206,7 +207,7 @@ export function PageCh03ProjectStructureAndToolingExercises() {
                 material. Use the acceptance criteria as your spec and explain tradeoffs in concrete operational terms.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(4)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(5)} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 03
             </Button>
@@ -296,7 +297,9 @@ export function PageCh03ProjectStructureAndToolingExercises() {
           description={
             <>
               Model a small backend-selection matrix. The checker expects zero selections and double selections to fail
-              with the same explicit error, while single selections return the chosen backend.
+              with the same explicit error, while single selections return the chosen backend. The starter code has two
+              defects to find and correct before the output matches: the zero-selection error string is wrong, and the
+              double-selection case is not rejected at all.
             </>
           }
           filename="feature_matrix_lab.rs"

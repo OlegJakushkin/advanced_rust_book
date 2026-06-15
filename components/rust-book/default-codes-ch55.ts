@@ -50,7 +50,7 @@ fn write_counter(data: &mut [u8], value: u64) -> Result<(), ProgramError> {
 fn process_instruction(data: &mut [u8], instruction: &Instruction) -> Result<u64, ProgramError> {
     let current = read_counter(data)?;
     let next = match instruction {
-        Instruction::Increment => current + 1,
+        Instruction::Increment => current + 1, // intentionally unchecked — Exercise 5 asks you to harden this
         Instruction::SetTo(value) => *value,
     };
     write_counter(data, next)?;

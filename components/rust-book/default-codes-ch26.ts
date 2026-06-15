@@ -74,27 +74,30 @@ fn main() {
             tx.send(vec![9_u64, 10]).unwrap();
         });
 
-        pool.install(|| {
-            let mut batches = 0_u64;
-            let mut total = 0_u64;
+        // The blocking recv stays on this drain thread, not on a pool worker.
+        // Only the per-batch par_iter is dispatched into the Rayon pool, so no
+        // CPU thread ever sits idle waiting on the channel.
+        let mut batches = 0_u64;
+        let mut total = 0_u64;
 
-            while let Ok(batch) = rx.recv() {
-                let subtotal: u64 = batch
+        while let Ok(batch) = rx.recv() {
+            let subtotal: u64 = pool.install(|| {
+                batch
                     .par_iter()
                     .copied()
                     .map(|value| value * 2)
-                    .sum();
+                    .sum()
+            });
 
-                total += subtotal;
-                batches += 1;
-            }
+            total += subtotal;
+            batches += 1;
+        }
 
-            (batches, total)
-        })
+        (batches, total)
     });
 
     println!("batches = {}", batches);
     println!("scaled total = {}", total);
-    println!("pool threads = {}", 2);
+    println!("pool threads = {}", pool.current_num_threads());
 }`,
 }

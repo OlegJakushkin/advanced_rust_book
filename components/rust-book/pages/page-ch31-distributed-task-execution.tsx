@@ -485,12 +485,13 @@ export function PageCh31DistributedTaskExecution() {
     trace_id: String,
     parent_span_id: Option<String>,
     dedupe_key: String,
+    payload: Vec<u8>,
 }`}</code>
             </pre>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">Distributed tasks profiling</h4>
+            <h4 className="font-semibold text-foreground mb-3">Profiling distributed tasks</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
               The reflex carried over from single-process work is to profile the handler, find the hot function, and
               optimize it. In a distributed task system that reflex usually points at the wrong thing. A task can be
@@ -517,7 +518,7 @@ export function PageCh31DistributedTaskExecution() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Network className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">How this lands for each background</h3>
+            <h3 className="text-lg font-semibold text-foreground">Notes for C++, C#, Go, and Python engineers</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
             Most engineers arrive at distributed tasks with a mental model from another language's concurrency story, and
@@ -690,7 +691,7 @@ export function PageCh31DistributedTaskExecution() {
               What to look at: the scheduler never iterates the nodes in declaration order. On each pass it builds the
               ready set, the nodes whose dependencies have all completed, runs them, folds their outputs into one
               aggregate, and repeats until nothing is left. Watch how the same trace ID rides along through every node so
-              the whole run shares one lineage. The five nodes complete across the frontiers shown below;{" "}
+              the whole run shares one lineage. The five nodes complete across four frontiers shown below;{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">notify</code> is the join that runs
               last because it depends on the parallel pair before it.
             </p>

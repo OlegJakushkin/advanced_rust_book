@@ -198,7 +198,7 @@ export function PageCh11HashMapsAndSets() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">{`HashMap<K, V> fundamentals`}</h4>
+            <h4 className="font-semibold text-foreground mb-3">{`HashMap<K, V> and HashSet<T> fundamentals`}</h4>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="text-sm text-muted-foreground leading-6">
@@ -240,7 +240,7 @@ export function PageCh11HashMapsAndSets() {
               the rest of the chapter is mostly choosing the right edge for each call site.
             </p>
             <MermaidDiagram
-              chart={`flowchart TD\n  Caller[Caller owns key and value] -->|insert moves in| Map[(HashMap owns entries)]\n  Map -->|get and contains borrow| Read[Read path keeps borrow]\n  Map -->|iter borrows| Loop[Borrowed iteration]\n  Map --> Cont[outbound moves below]`}
+              chart={`flowchart TD\n  Caller[Caller owns key and value] -->|insert moves in| Map[(HashMap owns entries)]\n  Map -->|get and contains borrow| Read[Read path keeps borrow]\n  Map -->|iter borrows| Loop[Borrowed iteration]\n  Map -.->|outbound moves| Cont[See outbound diagram below]`}
               caption="Inbound: insert moves owned data in; read paths borrow and leave ownership where it was."
             />
             <p className="text-sm text-muted-foreground leading-6">
@@ -306,7 +306,9 @@ export function PageCh11HashMapsAndSets() {
                   membership with <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px]">{"&str"}</code>.
                 </p>
                 <pre className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-xs overflow-x-auto">
-                  <code className="font-mono text-foreground">{`let mut counts: HashMap<String, usize> = HashMap::new();
+                  <code className="font-mono text-foreground">{`use std::collections::{HashMap, HashSet};
+
+let mut counts: HashMap<String, usize> = HashMap::new();
 counts.insert(String::from("api"), 2);
 
 assert_eq!(counts.get("api"), Some(&2));
@@ -564,7 +566,7 @@ assert!(active.contains("worker"));`}</code>
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Why this is calm</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-primary mb-2">Why one lookup is enough</div>
                 <p className="text-xs text-muted-foreground leading-5">
                   No duplicated `contains_key` branch, no second hash-table lookup, and no ambiguity about who owns the key.
                 </p>

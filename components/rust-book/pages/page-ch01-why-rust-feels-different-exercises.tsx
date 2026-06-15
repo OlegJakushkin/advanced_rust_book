@@ -50,7 +50,7 @@ const exercises: Exercise[] = [
     objective:
       "Identify which parts of a Rust abstraction are compile-time structure and which parts still do real work at runtime.",
     starterPrompt:
-      "Study an iterator-based function that filters high-priority jobs from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
+      "Study the `critical_count` iterator function from the main chapter (Example 1), which filters high-priority readings from a slice, then annotate which parts are compile-time abstraction structure and which parts still cost CPU cycles.",
     prompts: [
       "Call out which parts are likely monomorphized or optimized as abstraction structure.",
       "List the runtime work that still exists: iteration, branching, cache behavior, and any downstream materialization cost.",
@@ -145,7 +145,7 @@ const reviewQuestions = [
 ]
 
 const workingLoop = [
-  "Restate the exercise in ownership language before you write code.",
+  "Restate the exercise in ownership language before you write code or draft your answer.",
   "Decide whether the boundary wants borrowing, ownership transfer, or explicit cloning.",
   "Run the lab, then explain the result by naming the ownership or borrowing rule involved.",
   "Write down one tradeoff you accepted: allocation, duplication, indirection, or API complexity.",
@@ -200,7 +200,7 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
                 language, and short architectural explanations another senior engineer could review quickly.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(0)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch01-why-rust-feels-different"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 01
             </Button>
@@ -320,7 +320,7 @@ export function PageCh01WhyRustFeelsDifferentExercises() {
               <h3 className="text-lg font-semibold text-foreground mb-3">Continue the model-building</h3>
               <p className="text-sm text-muted-foreground leading-6">Chapter 02 explains the mechanics underneath these exercises: values, bindings, moves, drops, stack and heap-backed ownership, and why lifetime bugs are usually ownership bugs with references layered on top.</p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(2)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))} className="gap-2 shrink-0">
               Go to Chapter 02
               <ArrowRight className="h-4 w-4" />
             </Button>

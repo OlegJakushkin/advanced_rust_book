@@ -50,7 +50,7 @@ const cacheAwareCards = [
   },
   {
     title: "Reuse hot values explicitly",
-    body: "In a row-major blocked kernel, loading `a[i, k]` once and reusing it across a short `j` tile often matters more than squeezing a tiny amount of syntax out of the loop.",
+    body: "In a row-major blocked kernel, loading `a[i, k]` once and reusing it across a short `j` tile often matters more than squeezing a tiny amount of code out of the loop.",
   },
   {
     title: "Measure cache-aware changes on the same workload",
@@ -432,34 +432,6 @@ export function PageCh40MatrixOptimizationGames() {
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="font-semibold text-foreground mb-3">SIMD opportunities</h4>
-            <p className="text-sm text-muted-foreground leading-6 mb-4">
-              SIMD lets one instruction multiply or add several values at once, which is exactly the shape of the inner
-              dot-product loop. But the compiler can only vectorize what it can prove is safe and regular, and you can
-              only reach for intrinsics productively once the data is already contiguous. So treat SIMD as the last layer,
-              not the first. In most kernels the auto-vectorizer does the work for free if you feed it a flat buffer and a
-              tight loop; explicit intrinsics earn their complexity only after profiling shows the loop is genuinely
-              arithmetic-bound. The snippet below is the kind of inner loop that vectorizes well: contiguous loads, a fixed
-              trip count, and no branchy noise.
-            </p>
-            <div className="grid gap-4 lg:grid-cols-3">
-              {simdCards.map((card) => (
-                <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="font-medium text-foreground mb-2">{card.title}</div>
-                  <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
-                </div>
-              ))}
-            </div>
-            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
-              <code className="font-mono text-foreground">{`// conceptually good SIMD territory:
-// contiguous loads, fixed-width inner loop, low branch noise
-for k in 0..tile_width {
-    acc += a_row[k] * b_col[k];
-}`}</code>
-            </pre>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">Sparse vs dense matrices</h4>
             <p className="text-sm text-muted-foreground leading-6 mb-4">
               Dense and sparse are not two tuning settings on the same matrix; they are two different data models that
@@ -516,6 +488,34 @@ for k in 0..tile_width {
                 </p>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="font-semibold text-foreground mb-3">SIMD opportunities</h4>
+            <p className="text-sm text-muted-foreground leading-6 mb-4">
+              SIMD lets one instruction multiply or add several values at once, which is exactly the shape of the inner
+              dot-product loop. But the compiler can only vectorize what it can prove is safe and regular, and you can
+              only reach for intrinsics productively once the data is already contiguous and tiled. So treat SIMD as the
+              last layer, not the first. In most kernels the auto-vectorizer does the work for free if you feed it a flat
+              buffer and a tight loop; explicit intrinsics earn their complexity only after profiling shows the loop is
+              genuinely arithmetic-bound. The snippet below is the kind of inner loop that vectorizes well: contiguous
+              loads, a fixed trip count, and no branchy noise.
+            </p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {simdCards.map((card) => (
+                <div key={card.title} className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="font-medium text-foreground mb-2">{card.title}</div>
+                  <p className="text-sm text-muted-foreground leading-6">{card.body}</p>
+                </div>
+              ))}
+            </div>
+            <pre className="mt-4 rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
+              <code className="font-mono text-foreground">{`// conceptually good SIMD territory:
+// contiguous loads, fixed-width inner loop, low branch noise
+for k in 0..tile_width {
+    acc += a_row[k] * b_col[k];
+}`}</code>
+            </pre>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">
@@ -596,7 +596,7 @@ for k in 0..tile_width {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Optimization games and challenge tracks</h3>
+            <h3 className="text-lg font-semibold text-foreground">Challenge tracks</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
             Each track is scored, because the point is not to chase one fastest number but to defend a decision with
@@ -815,11 +815,8 @@ for k in 0..tile_width {
 
           <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-sm text-muted-foreground leading-6">
-              The repository also includes standalone Rust source under{" "}
-              <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">
-                examples/ch40_matrix_optimization_games/
-              </code>{" "}
-              including a small CPU-versus-GPU tournament scoreboard sketch alongside the two in-browser worked examples.
+              Both worked examples above run in the browser editor; edit a kernel, run it, and confirm the printed
+              equality and checksum still match before trusting any change.
             </p>
           </div>
         </section>

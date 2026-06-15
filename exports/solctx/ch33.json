@@ -95,7 +95,7 @@
   },
   {
    "number": 5,
-   "kind": "debugging or refactoring",
+   "kind": "analysis or methodology",
    "title": "Compare iterator and loop implementations responsibly",
    "objective": "Avoid folklore by designing a fair comparison between two equivalent hot loops.",
    "starterPrompt": "You have one implementation written as an iterator chain and one as an explicit `for` loop over the same slice.",
@@ -126,13 +126,15 @@
     "Which release-build command should every performance run use?",
     "Which profile settings would you consider, and what tradeoff does each one carry?",
     "When might `panic = \"abort\"` be acceptable, and when would it be the wrong contract?",
-    "Which live signals would you require before trusting the optimized build in production?"
+    "Which live signals would you require before trusting the optimized build in production?",
+    "Where would synchronization cost (lock scope, queue depth, or batch size at an IO boundary) show up, and how would you keep it from becoming the next regression?"
    ],
    "acceptanceCriteria": [
     "You name release mode explicitly for measurement.",
     "You justify at least two profile settings or profile decisions with tradeoffs.",
     "You explain `panic = \"abort\"` as a binary contract choice rather than a free speed flag.",
-    "You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate."
+    "You mention at least two production observability signals such as p99 latency, queue depth, allocation pressure, or error rate.",
+    "You name at least one synchronization-cost decision (lock hold duration, queue depth, or batch size) as part of the design, not an afterthought."
    ],
    "hints": [
     "Compiler flags are workload tools, not trophies.",
@@ -145,7 +147,8 @@
   "What is the practical difference between reducing allocations and reducing branch misses?",
   "Why are slice-based and chunk-based loops often easier to optimize than index-heavy loops?",
   "When is a clone economically justified even in performance-sensitive code?",
-  "What does release mode change, and what questions does it still not answer by itself?"
+  "What does release mode change, and what questions does it still not answer by itself?",
+  "What question does a distributed trace answer that a microbenchmark cannot, and what question does production observability answer that a trace alone cannot?"
  ],
  "lab": {
   "title": "Runnable lab · Allocation-aware hot-route filter",

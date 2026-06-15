@@ -25,7 +25,7 @@
     {
       "number": 2,
       "kind": "code reading",
-      "title": "Trace the idempotent consumer's decision machine",
+      "title": "Trace the idempotent consumer's state transitions",
       "objective": "Predict the processed, duplicate, retried, and dead-letter counts by reading the on_delivery state transitions.",
       "starterPrompt": "Read the Consumer type from Example 2, whose on_delivery first checks processed_ids, then routes a delivery for order ord-fail through a bounded retry, and finally records successful unique work. Hand-trace the four messages that main feeds it, including the retry-queue drain loop.",
       "prompts": [
@@ -48,7 +48,7 @@
       "kind": "implementation",
       "title": "Add a wildcard topic match to the exchange",
       "objective": "Extend the routing lookup so a single binding pattern can match a family of routing keys.",
-      "starterPrompt": "Starting from DirectExchange in Example 1, add a method that supports a single trailing wildcard segment, so binding orders.* reaches a queue for both orders.created and orders.cancelled. Keep the exact-match route method working unchanged.",
+      "starterPrompt": "Starting from the DirectExchange struct in the main chapter's Example 1 (no unrouted counter, &self on route), add a method that supports a single trailing wildcard segment, so binding orders.* reaches a queue for both orders.created and orders.cancelled. Keep the exact-match route method working unchanged.",
       "prompts": [
         "Decide how to store wildcard bindings so an exact lookup is still cheap.",
         "Implement matching by splitting the routing key on '.' and comparing segments, treating '*' as matching exactly one segment.",
@@ -93,7 +93,7 @@
       "kind": "debugging or refactoring",
       "title": "Fix an ack-before-commit consumer",
       "objective": "Diagnose and correct a consumer that loses work by acknowledging before its side effect is durable.",
-      "starterPrompt": "A consumer acks the broker first and then performs the durable write, and it also retries malformed payloads forever. Identify both defects against the chapter's guidance and refactor the handler.",
+      "starterPrompt": "Start from this broken consumer, which acks before it commits and requeues every failure forever:\n\n    fn handle(&mut self, id: &str, payload: &str) {\n        self.ack(id);                 // BUG: acks before the durable write\n        if let Err(_) = self.commit(id, payload) {\n            self.requeue(id);         // BUG: unbounded retry, even for malformed payloads\n        }\n    }\n\nIdentify both defects against the chapter's guidance and refactor the handler.",
       "prompts": [
         "Explain the data-loss window created when ack happens before the durable commit.",
         "Reorder the steps so the durable effect is committed before the ack.",
@@ -132,6 +132,29 @@
       "hints": [
         "A message often outlives the code that produced it, so the version belongs in the envelope, not in tribal knowledge.",
         "A broker is a place work can pile up invisibly; depth, age, retry rate, and DLQ count are what reveal it."
+      ]
+    },
+    {
+      "number": 7,
+      "kind": "implementation",
+      "title": "Bound the local worker budget, not just broker prefetch",
+      "objective": "Show that a broker prefetch cap without a bounded in-process worker queue just moves the overload into the process.",
+      "starterPrompt": "Model a consumer with two separate limits: a broker prefetch cap (how many unacked messages it will hold) and a bounded local worker queue (how much in-process work those messages can spawn). Feed it a burst larger than the local queue and demonstrate that the local cap, not prefetch, is what protects the process from unbounded growth.",
+      "prompts": [
+        "Give the consumer a prefetch field and a separate bounded local queue with its own capacity.",
+        "When the broker offers a message, honor prefetch first, then refuse to enqueue past the local capacity, counting the shed work instead of letting the buffer grow.",
+        "Set prefetch generously (say 8) but the local capacity small (say 2), feed a burst of 5, and report how many were buffered, how many were rejected, and how many were eventually worked.",
+        "Explain in one sentence why setting prefetch alone, without the local cap, would only move the overload from the broker into the process heap."
+      ],
+      "acceptanceCriteria": [
+        "The consumer carries a broker prefetch cap and a bounded local worker queue as two independent limits.",
+        "A message offered past the local capacity is shed and counted rather than appended to an unbounded buffer.",
+        "With prefetch 8, local capacity 2, and a burst of 5, the output is buffered = 2, rejected = 3, done = 2.",
+        "The answer states that prefetch without a local cap relocates the overload into the process rather than removing it."
+      ],
+      "hints": [
+        "Prefetch and local capacity are two layers of backpressure; setting one without the other only moves where the work piles up.",
+        "Check the local queue length before pushing; if it is at capacity, increment a rejected counter instead of growing the buffer."
       ]
     }
   ],

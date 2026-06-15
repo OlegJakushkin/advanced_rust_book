@@ -136,6 +136,28 @@
     "Distributed graph search is partly an algorithm problem and partly a control-plane problem.",
     "Frontier size and duplicate rate are often more useful than raw CPU usage at first."
    ]
+  },
+  {
+   "number": 7,
+   "kind": "implementation",
+   "title": "Implement Dijkstra and A* and verify they agree on the sample graph",
+   "objective": "Build weighted shortest-path search two ways and confirm a consistent heuristic does not change the optimal cost.",
+   "starterPrompt": "Reuse the weighted graph from the chapter's Example 2 (nodes A, B, C, D, Goal with the same coordinates and edge costs). Implement `dijkstra_cost` and `a_star_cost` over a `BinaryHeap` frontier, then run both from A to Goal.",
+   "prompts": [
+    "Order the frontier with a `State` whose `Ord` is inverted so the max-heap pops the lowest priority first.",
+    "Use cost-so-far as the Dijkstra priority and cost-so-far plus the Manhattan heuristic as the A* priority.",
+    "Skip stale heap entries by comparing the popped cost against the best recorded cost for that node.",
+    "Print both results and confirm `dijkstra cost = 7` and `a_star cost = 7` on the sample graph."
+   ],
+   "acceptanceCriteria": [
+    "Both methods share one `BinaryHeap`-backed frontier with an inverted `Ord` so the smallest priority pops first.",
+    "Dijkstra orders by cost only; A* adds the Manhattan heuristic to the goal.",
+    "Both return the same optimal cost (7) on the sample graph, and you explain why the consistent heuristic preserves that answer."
+   ],
+   "hints": [
+    "The heuristic must never overestimate the remaining cost, or A* can return a non-optimal answer.",
+    "A stale-entry guard (`if cost > best[node.0] { continue }`) is simpler than trying to update entries already in the heap."
+   ]
   }
  ],
  "reviewQuestions": [

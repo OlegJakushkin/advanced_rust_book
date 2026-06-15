@@ -315,6 +315,11 @@ export function PageCh29JsAndCppIntegrationForWasm() {
             <Gauge className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
           </div>
+          <p className="text-sm text-muted-foreground leading-6 max-w-3xl">
+            This section covers a lot of ground: how Rust becomes a WebAssembly module, the boundary data
+            choices and their cost ladder, the C and C++ shim seam, WASI and host capabilities, the performance
+            limits at the boundary, and how to debug a module. Each sub-section below takes one of these in turn.
+          </p>
 
           <div className="rounded-xl border border-border bg-card p-5">
             <h4 className="font-semibold text-foreground mb-3">From Rust to WebAssembly</h4>
@@ -333,9 +338,21 @@ export function PageCh29JsAndCppIntegrationForWasm() {
                 artifact, then <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">wasm-bindgen</code>
                 post-processes it to emit the JavaScript glue that knows how to lay out and read back each annotated value.
               </p>
+              <p className="text-sm text-muted-foreground leading-6 mb-3">
+                The crate type and the post-processing command are the two configuration decisions that determine what the
+                compiler and wasm-bindgen emit.
+              </p>
               <pre className="rounded-md bg-muted/30 px-3 py-2 text-xs overflow-x-auto">
                 <code className="font-mono text-foreground">{cargoTomlSnippet}</code>
               </pre>
+              <p className="text-sm text-muted-foreground leading-6 mt-3">
+                This chapter covers the outbound direction, Rust exporting functions to JavaScript. To call JavaScript APIs
+                in the other direction (the DOM, fetch, timers) from Rust, the
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">js-sys</code> and
+                <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px] mx-1">web-sys</code> crates provide
+                typed wasm-bindgen wrappers for the standard web platform; they are the natural complement to the exports
+                shown here.
+              </p>
             </div>
           </div>
 

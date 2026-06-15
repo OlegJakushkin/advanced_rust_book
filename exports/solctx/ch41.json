@@ -79,6 +79,7 @@
     "Where should you add context before the spawn boundary and after the await?",
     "Why is `JoinHandle<Result<T, E>>` a two-layer error surface instead of one?",
     "Which fields belong in the context message: job ID, queue name, attempt, resource name?",
+    "Which failures in this path are retryable, and where would you record that policy so callers do not infer it from message text?",
     "When should cancellation be modeled distinctly from ordinary inner failure?"
    ],
    "acceptanceCriteria": [

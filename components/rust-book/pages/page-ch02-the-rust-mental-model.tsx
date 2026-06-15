@@ -163,7 +163,7 @@ export function PageCh02TheRustMentalModel() {
                 proofs about references rather than a runtime memory system.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(0)} className="shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch01-why-rust-feels-different"))} className="shrink-0">
               Revisit Chapter 01
             </Button>
           </div>
@@ -226,7 +226,7 @@ export function PageCh02TheRustMentalModel() {
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4">
-            <h4 className="font-semibold text-foreground mb-3">translating prior instincts</h4>
+            <h4 className="font-semibold text-foreground mb-3">Translating prior instincts</h4>
             <div className="grid gap-3 lg:grid-cols-3">
               {comparisons.map((comparison) => (
                 <div key={comparison.title} className="rounded-lg border border-border bg-muted/30 p-4">
@@ -238,7 +238,7 @@ export function PageCh02TheRustMentalModel() {
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4">
-            <h4 className="font-semibold text-foreground mb-3">Two corrections that remove a lot of confusion</h4>
+            <h4 className="font-semibold text-foreground mb-3">Two common misconceptions corrected</h4>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <div className="font-medium text-foreground mb-2">A move is not “copy then invalidate” as a user model</div>
@@ -428,7 +428,7 @@ export function PageCh02TheRustMentalModel() {
             The exercise page asks you to predict move and drop behavior, classify stack and heap ownership precisely,
             refactor imperative code into expression-oriented Rust, and explain a lifetime error in operational terms.
           </p>
-          <Button onClick={() => setCurrentPage(3)} className="gap-2">
+          <Button onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model-exercises"))} className="gap-2">
             Open Chapter 02 Exercises
             <ArrowRight className="h-4 w-4" />
           </Button>

@@ -54,8 +54,8 @@ const regionReasons = [
 const lifetimeModels = [
   {
     title: "Borrowed-from-arena references",
-    body: "A reference arena gives you references tied to the arena's borrow. The idiomatic shape is `fn alloc<'a>(&'a self, value: T) -> &'a T`, often written simply as `fn alloc(&self, value: T) -> &T` and elided. In practice `typed-arena` returns `&mut T` so the caller can still mutate the newly allocated value. This is excellent for build-once, traverse-many trees where the arena outlives all reads. It is less comfortable when you need mutation after long-lived borrows exist, or when the data must cross wider subsystem boundaries.",
-    signature: "fn alloc<'a>(&'a self, value: T) -> &'a mut T",
+    body: "A reference arena gives you references tied to the arena's borrow. The receiver is `&self`, not `&mut self`: `typed-arena`'s `alloc` takes `&self` and uses interior mutability (an `UnsafeCell` behind the scenes) to push into its backing storage, then returns `&mut T` so the caller can still mutate the newly allocated value. The full signature is `fn alloc(&self, value: T) -> &mut T`, where the returned reference is tied to the arena's borrow. This is excellent for build-once, traverse-many trees where the arena outlives all reads. It is less comfortable when you need mutation after long-lived borrows exist, or when the data must cross wider subsystem boundaries.",
+    signature: "fn alloc(&self, value: T) -> &mut T",
   },
   {
     title: "Index or ID handles",
@@ -284,7 +284,7 @@ export function PageCh13ArenaAllocation() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Mechanisms and patterns</h3>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5">

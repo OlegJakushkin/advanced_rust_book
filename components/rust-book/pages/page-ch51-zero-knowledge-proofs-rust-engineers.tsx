@@ -404,8 +404,10 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
               You do not need to derive these systems to integrate them well, but you do need a working sense of the
               tradeoffs they push onto your service. The choice between a SNARK and a STARK is rarely about elegance; it
               shows up in your design as proof size on the wire, verifier cost, and whether you inherit a trusted-setup
-              ceremony you now have to document and defend. The summaries below are deliberately operational rather than
-              mathematical.
+              ceremony you now have to document and defend. A trusted setup is a one-time ceremony that produces the
+              proving and verification keys; its soundness depends on at least one participant having discarded their
+              secret contribution, so if every contributor is compromised the system&apos;s soundness fails. The
+              summaries below are deliberately operational rather than mathematical.
             </p>
             <div className="grid gap-4 lg:grid-cols-3">
               {proofSystemCards.map((card) => (
@@ -428,7 +430,7 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
               architecture review, not only a math exercise.
             </p>
             <p className="mt-4 text-sm text-muted-foreground leading-6">
-              Look at the small example below before reading the listing. It proves that two private amounts sum to a
+              Read the two diagrams below, then the pseudo-circuit listing. It proves that two private amounts sum to a
               public total, stay under a limit, and match a public commitment. Watch the right-hand column of the
               diagram: the addition stays cheap, but the innocent-looking <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">total &lt;= limit</code> and the hash each blow up into a multi-constraint gadget. That asymmetry is the
               whole point.
@@ -563,7 +565,7 @@ export function PageCh51ZeroKnowledgeProofsRustEngineers() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">How this lands by background</h3>
+            <h3 className="text-lg font-semibold text-foreground">Adjustments by starting language</h3>
           </div>
           <p className="text-sm text-muted-foreground leading-6">
             The cryptography is the same regardless of where you came from, but the instinct that misleads you is not.

@@ -93,6 +93,7 @@ fn build_batch() -> Vec<f32> {
 
 // Run the dense layer over one feature row and return its logits.
 fn forward_row(row: &[f32]) -> [f32; OUT] {
+    assert_eq!(row.len(), IN, "row must have {IN} elements");
     let mut logits = [0.0f32; OUT];
     for o in 0..OUT {
         let mut sum = BIAS[o];

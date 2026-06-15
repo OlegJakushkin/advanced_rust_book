@@ -143,7 +143,7 @@ const integrationCards = [
   },
   {
     title: "Service and queue boundary",
-    body: "The API layer should accept requests, normalize inputs, resolve artifact versions, and enqueue one owned proving job. It should not hold the user open for heavyweight proving by default.",
+    body: "The API layer should accept requests, normalize inputs, resolve artifact versions, and enqueue one owned proving job. It should not hold the user open for heavyweight proving by default. This is where the typed service and transport boundaries from Chapter 47 pay off: the submit, status, and verify surfaces are distinct request and response types, so the wire contract for enqueuing a job never accidentally carries proving-side fields.",
   },
   {
     title: "Verifier boundary",
@@ -355,7 +355,7 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
           <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
             <div className="flex items-center gap-2 mb-2">
               <Network className="h-5 w-5 text-primary" />
-              <h4 className="font-semibold text-foreground">The same topology as a service sketch</h4>
+              <h4 className="font-semibold text-foreground">Architecture as text</h4>
             </div>
             <p className="text-sm text-muted-foreground leading-6 mb-3">
               Read the diagram top to bottom in code form. The indentation shows which stores and manifests each stage
@@ -401,7 +401,7 @@ export function PageCh53EzklVerifiableLlmInferenceGpuZkml() {
         <section className="space-y-5">
           <div className="flex items-center gap-2">
             <Gauge className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold text-foreground">Core concepts</h3>
+            <h3 className="text-lg font-semibold text-foreground">Pipeline stages, LLM constraints, and Rust boundaries</h3>
           </div>
 
           <article className="rounded-xl border border-border bg-card p-5">

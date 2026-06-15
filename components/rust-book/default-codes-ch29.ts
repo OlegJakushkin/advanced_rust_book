@@ -19,15 +19,17 @@ fn main() {
     println!("sum = {}", total);
 }`,
   wasm_cpp_ffi_boundary: `mod cpp_shim {
+    // Rust 2024 edition syntax; on older toolchains use
+    // #[no_mangle] and a plain extern "C" block.
     #[unsafe(no_mangle)]
     pub extern "C" fn cpp_route_score(ptr: *const u8, len: usize) -> u32 {
-        if ptr.is_null() && len != 0 {
-            return 0;
+        if ptr.is_null() {
+            return 0; // reject null regardless of len
         }
 
         let bytes = unsafe {
             // SAFETY:
-            // - ptr is either null with len == 0 or valid for len bytes.
+            // - ptr is non-null (checked above) and valid for len initialized bytes.
             // - the shim only reads the bytes for the duration of the call.
             std::slice::from_raw_parts(ptr, len)
         };

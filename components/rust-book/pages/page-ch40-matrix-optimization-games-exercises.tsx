@@ -55,7 +55,7 @@ const exercises: Exercise[] = [
       "State what graph.nnz() and graph.dense_bytes() report and what that contrast is meant to show.",
     ],
     acceptanceCriteria: [
-      "Row 0 expands over indptr[0]..indptr[2] reaching columns 1 and 2; row 2 expands over indptr[2]..indptr[4] reaching columns 3 and 4.",
+      "Row 0 expands over indptr[0]..indptr[1] (= 0..2) reaching columns 1 and 2; row 2 expands over indptr[2]..indptr[3] (= 3..5) reaching columns 3 and 4.",
       "The resulting next frontier is 0,1,1,1,1 and rows 1, 3, 4 are skipped because their frontier value is 0.0.",
       "nnz is 6 (the length of data) and dense_bytes is rows * cols * 4 = 100, illustrating the metadata-versus-density tradeoff.",
     ],
@@ -77,7 +77,7 @@ const exercises: Exercise[] = [
     ],
     acceptanceCriteria: [
       "The loop nest is ordered i, k, j with j innermost, and a.get(i, k) is read once per (i, k) rather than once per (i, j, k).",
-      "The innermost loop indexes b.get(k, j), so it strides one element at a time along a row of B rather than jumping across rows.",
+      "The innermost loop indexes b.get(k, j), so it reads consecutive memory addresses along a row of B rather than jumping across rows.",
       "matmul_ikj returns a matrix that approx_eq reports equal to matmul_naive for the same operands.",
     ],
     hints: [

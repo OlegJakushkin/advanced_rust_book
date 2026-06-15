@@ -45,7 +45,7 @@ const exercises: Exercise[] = [
   },
   {
     number: 2,
-    kind: "code reading",
+    kind: "estimation",
     title: "Estimate transfer cost before discussing the kernel",
     objective: "Translate one matrix job into bytes on the bus before you start tuning arithmetic.",
     starterPrompt:
@@ -165,6 +165,7 @@ const reviewQuestions = [
   "What is the practical difference between host memory ownership and device memory ownership?",
   "Why are queue wait and launch count often more useful than one isolated kernel timing?",
   "When is CUDA the wrong choice even when a kernel itself is efficient?",
+  "Why should device memory be modeled as an explicit owner handle rather than a borrowed pointer into host memory?",
 ]
 
 const workingLoop = [
@@ -313,22 +314,35 @@ struct LaunchConfig {
 }
 
 fn validate_buffers(a_len: usize, b_len: usize, out_len: usize) -> Result<(), &'static str> {
-    Ok(())
+    // TODO: reject zero-length buffers and mismatched lengths before any launch.
+    Err("not implemented")
 }
 
 fn build_config(a_len: usize, threads_per_block: u32) -> LaunchConfig {
+    // TODO: derive the block count from a_len with ceiling division.
     LaunchConfig {
         threads_per_block,
         blocks: 0,
     }
 }
 
+unsafe fn raw_launch(_config: LaunchConfig, _len: usize) {
+    // SAFETY: callers reach this only after validate_buffers confirmed equal,
+    // nonzero lengths and build_config produced a nonzero launch config.
+}
+
 fn main() {
     let len = 1_024_usize;
     let threads_per_block = 128_u32;
 
-    let launch_ok = validate_buffers(len, len, len).is_ok();
     let config = build_config(len, threads_per_block);
+    let launch_ok = match validate_buffers(len, len, len) {
+        Ok(()) => {
+            unsafe { raw_launch(config, len); }
+            true
+        }
+        Err(_) => false,
+    };
 
     println!("blocks = {}", config.blocks);
     println!("threads = {}", config.threads_per_block);

@@ -5,7 +5,7 @@ struct Request<'a> {
     bytes: usize,
 }
 
-fn hot_routes<'a>(requests: &'a [Request<'a>], min_bytes: usize) -> Vec<&'a str> {
+fn hot_routes<'r, 's: 'r>(requests: &'r [Request<'s>], min_bytes: usize) -> Vec<&'s str> {
     let mut out = Vec::with_capacity(requests.len());
 
     for request in requests {
