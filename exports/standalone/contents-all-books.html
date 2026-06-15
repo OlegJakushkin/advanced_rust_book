@@ -1,0 +1,334 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Advanced Rust · Contents</title><style>/* ============================================================================
+   O'Reilly-style book print theme (homage, using freely available fonts).
+   Serif body, sans headings, monospace code; numbered Example listings;
+   NOTE/TIP/WARNING admonitions; gray sidebars. Page numbers + running heads
+   are stamped onto the PDF after rendering (see oreilly_pdf.add_running_heads).
+   ============================================================================ */
+:root{
+  --ink:#1a1a1a; --muted:#5c5c5c; --rule:#d8d8d8;
+  --accent:#CE412B;                 /* official Rust orange (logo gear / brand) */
+  --code-bg:#f7f7f8; --code-border:#e2e3e6; --code-ink:#1f2328;
+  --note:#1f5fa6;  --note-bg:#eef4fb;
+  --tip:#2f7a43;   --tip-bg:#eef7f0;
+  --warn:#b3531a;  --warn-bg:#fbf2ea;
+  --sidebar-bg:#f4f4f5;
+  --serif:Georgia,"Times New Roman",serif;
+  --sans:"Helvetica Neue",Arial,"Segoe UI",sans-serif;
+  --mono:"Consolas","Cascadia Mono","DejaVu Sans Mono",monospace;
+}
+
+@page{ size:A4; margin:18mm 17mm 20mm 17mm; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:var(--serif); color:var(--ink);
+  font-size:10.6pt; line-height:1.5;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+
+/* ---- chapter opener -------------------------------------------------------*/
+.chapter{ break-before:page; }
+.chapter:first-of-type{ break-before:auto; }
+.ch-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--accent);
+  margin:0 0 6px; }
+h1.ch-title{ font-family:var(--sans); font-weight:700; font-size:27pt;
+  line-height:1.1; letter-spacing:-.01em; margin:0 0 4px; }
+.ch-rule{ height:3px; background:var(--accent); width:54px; margin:10px 0 12px; }
+.ch-desc{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#3a3a3a; margin:0 0 6px; max-width:42em; }
+
+/* ---- headings + prose -----------------------------------------------------*/
+h2.sect{ font-family:var(--sans); font-weight:700; font-size:15pt;
+  margin:22px 0 9px; padding-bottom:4px; border-bottom:1px solid var(--rule);
+  color:var(--ink); }
+h3.sub{ font-family:var(--sans); font-weight:700; font-size:11.5pt;
+  margin:16px 0 7px; color:var(--ink); }
+p{ margin:0 0 9px; }
+p.body{ text-align:justify; hyphens:auto; }
+p.lead{ font-size:11pt; color:#2c2c2c; }
+
+ul.list,ol.list{ margin:0 0 9px; padding-left:20px; }
+ul.list li,ol.list li{ margin:0 0 5px; }
+.tight li{ margin:0 0 3px; }
+
+/* inline code */
+code{ font-family:var(--mono); font-size:.85em; background:#f0f0f1;
+  border-radius:3px; padding:.5px 4px; color:#1f2328; white-space:nowrap;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+
+/* ---- grouped blocks (comparisons, patterns, pitfalls, diagnostics) --------*/
+.group{ display:grid; gap:11px; margin:10px 0; }
+.group.cols-2{ grid-template-columns:1fr 1fr; }
+.group.cols-3{ grid-template-columns:1fr 1fr 1fr; }
+.block{ border:1px solid var(--rule); border-radius:4px; padding:10px 12px;
+  break-inside:avoid; background:#fff; }
+.block .block-t{ font-family:var(--sans); font-weight:700; font-size:9.7pt;
+  display:block; margin-bottom:4px; }
+.block p{ margin:0; }
+.block.plain .block-t{ display:none; }
+.block.diag .dcode{ font-family:var(--mono); font-size:8.4pt; color:var(--accent);
+  display:block; margin-bottom:3px; }
+.block.diag .dfix{ margin-top:5px; }
+.cols-2col{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.col-lbl{ font-family:var(--sans); font-weight:700; font-size:8.4pt;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:5px; }
+
+/* ---- sidebars (How to use / working loop / success / checklists) ----------*/
+.sidebar{ background:var(--sidebar-bg); border:1px solid var(--rule);
+  border-radius:4px; padding:11px 14px; margin:11px 0; break-inside:avoid; }
+.sidebar .side-t{ font-family:var(--sans); font-weight:700; font-size:10.2pt;
+  display:block; margin-bottom:6px; }
+.sidebar p:last-child{ margin-bottom:0; }
+.sidebar ol.list,.sidebar ul.list{ margin-bottom:0; }
+
+/* ---- admonitions: NOTE / TIP / WARNING ------------------------------------*/
+.admon{ display:flex; gap:11px; align-items:flex-start;
+  border:1px solid var(--rule); border-left:4px solid var(--rule);
+  border-radius:4px; padding:10px 13px; margin:10px 0; break-inside:avoid; }
+.admon-ico{ flex:0 0 auto; width:20px; height:20px; margin-top:1px; }
+.admon-body{ flex:1; }
+.admon-body p{ margin:0; }
+.admon-label{ font-family:var(--sans); font-weight:700; font-size:8pt;
+  letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:3px; }
+.admon-note{ border-left-color:var(--note); background:var(--note-bg); }
+.admon-note .admon-label{ color:var(--note); }
+.admon-tip{ border-left-color:var(--tip); background:var(--tip-bg); }
+.admon-tip .admon-label{ color:var(--tip); }
+.admon-warn{ border-left-color:var(--warn); background:var(--warn-bg); }
+.admon-warn .admon-label{ color:var(--warn); }
+
+/* ---- numbered code listings (Example N-M) ---------------------------------*/
+/* Allow the listing to flow across page boundaries: a long Example fills the
+   rest of the page and continues on the next one, instead of being pushed to a
+   blank page just because it doesn't fit in one piece. The caption stays glued
+   to the start of the code. */
+.example{ margin:13px 0; break-inside:auto; }
+.ex-cap{ font-family:var(--sans); font-size:9.4pt; color:var(--ink); margin:0 0 5px;
+  break-after:avoid; page-break-after:avoid; }
+.ex-cap b{ color:var(--accent); }
+.ex-cap .fn{ font-family:var(--mono); font-size:8.8pt; }
+.ex-cap .ex-desc{ font-style:italic; color:#3a3a3a; }
+.listing{ background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:9px 13px; overflow-x:auto; break-inside:auto; }
+pre.hl{ margin:0; font-family:var(--mono); font-size:8.8pt; line-height:1.5;
+  white-space:pre; color:var(--code-ink); break-inside:auto;
+  orphans:3; widows:3;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+.output{ margin-top:6px; }
+.output .out-lbl{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.output pre{ margin:0; background:#fff; border:1px solid var(--code-border);
+  border-left:3px solid #c9ccd1; border-radius:3px; padding:7px 13px;
+  font-family:var(--mono); font-size:8.6pt; line-height:1.5; color:#33373d;
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+
+/* ---- inline single-line snippets (illustrative, not numbered) -------------*/
+.snippet{ margin:8px 0 4px; }
+.snippet pre{ margin:0; background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:7px 11px; overflow-x:auto;
+  font-family:var(--mono); font-size:8.7pt; line-height:1.5; color:var(--code-ink);
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+.snippet-note{ font-size:9pt; color:var(--muted); margin:5px 0 0; }
+
+/* ---- exercises ------------------------------------------------------------*/
+.exercise{ border:1px solid var(--rule); border-radius:5px; padding:12px 14px;
+  margin:12px 0; break-inside:avoid; }
+.xr-head{ display:flex; gap:9px; align-items:center; margin-bottom:4px; }
+.xr-num{ font-family:var(--sans); font-weight:700; font-size:7.8pt;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+.xr-kind{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted); border:1px solid var(--rule);
+  border-radius:9px; padding:1px 8px; }
+.xr-title{ font-family:var(--sans); font-weight:700; font-size:11.5pt; margin:0 0 8px; }
+.xr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.xr-lbl{ font-family:var(--sans); font-weight:700; font-size:7.5pt;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.xr-cols p{ margin:0 0 6px; }
+.xr-acc{ margin-top:9px; border-top:1px solid var(--rule); padding-top:8px; }
+.xr-acc .xr-lbl{ color:var(--tip); }
+.xr-hints{ margin-top:9px; }
+.xr-hints .xr-lbl{ color:var(--muted); }
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ffffcc }
+.hl { background: #f7f7f8; }
+.hl .c { color: #6E7781; font-style: italic } /* Comment */
+.hl .g { color: #1F2328 } /* Generic */
+.hl .k { color: #CF222E } /* Keyword */
+.hl .n { color: #1F2328 } /* Name */
+.hl .o { color: #1F2328 } /* Operator */
+.hl .p { color: #1F2328 } /* Punctuation */
+.hl .ch { color: #6E7781; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #6E7781; font-style: italic } /* Comment.Multiline */
+.hl .cp { color: #8250DF; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #6E7781; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #6E7781; font-style: italic } /* Comment.Single */
+.hl .cs { color: #6E7781; font-style: italic } /* Comment.Special */
+.hl .gd { color: #1F2328 } /* Generic.Deleted */
+.hl .ge { color: #1F2328 } /* Generic.Emph */
+.hl .ges { color: #1F2328 } /* Generic.EmphStrong */
+.hl .gr { color: #1F2328 } /* Generic.Error */
+.hl .gh { color: #1F2328 } /* Generic.Heading */
+.hl .gi { color: #1F2328 } /* Generic.Inserted */
+.hl .go { color: #1F2328 } /* Generic.Output */
+.hl .gp { color: #1F2328 } /* Generic.Prompt */
+.hl .gs { color: #1F2328 } /* Generic.Strong */
+.hl .gu { color: #1F2328 } /* Generic.Subheading */
+.hl .gt { color: #1F2328 } /* Generic.Traceback */
+.hl .kc { color: #CF222E } /* Keyword.Constant */
+.hl .kd { color: #CF222E } /* Keyword.Declaration */
+.hl .kn { color: #CF222E } /* Keyword.Namespace */
+.hl .kp { color: #CF222E } /* Keyword.Pseudo */
+.hl .kr { color: #CF222E } /* Keyword.Reserved */
+.hl .kt { color: #953800 } /* Keyword.Type */
+.hl .m { color: #0550AE } /* Literal.Number */
+.hl .s { color: #0A3069 } /* Literal.String */
+.hl .na { color: #0550AE } /* Name.Attribute */
+.hl .nb { color: #0550AE } /* Name.Builtin */
+.hl .nc { color: #953800 } /* Name.Class */
+.hl .no { color: #0550AE } /* Name.Constant */
+.hl .nd { color: #1F2328 } /* Name.Decorator */
+.hl .ni { color: #1F2328 } /* Name.Entity */
+.hl .ne { color: #1F2328 } /* Name.Exception */
+.hl .nf { color: #8250DF } /* Name.Function */
+.hl .nl { color: #0550AE } /* Name.Label */
+.hl .nn { color: #1F2328 } /* Name.Namespace */
+.hl .nx { color: #1F2328 } /* Name.Other */
+.hl .py { color: #1F2328 } /* Name.Property */
+.hl .nt { color: #1F2328 } /* Name.Tag */
+.hl .nv { color: #1F2328 } /* Name.Variable */
+.hl .ow { color: #CF222E } /* Operator.Word */
+.hl .pm { color: #1F2328 } /* Punctuation.Marker */
+.hl .mb { color: #0550AE } /* Literal.Number.Bin */
+.hl .mf { color: #0550AE } /* Literal.Number.Float */
+.hl .mh { color: #0550AE } /* Literal.Number.Hex */
+.hl .mi { color: #0550AE } /* Literal.Number.Integer */
+.hl .mo { color: #0550AE } /* Literal.Number.Oct */
+.hl .sa { color: #CF222E } /* Literal.String.Affix */
+.hl .sb { color: #0A3069 } /* Literal.String.Backtick */
+.hl .sc { color: #0A3069 } /* Literal.String.Char */
+.hl .dl { color: #0A3069 } /* Literal.String.Delimiter */
+.hl .sd { color: #0A3069 } /* Literal.String.Doc */
+.hl .s2 { color: #0A3069 } /* Literal.String.Double */
+.hl .se { color: #0A3069 } /* Literal.String.Escape */
+.hl .sh { color: #0A3069 } /* Literal.String.Heredoc */
+.hl .si { color: #0A3069 } /* Literal.String.Interpol */
+.hl .sx { color: #0A3069 } /* Literal.String.Other */
+.hl .sr { color: #0A3069 } /* Literal.String.Regex */
+.hl .s1 { color: #0A3069 } /* Literal.String.Single */
+.hl .ss { color: #0A3069 } /* Literal.String.Symbol */
+.hl .bp { color: #CF222E } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8250DF } /* Name.Function.Magic */
+.hl .vc { color: #1F2328 } /* Name.Variable.Class */
+.hl .vg { color: #1F2328 } /* Name.Variable.Global */
+.hl .vi { color: #1F2328 } /* Name.Variable.Instance */
+.hl .vm { color: #1F2328 } /* Name.Variable.Magic */
+.hl .il { color: #0550AE } /* Literal.Number.Integer.Long */
+
+.title-page{ break-before:auto; height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.title-block{ text-align:center; max-width:34em; }
+.title-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:36px; }
+.title-name{ font-family:var(--sans); font-weight:700; font-size:46pt;
+  line-height:1.05; letter-spacing:-.015em; color:var(--ink); margin:0; }
+.title-rule{ height:4px; width:90px; background:var(--accent); margin:22px auto; }
+.title-sub{ font-family:var(--serif); font-style:italic; font-size:13.5pt;
+  color:#444; margin:0 0 56px; }
+.title-author{ font-family:var(--serif); font-weight:700; font-size:14pt;
+  color:var(--ink); letter-spacing:.02em; }
+
+/* Colophon (back-matter close) */
+.colophon{ height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.colo-block{ text-align:center; max-width:30em; }
+.colo-mark{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
+.colo-rule{ height:3px; width:60px; background:var(--accent); margin:14px auto 22px; }
+.colo-title{ font-family:var(--sans); font-weight:700; font-size:26pt;
+  margin:0 0 6px; color:var(--ink); }
+.colo-author{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#444; margin:0 0 28px; }
+.colo-meta{ font-family:var(--serif); font-size:10pt; color:var(--muted);
+  margin:0 0 22px; line-height:1.6; }
+.colo-thanks{ font-family:var(--serif); font-size:11pt; color:var(--ink); margin:0; }
+
+/* Keep section headings with the block that follows them — no orphan headings —
+   and clear any floated (slim) diagram so it never bleeds past its section. */
+h2.sect, h3.sub{ break-after:avoid; page-break-after:avoid; clear:both; }
+/* Code listings, labs, and exercises never sit beside a floated diagram. */
+.example, .exercise, .snippet{ clear:both; }
+
+/* Workbook: let exercises flow so several fit per page (like the main book's
+   prose) instead of each one grabbing its own page. They keep their border box;
+   only the "never split across a page" rule is relaxed. */
+.exercise{ break-inside:auto; }
+.xr-head, .xr-title{ break-after:avoid; }
+
+/* Mermaid diagrams.
+   SVGs render at body text size (14px = 10.6pt). A diagram wider than the
+   content column is scaled down to fit (max-width:100%) so it is never clipped
+   at the page edge — its text shrinks proportionally. Slim, portrait diagrams
+   instead float left (.slim) so prose wraps to their right. */
+.mermaid-fig{ margin:14px 0; text-align:center; break-inside:avoid; clear:both; }
+.mermaid-svg{ display:inline-block; width:auto; height:auto; max-width:100%;
+  max-height:none; }
+.mermaid-fig.slim{ float:left; clear:left; width:auto; max-width:44%;
+  text-align:left; margin:4px 22px 8px 0; }
+.mermaid-fig.slim .mermaid-svg{ max-width:100%; }
+.mermaid-fig.slim .mermaid-cap{ text-align:left; margin-left:0; margin-right:0;
+  max-width:100%; }
+.mermaid-cap{ font-family:var(--serif); font-style:italic; font-size:10.6pt;
+  color:#555; margin-top:6px; max-width:38em; margin-left:auto;
+  margin-right:auto; line-height:1.5; }
+.mermaid-missing{ font-family:var(--serif); color:#888; font-size:10.6pt;
+  text-align:center; margin:8px 0; }
+
+/* Table of contents */
+.toc-section{ padding-top:6mm; }
+.toc-h{ font-family:var(--sans); font-weight:700; font-size:24pt;
+  letter-spacing:-.01em; color:var(--ink); margin:0 0 4px; }
+.toc-rule{ height:3px; width:54px; background:var(--accent); margin:0 0 16px; }
+.toc-row{ display:flex; align-items:baseline; gap:8px; padding:3px 0;
+  font-family:var(--serif); font-size:10.6pt; color:var(--ink);
+  break-inside:avoid; }
+.toc-num{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  color:var(--accent); min-width:26px; text-align:right;
+  letter-spacing:.02em; }
+.toc-title{ flex:0 1 auto; }
+.toc-leader{ flex:1 1 auto; border-bottom:1px dotted #b5b5b5;
+  transform:translateY(-3px); margin:0 6px; }
+.toc-page{ font-family:var(--serif); font-size:10.6pt; color:#3a3a3a;
+  min-width:24px; text-align:right; }
+.toc-part{ font-family:var(--sans); font-weight:700; font-size:10pt;
+  letter-spacing:.05em; color:var(--accent); margin:13px 0 3px;
+  padding-top:7px; border-top:1px solid #e3e3e3; break-after:avoid; }
+
+/* Part-divider pages */
+.part-divider{ height:100vh; display:flex; align-items:center;
+  justify-content:center; }
+.part-block{ width:100%; max-width:34em; }
+.part-eyebrow{ font-family:var(--sans); font-weight:700; font-size:11pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--accent); }
+.part-name{ font-family:var(--sans); font-weight:700; font-size:33pt;
+  line-height:1.07; letter-spacing:-.012em; color:var(--ink); margin:10px 0 0; }
+.part-rule{ height:4px; width:80px; background:var(--accent); margin:18px 0; }
+.part-sub{ font-family:var(--serif); font-style:italic; font-size:13pt;
+  color:#444; margin:0 0 26px; line-height:1.5; }
+.part-list{ border-top:1px solid #ddd; }
+.part-row{ display:flex; gap:12px; align-items:baseline; padding:6px 0;
+  border-bottom:1px solid #eee; font-family:var(--serif); font-size:11pt;
+  color:var(--ink); break-inside:avoid; }
+.part-row-num{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  color:var(--accent); min-width:26px; text-align:right; }
+
+.toc-allbooks{ font-family:var(--serif); font-style:italic; font-size:11pt;
+  color:#555; margin:0 0 16px; }
+</style></head><body><section class="chapter toc-section"><h1 class="toc-h">Contents</h1><div class="toc-rule"></div><p class="toc-allbooks">The 56-chapter structure shared by the Main book, the Exercise Workbook, and the Answers &amp; Solutions book.</p><div class="toc-part">Part I · Getting Your Bearings in Rust</div><div class="toc-row"><span class="toc-num">1</span><span class="toc-title">Why Rust Feels Different</span></div><div class="toc-row"><span class="toc-num">2</span><span class="toc-title">The Rust Mental Model</span></div><div class="toc-row"><span class="toc-num">3</span><span class="toc-title">Project Structure and Tooling</span></div><div class="toc-part">Part II · Memory, Ownership, and Data Layout</div><div class="toc-row"><span class="toc-num">4</span><span class="toc-title">Ownership, Borrowing, and Lifetimes</span></div><div class="toc-row"><span class="toc-num">5</span><span class="toc-title">Pointers, References, and Ownership Inside Structs</span></div><div class="toc-row"><span class="toc-num">6</span><span class="toc-title">Pointers, References, and Ownership Inside Vectors</span></div><div class="toc-row"><span class="toc-num">7</span><span class="toc-title">Copying Data vs Cloning Data</span></div><div class="toc-row"><span class="toc-num">8</span><span class="toc-title">Undefined Behavior and Unsafe Rust</span></div><div class="toc-row"><span class="toc-num">9</span><span class="toc-title">Smart Pointers and Pinning</span></div><div class="toc-row"><span class="toc-num">10</span><span class="toc-title">Arrays, Slices, and Vectors</span></div><div class="toc-row"><span class="toc-num">11</span><span class="toc-title">Hash Maps and Sets</span></div><div class="toc-row"><span class="toc-num">12</span><span class="toc-title">Matrices and Multidimensional Data</span></div><div class="toc-row"><span class="toc-num">13</span><span class="toc-title">Arena Allocation and Region-Based Memory</span></div><div class="toc-part">Part III · Designing Types and Abstractions</div><div class="toc-row"><span class="toc-num">14</span><span class="toc-title">Interfaces in Rust: Traits</span></div><div class="toc-row"><span class="toc-num">15</span><span class="toc-title">OOP Models in Rust</span></div><div class="toc-row"><span class="toc-num">16</span><span class="toc-title">Domain-Driven Design in Rust</span></div><div class="toc-row"><span class="toc-num">17</span><span class="toc-title">Refactoring Toward Idiomatic Rust</span></div><div class="toc-row"><span class="toc-num">18</span><span class="toc-title">Generics Instead of Templates</span></div><div class="toc-row"><span class="toc-num">19</span><span class="toc-title">Serialization and Data Contracts</span></div><div class="toc-row"><span class="toc-num">20</span><span class="toc-title">Metaprogramming</span></div><div class="toc-row"><span class="toc-num">21</span><span class="toc-title">Reflection and Type Introspection</span></div><div class="toc-part">Part IV · Concurrency, Async, and Systems IO</div><div class="toc-row"><span class="toc-num">22</span><span class="toc-title">Multithreading in Rust</span></div><div class="toc-row"><span class="toc-num">23</span><span class="toc-title">Synchronization Primitives</span></div><div class="toc-row"><span class="toc-num">24</span><span class="toc-title">Coroutines, Futures, and Async Rust</span></div><div class="toc-row"><span class="toc-num">25</span><span class="toc-title">Tokio</span></div><div class="toc-row"><span class="toc-num">26</span><span class="toc-title">Task Libraries and Parallel Execution</span></div><div class="toc-row"><span class="toc-num">27</span><span class="toc-title">IO Tricks and Systems Programming Patterns</span></div><div class="toc-part">Part V · Integration, Distributed Systems, and HPC</div><div class="toc-row"><span class="toc-num">28</span><span class="toc-title">C++ Integration</span></div><div class="toc-row"><span class="toc-num">29</span><span class="toc-title">JavaScript and C++ Integration for WASM</span></div><div class="toc-row"><span class="toc-num">30</span><span class="toc-title">AMQP and Message Brokers</span></div><div class="toc-row"><span class="toc-num">31</span><span class="toc-title">Distributed Task Execution</span></div><div class="toc-row"><span class="toc-num">32</span><span class="toc-title">MPI and High-Performance Computing</span></div><div class="toc-row"><span class="toc-num">33</span><span class="toc-title">Performance-Oriented Rust</span></div><div class="toc-row"><span class="toc-num">34</span><span class="toc-title">Memory Profiling</span></div><div class="toc-row"><span class="toc-num">35</span><span class="toc-title">Performance Profiling</span></div><div class="toc-row"><span class="toc-num">36</span><span class="toc-title">Distributed Tasks Profiling</span></div><div class="toc-row"><span class="toc-num">37</span><span class="toc-title">CUDA and GPU Acceleration</span></div><div class="toc-row"><span class="toc-num">38</span><span class="toc-title">Merkle Tree Games and Challenges</span></div><div class="toc-row"><span class="toc-num">39</span><span class="toc-title">Graph Search Games</span></div><div class="toc-row"><span class="toc-num">40</span><span class="toc-title">Matrix Optimization Games</span></div><div class="toc-part">Part VI · Engineering Systems for Production</div><div class="toc-row"><span class="toc-num">41</span><span class="toc-title">Error Handling in Large Systems</span></div><div class="toc-row"><span class="toc-num">42</span><span class="toc-title">Testing Advanced Rust Systems</span></div><div class="toc-row"><span class="toc-num">43</span><span class="toc-title">Observability</span></div><div class="toc-row"><span class="toc-num">44</span><span class="toc-title">Packaging and Deployment</span></div><div class="toc-row"><span class="toc-num">45</span><span class="toc-title">Capstone: A Distributed Rust System</span></div><div class="toc-part">Part VII · Networked Services and Secure Boundaries</div><div class="toc-row"><span class="toc-num">46</span><span class="toc-title">FastAPI-Style Web Apps, Swagger, and OpenAPI Codegen</span></div><div class="toc-row"><span class="toc-num">47</span><span class="toc-title">gRPC Services with Protobuf and Service API Codegen</span></div><div class="toc-row"><span class="toc-num">48</span><span class="toc-title">WebSockets and Long-Lived Connections</span></div><div class="toc-row"><span class="toc-num">49</span><span class="toc-title">HTTPS, TLS, and Secure Service Boundaries</span></div><div class="toc-row"><span class="toc-num">50</span><span class="toc-title">libp2p and Peer-to-Peer Rust Systems</span></div><div class="toc-part">Part VIII · Frontier Specializations</div><div class="toc-row"><span class="toc-num">51</span><span class="toc-title">Zero-Knowledge Proofs for Rust Engineers</span></div><div class="toc-row"><span class="toc-num">52</span><span class="toc-title">ZoKrates Workflows and Ethereum Verifiers</span></div><div class="toc-row"><span class="toc-num">53</span><span class="toc-title">EZKL, Verifiable LLM Inference, and GPU-Aware ZKML</span></div><div class="toc-row"><span class="toc-num">54</span><span class="toc-title">ONNX Model Inference in Rust</span></div><div class="toc-row"><span class="toc-num">55</span><span class="toc-title">Smart Contracts in Rust: Solana, Sei, and Beyond</span></div><div class="toc-row"><span class="toc-num">56</span><span class="toc-title">no-std Rust and Constrained Runtime Derivatives</span></div></section></body></html>

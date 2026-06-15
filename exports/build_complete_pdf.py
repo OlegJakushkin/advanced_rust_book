@@ -510,6 +510,12 @@ h2.sect, h3.sub{ break-after:avoid; page-break-after:avoid; clear:both; }
 /* Code listings, labs, and exercises never sit beside a floated diagram. */
 .example, .exercise, .snippet{ clear:both; }
 
+/* Workbook: let exercises flow so several fit per page (like the main book's
+   prose) instead of each one grabbing its own page. They keep their border box;
+   only the "never split across a page" rule is relaxed. */
+.exercise{ break-inside:auto; }
+.xr-head, .xr-title{ break-after:avoid; }
+
 /* Mermaid diagrams.
    SVGs render at body text size (14px = 10.6pt). A diagram wider than the
    content column is scaled down to fit (max-width:100%) so it is never clipped

@@ -14,5 +14,14 @@
     "curve": "linear",
     "useMaxWidth": false,
     "htmlLabels": false
+  },
+  "state": {
+    "useMaxWidth": false
+  },
+  "sequence": {
+    "useMaxWidth": false
+  },
+  "class": {
+    "useMaxWidth": false
   }
 }

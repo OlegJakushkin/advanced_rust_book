@@ -209,7 +209,7 @@ export function PageCh06OwnershipInsideVectorsExercises() {
                 index, a typed ID, or a different representation entirely.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(12)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch06-ownership-inside-vectors"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 06
             </Button>

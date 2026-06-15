@@ -198,10 +198,10 @@ export function PageCh05OwnershipInsideStructs() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(3)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))}>
                 Revisit Chapter 02
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}>
                 Revisit Chapter 04
               </Button>
             </div>

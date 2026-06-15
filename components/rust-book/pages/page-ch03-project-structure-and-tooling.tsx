@@ -166,7 +166,7 @@ export function PageCh03ProjectStructureAndTooling() {
                 and explains the Cargo layouts you would create in a real Rust repository.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(3)} className="shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch02-the-rust-mental-model"))} className="shrink-0">
               Revisit Chapter 02
             </Button>
           </div>

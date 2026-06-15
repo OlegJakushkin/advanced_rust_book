@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { getPageIndexById } from "../page-index"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Shield, TriangleAlert, Users, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
@@ -224,16 +225,16 @@ export function PageCh26TaskLibrariesAndParallelExecution() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(46)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch22-multithreading-in-rust"))}>
                 Chapter 22
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(48)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch23-synchronization-primitives"))}>
                 Chapter 23
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(50)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch24-coroutines-futures-and-async-rust"))}>
                 Chapter 24
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(52)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch25-tokio"))}>
                 Chapter 25
               </Button>
             </div>

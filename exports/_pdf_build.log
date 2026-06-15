@@ -1,0 +1,20 @@
+Build started at 03:46:47
+=== MAIN 03:46:47 ===
+Pass 1 done: 56/56 chapter starts located. Missing: []
+Rendering pass 2/3 — resolved TOC page numbers...
+TOC converged on pass 2.
+Stamping chapter-name footers...
+PDF: C:\work\advanced_rust_book\exports\advanced-rust-book.pdf
+=== WORKBOOK 03:48:27 ===
+Pass 1 done: 56/56 chapter starts located. Missing: []
+Rendering pass 2/3 — resolved TOC page numbers...
+TOC converged on pass 2.
+Stamping chapter-name footers...
+PDF: C:\work\advanced_rust_book\exports\advanced-rust-workbook.pdf
+=== SOLUTIONS 03:49:12 ===
+Pass 1 done: 56/56 chapter starts located. Missing: []
+Rendering pass 2/3 — resolved TOC page numbers...
+TOC converged on pass 2.
+Stamping chapter-name footers...
+PDF: C:\work\advanced_rust_book\exports\advanced-rust-solutions.pdf
+=== DONE 03:51:25 ===

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { getPageIndexById } from "../page-index"
 import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { PAGES } from "../types"
@@ -215,7 +216,7 @@ export function PageCh23SynchronizationPrimitivesExercises() {
                 matches that story.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(48)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch23-synchronization-primitives"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 23
             </Button>

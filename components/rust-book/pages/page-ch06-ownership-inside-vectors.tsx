@@ -157,10 +157,10 @@ export function PageCh06OwnershipInsideVectors() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}>
                 Revisit Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(10)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch05-ownership-inside-structs"))}>
                 Revisit Chapter 05
               </Button>
             </div>

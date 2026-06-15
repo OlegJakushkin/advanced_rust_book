@@ -1,0 +1,441 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Advanced Rust · Chapter 41</title><style>/* ============================================================================
+   O'Reilly-style book print theme (homage, using freely available fonts).
+   Serif body, sans headings, monospace code; numbered Example listings;
+   NOTE/TIP/WARNING admonitions; gray sidebars. Page numbers + running heads
+   are stamped onto the PDF after rendering (see oreilly_pdf.add_running_heads).
+   ============================================================================ */
+:root{
+  --ink:#1a1a1a; --muted:#5c5c5c; --rule:#d8d8d8;
+  --accent:#CE412B;                 /* official Rust orange (logo gear / brand) */
+  --code-bg:#f7f7f8; --code-border:#e2e3e6; --code-ink:#1f2328;
+  --note:#1f5fa6;  --note-bg:#eef4fb;
+  --tip:#2f7a43;   --tip-bg:#eef7f0;
+  --warn:#b3531a;  --warn-bg:#fbf2ea;
+  --sidebar-bg:#f4f4f5;
+  --serif:Georgia,"Times New Roman",serif;
+  --sans:"Helvetica Neue",Arial,"Segoe UI",sans-serif;
+  --mono:"Consolas","Cascadia Mono","DejaVu Sans Mono",monospace;
+}
+
+@page{ size:A4; margin:18mm 17mm 20mm 17mm; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:var(--serif); color:var(--ink);
+  font-size:10.6pt; line-height:1.5;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+
+/* ---- chapter opener -------------------------------------------------------*/
+.chapter{ break-before:page; }
+.chapter:first-of-type{ break-before:auto; }
+.ch-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--accent);
+  margin:0 0 6px; }
+h1.ch-title{ font-family:var(--sans); font-weight:700; font-size:27pt;
+  line-height:1.1; letter-spacing:-.01em; margin:0 0 4px; }
+.ch-rule{ height:3px; background:var(--accent); width:54px; margin:10px 0 12px; }
+.ch-desc{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#3a3a3a; margin:0 0 6px; max-width:42em; }
+
+/* ---- headings + prose -----------------------------------------------------*/
+h2.sect{ font-family:var(--sans); font-weight:700; font-size:15pt;
+  margin:22px 0 9px; padding-bottom:4px; border-bottom:1px solid var(--rule);
+  color:var(--ink); }
+h3.sub{ font-family:var(--sans); font-weight:700; font-size:11.5pt;
+  margin:16px 0 7px; color:var(--ink); }
+p{ margin:0 0 9px; }
+p.body{ text-align:justify; hyphens:auto; }
+p.lead{ font-size:11pt; color:#2c2c2c; }
+
+ul.list,ol.list{ margin:0 0 9px; padding-left:20px; }
+ul.list li,ol.list li{ margin:0 0 5px; }
+.tight li{ margin:0 0 3px; }
+
+/* inline code */
+code{ font-family:var(--mono); font-size:.85em; background:#f0f0f1;
+  border-radius:3px; padding:.5px 4px; color:#1f2328; white-space:nowrap;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+
+/* ---- grouped blocks (comparisons, patterns, pitfalls, diagnostics) --------*/
+.group{ display:grid; gap:11px; margin:10px 0; }
+.group.cols-2{ grid-template-columns:1fr 1fr; }
+.group.cols-3{ grid-template-columns:1fr 1fr 1fr; }
+.block{ border:1px solid var(--rule); border-radius:4px; padding:10px 12px;
+  break-inside:avoid; background:#fff; }
+.block .block-t{ font-family:var(--sans); font-weight:700; font-size:9.7pt;
+  display:block; margin-bottom:4px; }
+.block p{ margin:0; }
+.block.plain .block-t{ display:none; }
+.block.diag .dcode{ font-family:var(--mono); font-size:8.4pt; color:var(--accent);
+  display:block; margin-bottom:3px; }
+.block.diag .dfix{ margin-top:5px; }
+.cols-2col{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.col-lbl{ font-family:var(--sans); font-weight:700; font-size:8.4pt;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:5px; }
+
+/* ---- sidebars (How to use / working loop / success / checklists) ----------*/
+.sidebar{ background:var(--sidebar-bg); border:1px solid var(--rule);
+  border-radius:4px; padding:11px 14px; margin:11px 0; break-inside:avoid; }
+.sidebar .side-t{ font-family:var(--sans); font-weight:700; font-size:10.2pt;
+  display:block; margin-bottom:6px; }
+.sidebar p:last-child{ margin-bottom:0; }
+.sidebar ol.list,.sidebar ul.list{ margin-bottom:0; }
+
+/* ---- admonitions: NOTE / TIP / WARNING ------------------------------------*/
+.admon{ display:flex; gap:11px; align-items:flex-start;
+  border:1px solid var(--rule); border-left:4px solid var(--rule);
+  border-radius:4px; padding:10px 13px; margin:10px 0; break-inside:avoid; }
+.admon-ico{ flex:0 0 auto; width:20px; height:20px; margin-top:1px; }
+.admon-body{ flex:1; }
+.admon-body p{ margin:0; }
+.admon-label{ font-family:var(--sans); font-weight:700; font-size:8pt;
+  letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:3px; }
+.admon-note{ border-left-color:var(--note); background:var(--note-bg); }
+.admon-note .admon-label{ color:var(--note); }
+.admon-tip{ border-left-color:var(--tip); background:var(--tip-bg); }
+.admon-tip .admon-label{ color:var(--tip); }
+.admon-warn{ border-left-color:var(--warn); background:var(--warn-bg); }
+.admon-warn .admon-label{ color:var(--warn); }
+
+/* ---- numbered code listings (Example N-M) ---------------------------------*/
+/* Allow the listing to flow across page boundaries: a long Example fills the
+   rest of the page and continues on the next one, instead of being pushed to a
+   blank page just because it doesn't fit in one piece. The caption stays glued
+   to the start of the code. */
+.example{ margin:13px 0; break-inside:auto; }
+.ex-cap{ font-family:var(--sans); font-size:9.4pt; color:var(--ink); margin:0 0 5px;
+  break-after:avoid; page-break-after:avoid; }
+.ex-cap b{ color:var(--accent); }
+.ex-cap .fn{ font-family:var(--mono); font-size:8.8pt; }
+.ex-cap .ex-desc{ font-style:italic; color:#3a3a3a; }
+.listing{ background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:9px 13px; overflow-x:auto; break-inside:auto; }
+pre.hl{ margin:0; font-family:var(--mono); font-size:8.8pt; line-height:1.5;
+  white-space:pre; color:var(--code-ink); break-inside:auto;
+  orphans:3; widows:3;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+.output{ margin-top:6px; }
+.output .out-lbl{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.output pre{ margin:0; background:#fff; border:1px solid var(--code-border);
+  border-left:3px solid #c9ccd1; border-radius:3px; padding:7px 13px;
+  font-family:var(--mono); font-size:8.6pt; line-height:1.5; color:#33373d;
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+
+/* ---- inline single-line snippets (illustrative, not numbered) -------------*/
+.snippet{ margin:8px 0 4px; }
+.snippet pre{ margin:0; background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:7px 11px; overflow-x:auto;
+  font-family:var(--mono); font-size:8.7pt; line-height:1.5; color:var(--code-ink);
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+.snippet-note{ font-size:9pt; color:var(--muted); margin:5px 0 0; }
+
+/* ---- exercises ------------------------------------------------------------*/
+.exercise{ border:1px solid var(--rule); border-radius:5px; padding:12px 14px;
+  margin:12px 0; break-inside:avoid; }
+.xr-head{ display:flex; gap:9px; align-items:center; margin-bottom:4px; }
+.xr-num{ font-family:var(--sans); font-weight:700; font-size:7.8pt;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+.xr-kind{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted); border:1px solid var(--rule);
+  border-radius:9px; padding:1px 8px; }
+.xr-title{ font-family:var(--sans); font-weight:700; font-size:11.5pt; margin:0 0 8px; }
+.xr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.xr-lbl{ font-family:var(--sans); font-weight:700; font-size:7.5pt;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.xr-cols p{ margin:0 0 6px; }
+.xr-acc{ margin-top:9px; border-top:1px solid var(--rule); padding-top:8px; }
+.xr-acc .xr-lbl{ color:var(--tip); }
+.xr-hints{ margin-top:9px; }
+.xr-hints .xr-lbl{ color:var(--muted); }
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ffffcc }
+.hl { background: #f7f7f8; }
+.hl .c { color: #6E7781; font-style: italic } /* Comment */
+.hl .g { color: #1F2328 } /* Generic */
+.hl .k { color: #CF222E } /* Keyword */
+.hl .n { color: #1F2328 } /* Name */
+.hl .o { color: #1F2328 } /* Operator */
+.hl .p { color: #1F2328 } /* Punctuation */
+.hl .ch { color: #6E7781; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #6E7781; font-style: italic } /* Comment.Multiline */
+.hl .cp { color: #8250DF; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #6E7781; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #6E7781; font-style: italic } /* Comment.Single */
+.hl .cs { color: #6E7781; font-style: italic } /* Comment.Special */
+.hl .gd { color: #1F2328 } /* Generic.Deleted */
+.hl .ge { color: #1F2328 } /* Generic.Emph */
+.hl .ges { color: #1F2328 } /* Generic.EmphStrong */
+.hl .gr { color: #1F2328 } /* Generic.Error */
+.hl .gh { color: #1F2328 } /* Generic.Heading */
+.hl .gi { color: #1F2328 } /* Generic.Inserted */
+.hl .go { color: #1F2328 } /* Generic.Output */
+.hl .gp { color: #1F2328 } /* Generic.Prompt */
+.hl .gs { color: #1F2328 } /* Generic.Strong */
+.hl .gu { color: #1F2328 } /* Generic.Subheading */
+.hl .gt { color: #1F2328 } /* Generic.Traceback */
+.hl .kc { color: #CF222E } /* Keyword.Constant */
+.hl .kd { color: #CF222E } /* Keyword.Declaration */
+.hl .kn { color: #CF222E } /* Keyword.Namespace */
+.hl .kp { color: #CF222E } /* Keyword.Pseudo */
+.hl .kr { color: #CF222E } /* Keyword.Reserved */
+.hl .kt { color: #953800 } /* Keyword.Type */
+.hl .m { color: #0550AE } /* Literal.Number */
+.hl .s { color: #0A3069 } /* Literal.String */
+.hl .na { color: #0550AE } /* Name.Attribute */
+.hl .nb { color: #0550AE } /* Name.Builtin */
+.hl .nc { color: #953800 } /* Name.Class */
+.hl .no { color: #0550AE } /* Name.Constant */
+.hl .nd { color: #1F2328 } /* Name.Decorator */
+.hl .ni { color: #1F2328 } /* Name.Entity */
+.hl .ne { color: #1F2328 } /* Name.Exception */
+.hl .nf { color: #8250DF } /* Name.Function */
+.hl .nl { color: #0550AE } /* Name.Label */
+.hl .nn { color: #1F2328 } /* Name.Namespace */
+.hl .nx { color: #1F2328 } /* Name.Other */
+.hl .py { color: #1F2328 } /* Name.Property */
+.hl .nt { color: #1F2328 } /* Name.Tag */
+.hl .nv { color: #1F2328 } /* Name.Variable */
+.hl .ow { color: #CF222E } /* Operator.Word */
+.hl .pm { color: #1F2328 } /* Punctuation.Marker */
+.hl .mb { color: #0550AE } /* Literal.Number.Bin */
+.hl .mf { color: #0550AE } /* Literal.Number.Float */
+.hl .mh { color: #0550AE } /* Literal.Number.Hex */
+.hl .mi { color: #0550AE } /* Literal.Number.Integer */
+.hl .mo { color: #0550AE } /* Literal.Number.Oct */
+.hl .sa { color: #CF222E } /* Literal.String.Affix */
+.hl .sb { color: #0A3069 } /* Literal.String.Backtick */
+.hl .sc { color: #0A3069 } /* Literal.String.Char */
+.hl .dl { color: #0A3069 } /* Literal.String.Delimiter */
+.hl .sd { color: #0A3069 } /* Literal.String.Doc */
+.hl .s2 { color: #0A3069 } /* Literal.String.Double */
+.hl .se { color: #0A3069 } /* Literal.String.Escape */
+.hl .sh { color: #0A3069 } /* Literal.String.Heredoc */
+.hl .si { color: #0A3069 } /* Literal.String.Interpol */
+.hl .sx { color: #0A3069 } /* Literal.String.Other */
+.hl .sr { color: #0A3069 } /* Literal.String.Regex */
+.hl .s1 { color: #0A3069 } /* Literal.String.Single */
+.hl .ss { color: #0A3069 } /* Literal.String.Symbol */
+.hl .bp { color: #CF222E } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8250DF } /* Name.Function.Magic */
+.hl .vc { color: #1F2328 } /* Name.Variable.Class */
+.hl .vg { color: #1F2328 } /* Name.Variable.Global */
+.hl .vi { color: #1F2328 } /* Name.Variable.Instance */
+.hl .vm { color: #1F2328 } /* Name.Variable.Magic */
+.hl .il { color: #0550AE } /* Literal.Number.Integer.Long */
+
+.title-page{ break-before:auto; height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.title-block{ text-align:center; max-width:34em; }
+.title-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:36px; }
+.title-name{ font-family:var(--sans); font-weight:700; font-size:46pt;
+  line-height:1.05; letter-spacing:-.015em; color:var(--ink); margin:0; }
+.title-rule{ height:4px; width:90px; background:var(--accent); margin:22px auto; }
+.title-sub{ font-family:var(--serif); font-style:italic; font-size:13.5pt;
+  color:#444; margin:0 0 56px; }
+.title-author{ font-family:var(--serif); font-weight:700; font-size:14pt;
+  color:var(--ink); letter-spacing:.02em; }
+
+/* Colophon (back-matter close) */
+.colophon{ height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.colo-block{ text-align:center; max-width:30em; }
+.colo-mark{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
+.colo-rule{ height:3px; width:60px; background:var(--accent); margin:14px auto 22px; }
+.colo-title{ font-family:var(--sans); font-weight:700; font-size:26pt;
+  margin:0 0 6px; color:var(--ink); }
+.colo-author{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#444; margin:0 0 28px; }
+.colo-meta{ font-family:var(--serif); font-size:10pt; color:var(--muted);
+  margin:0 0 22px; line-height:1.6; }
+.colo-thanks{ font-family:var(--serif); font-size:11pt; color:var(--ink); margin:0; }
+
+/* Keep section headings with the block that follows them — no orphan headings —
+   and clear any floated (slim) diagram so it never bleeds past its section. */
+h2.sect, h3.sub{ break-after:avoid; page-break-after:avoid; clear:both; }
+/* Code listings, labs, and exercises never sit beside a floated diagram. */
+.example, .exercise, .snippet{ clear:both; }
+
+/* Workbook: let exercises flow so several fit per page (like the main book's
+   prose) instead of each one grabbing its own page. They keep their border box;
+   only the "never split across a page" rule is relaxed. */
+.exercise{ break-inside:auto; }
+.xr-head, .xr-title{ break-after:avoid; }
+
+/* Mermaid diagrams.
+   SVGs render at body text size (14px = 10.6pt). A diagram wider than the
+   content column is scaled down to fit (max-width:100%) so it is never clipped
+   at the page edge — its text shrinks proportionally. Slim, portrait diagrams
+   instead float left (.slim) so prose wraps to their right. */
+.mermaid-fig{ margin:14px 0; text-align:center; break-inside:avoid; clear:both; }
+.mermaid-svg{ display:inline-block; width:auto; height:auto; max-width:100%;
+  max-height:none; }
+.mermaid-fig.slim{ float:left; clear:left; width:auto; max-width:44%;
+  text-align:left; margin:4px 22px 8px 0; }
+.mermaid-fig.slim .mermaid-svg{ max-width:100%; }
+.mermaid-fig.slim .mermaid-cap{ text-align:left; margin-left:0; margin-right:0;
+  max-width:100%; }
+.mermaid-cap{ font-family:var(--serif); font-style:italic; font-size:10.6pt;
+  color:#555; margin-top:6px; max-width:38em; margin-left:auto;
+  margin-right:auto; line-height:1.5; }
+.mermaid-missing{ font-family:var(--serif); color:#888; font-size:10.6pt;
+  text-align:center; margin:8px 0; }
+
+/* Table of contents */
+.toc-section{ padding-top:6mm; }
+.toc-h{ font-family:var(--sans); font-weight:700; font-size:24pt;
+  letter-spacing:-.01em; color:var(--ink); margin:0 0 4px; }
+.toc-rule{ height:3px; width:54px; background:var(--accent); margin:0 0 16px; }
+.toc-row{ display:flex; align-items:baseline; gap:8px; padding:3px 0;
+  font-family:var(--serif); font-size:10.6pt; color:var(--ink);
+  break-inside:avoid; }
+.toc-num{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  color:var(--accent); min-width:26px; text-align:right;
+  letter-spacing:.02em; }
+.toc-title{ flex:0 1 auto; }
+.toc-leader{ flex:1 1 auto; border-bottom:1px dotted #b5b5b5;
+  transform:translateY(-3px); margin:0 6px; }
+.toc-page{ font-family:var(--serif); font-size:10.6pt; color:#3a3a3a;
+  min-width:24px; text-align:right; }
+.toc-part{ font-family:var(--sans); font-weight:700; font-size:10pt;
+  letter-spacing:.05em; color:var(--accent); margin:13px 0 3px;
+  padding-top:7px; border-top:1px solid #e3e3e3; break-after:avoid; }
+
+/* Part-divider pages */
+.part-divider{ height:100vh; display:flex; align-items:center;
+  justify-content:center; }
+.part-block{ width:100%; max-width:34em; }
+.part-eyebrow{ font-family:var(--sans); font-weight:700; font-size:11pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--accent); }
+.part-name{ font-family:var(--sans); font-weight:700; font-size:33pt;
+  line-height:1.07; letter-spacing:-.012em; color:var(--ink); margin:10px 0 0; }
+.part-rule{ height:4px; width:80px; background:var(--accent); margin:18px 0; }
+.part-sub{ font-family:var(--serif); font-style:italic; font-size:13pt;
+  color:#444; margin:0 0 26px; line-height:1.5; }
+.part-list{ border-top:1px solid #ddd; }
+.part-row{ display:flex; gap:12px; align-items:baseline; padding:6px 0;
+  border-bottom:1px solid #eee; font-family:var(--serif); font-size:11pt;
+  color:var(--ink); break-inside:avoid; }
+.part-row-num{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  color:var(--accent); min-width:26px; text-align:right; }
+</style></head><body><section class="chapter"><div class="ch-eyebrow">Chapter 41 · Error Handling in Large Systems</div><h1 class="ch-title">Error Handling in Large Systems</h1><div class="ch-rule"></div><p class="ch-desc">Result and Option, typed error enums, thiserror and anyhow, context propagation, async and FFI boundaries, logging discipline, and error-contract design for production systems</p><p class="body">In a system with many layers, error handling stops being about formatting one message and becomes interface design. This chapter treats Rust errors as production contracts: how to keep domain failures, infrastructure failures, retry policy, and operator context distinct, and how to translate between them only where the meaning actually changes.</p><h2 class="sect">Builds on Chapters 16, 17, 24, 28, 30, and 40</h2><p class="body">Chapter 16 established domain invariants and domain errors. Chapter 17 introduced Result-first refactoring. Chapter 24 explained async state machines and await boundaries. Chapter 28 covered FFI translation. Chapter 30 covered retries and dead-letter policy at broker boundaries. Chapter 40 is the concrete reminder that even a specialist numeric subsystem fails in ways a caller must act on: a singular matrix or a non-converging solve is a typed Result the caller can fall back from, not a panic, and that is the same contract thinking this chapter applies across every boundary.</p><h2 class="sect">Opening scenario</h2><p class="body">Picture a multi-tenant billing platform. A request arrives over HTTP, the service publishes some internal work to a broker, it calls a native risk-scoring plugin over a C ABI, and it fans out a handful of async enrichment tasks before answering. A single charge can therefore fail in five different vocabularies at once: a business rule can reject it, a database row can be missing, the broker can be unreachable, the native plugin can return a status code, and a spawned task can panic. The job of this chapter is to keep those vocabularies from bleeding into each other.</p><p class="body">The requirement the team agrees on is one error policy per boundary. Domain errors stay in domain language and never mention SQL or TCP. Infrastructure errors stay actionable so a caller can retry or dead-letter. Retries are classified explicitly rather than guessed from a message. And every failure is logged exactly once, at the layer where it becomes operationally meaningful, with stable identifiers an operator can correlate later. The diagram below shows where those translation boundaries sit.</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/b689b01c214b.svg" alt="diagram" /><figcaption class="mermaid-cap">Request path: one charge fans out from the service into five dependencies, each speaking its own vocabulary.</figcaption></figure><p class="body">Each of those five dependencies can fail differently. The return path collapses those failures back into a single caller-facing contract:</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/f0bd80267bff.svg" alt="diagram" /><figcaption class="mermaid-cap">Return path: the service is the single seam where five vocabularies are translated into one caller-facing contract and logged once.</figcaption></figure><h3 class="sub">A practical decision order</h3><ol class="list"><li>Ask what the caller can still do: retry, reject, translate, or crash.</li><li>Keep Option local unless absence itself has become a contract violation.</li><li>Keep typed errors close to the layer that still understands them.</li><li>Add context at IO, task, queue, and FFI boundaries where meaning changes.</li><li>Log once, with structure, at the boundary that makes the event operationally relevant.</li></ol><p class="body">The in-browser editors simulate output so you can focus on contract shape. In a real Cargo project, the worked examples use ecosystem crates such as thiserror, anyhow, and tokio.</p><h2 class="sect">At a glance</h2><ul class="list"><li>Choose Option, Result, or panic from the caller’s next action, not from style preference.</li><li>Keep domain errors, infrastructure errors, and transport-facing errors distinct until the contract truly changes.</li><li>Add context where meaning changes: IO, task joins, queues, FFI, and process boundaries.</li><li>Log once at the boundary that makes the event operationally meaningful.</li></ul><h2 class="sect">Caller-action checklist</h2><ul class="list"><li>Should the caller retry, reject, translate, dead-letter, or crash?</li><li>Does the next layer still need typed classification, or is rich top-level context enough?</li><li>Is this failure local absence, recoverable error, or broken invariant?</li><li>Which stable IDs must travel with the error so an operator can reconstruct the incident later?</li></ul><h2 class="sect">Mental model</h2><h3 class="sub">An error is a contract, not a string to read later</h3><p class="body">When a function returns a failure, it is making a promise to its caller about what went wrong, what kind of failure it was, and what action still makes sense. In a small program you can get away with a printable message; in a large system that contract is the load-bearing part, because some other layer has to decide whether to retry, reject, translate, or give up. Design the contract first and let the message follow from it, not the other way around.</p><h3 class="sub">Let the caller's next move pick the error shape</h3><p class="body">Before you reach for a type, ask what the code one level up will do with the failure. If absence is ordinary and the caller only needs a local branch, an Option is enough. If the caller can retry, map, classify, log with structure, or surface the failure to a user, that is a Result with a meaningful error type. A panic is reserved for the cases where there is no sensible next move at all because a program invariant has been violated.</p><h3 class="sub">Each boundary wants the error shaped differently</h3><p class="body">An async task, a message broker, a C ABI, an HTTP handler, and a storage adapter each expect failures in their own vocabulary. The calmest large systems do not force one universal error type through all of them; they let every layer keep an error type it can reason about and translate only at the boundary where the contract genuinely changes. Translation is a deliberate act, performed once, at a named seam.</p><h2 class="sect">How to think about this coming from another language</h2><p class="body">Most senior engineers do not arrive at Rust error handling with a blank slate; they arrive with an exception habit, a runtime habit, or an err-string habit. The shift that matters is not which crate to import. It is where failure becomes visible and who is responsible for deciding what happens next. Find your background below and read the trap as much as the rule.</p><h3 class="sub">C++ background</h3><p class="body">Stop reaching for exceptions and the invisible unwind path as your normal failure channel. In Rust the failure type is part of the function signature, so whether a call can fail, what kind of failure it is, and who is responsible for handling it are all visible at the call site rather than discovered when something throws three frames away. The trap is treating a Result like a checked exception you must immediately rethrow; instead, design the error type so the caller has a real decision to make.</p><h3 class="sub">C# background</h3><p class="body">Drop the instinct toward one ambient exception hierarchy that everything inherits from. A rejected business rule, a request timeout, and a background task that panicked are three different operational events, and Rust rewards keeping them as distinct typed variants instead of collapsing them into a shared base class. The mental shift is that you classify failures at design time, in the type, rather than at catch time, in a chain of catch blocks.</p><h3 class="sub">Go background</h3><p class="body">You already make failure explicit in return values, so the half-step is comfortable. The thing that is different is how far Rust pushes typed classification: rather than accumulating wrapped strings that the next layer has to substring-match, a senior Rust codebase keeps a small enum close to the layer that can still act on the failure. Think less err != nil with a formatted message, more a variant the caller can pattern-match and route.</p><h3 class="sub">Python background</h3><p class="body">There is no implicit propagate-until-something-catches behavior at the HTTP edge, and no convention of catching a broad Exception near the top. Fallibility is in the type, and the question driving everything is what the caller can still do: retry, reject with a 4xx, dead-letter, or surface a 5xx. The trap is wanting one giant error type that mirrors a broad except; Rust prefers narrow typed errors near the domain and one rich wrapper only at the very top.</p><h2 class="sect">Core concepts</h2><h3 class="sub">Choosing between Option, Result, and a typed enum</h3><p class="body">These three are not interchangeable styles; they encode three different statements about a failure. An Option says a value may simply be absent and that absence is unremarkable. A Result says the operation can fail in a way the caller is expected to handle. A typed error enum goes one step further and says the caller may need to tell those failures apart. The common repair in real code is to keep an Option local and promote it into a typed Result at exactly the boundary where missing data stops being routine and becomes a contract violation.</p><h3 class="sub">Result and Option</h3><p class="body">Option models ordinary absence. Result models actionable failure. The common repair is to keep Option local, then promote it to Result at the boundary where missing data stops being routine and starts being a contract violation.</p><h3 class="sub">Error enums</h3><p class="body">Typed enums keep failures reviewable. They let you distinguish invalid state, not found, permission denied, timeout, and retry exhaustion without forcing every caller to parse log text or inspect strings.</p><p class="body">A reliable large-system rule is simple: if the caller needs classification, use a typed error. If the caller only needs one local branch on absence, Option is often enough. Promote absence into a typed Result exactly where the contract becomes meaningful.</p><h3 class="sub">When to reach for thiserror and when to reach for anyhow</h3><p class="body">These two crates are not competitors; they answer different questions and most production systems use both. The deciding factor is whether a downstream layer still needs to branch on the error. If it does, you want a named enum with named variants, and thiserror generates the tedious Display and From boilerplate while keeping the structure intact. If the only remaining job is to attach context and surface or log the failure, a single opaque anyhow::Error with a rich context chain is lighter and just as honest.</p><h3 class="sub">thiserror</h3><p class="body">Use thiserror for typed error contracts in libraries, domains, adapters, and public seams. It keeps Display implementations readable while preserving structured variants another layer can still match on or translate.</p><h3 class="sub">anyhow</h3><p class="body">Use anyhow for top-level application orchestration, binaries, workers, CLI entry points, and jobs where rich context is more important than downstream pattern matching. It is usually a boundary aggregation tool, not a domain-model replacement.</p><p class="body">This is the usual operational split: typed enums when a downstream layer still branches on the error, rich context wrappers when the boundary is already top-level orchestration and the next action is mostly logging, surfacing, or exiting.</p><h3 class="sub">Adding context without burying the source</h3><p class="body">Context is the answer to the question an operator will ask at 3 a.m.: what was the system trying to do when this failed? A low-level error like "file not found" is true but useless on its own; wrapped with "loading worker config" it becomes diagnosable. The discipline is to add context at the moments where meaning changes and to add it once, never re-stating the same low-level text at every frame on the way up.</p><ul class="list"><li>Context should explain the operation that failed, not restate the same low-level error text at every layer.</li><li>Prefer context at boundary crossings: opening a file, fetching from a store, waiting on a task, decoding a message, calling an FFI function, or publishing to a broker.</li><li>Add IDs and resource names in context only when they help operators correlate the failure later.</li><li>Preserve the original source error. Context should add meaning, not erase the chain.</li></ul><h3 class="sub">Recoverable versus unrecoverable failures</h3><p class="body">The dividing line is not how serious the failure feels; it is whether any caller, anywhere up the stack, has a sensible response. Bad input, a rejected business action, or one flaky dependency all have responses, so they belong in a Result. A violated invariant has no sensible response because the program is now in a state it was designed never to reach, and that is the narrow place a panic is correct. The decision usually flows like this.</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/732423363562.svg" alt="diagram" /><figcaption class="mermaid-cap">Route by the caller's options, not by how alarming the failure sounds. Panic is the dead end reserved for broken invariants.</figcaption></figure><h3 class="sub">Recoverable errors</h3><p class="body">Bad input, missing configuration, a rejected domain action, one temporary dependency failure, or a timed-out queue claim are all ordinary failures. They belong in Result or an equivalent explicit contract the caller can branch on.</p><h3 class="sub">Unrecoverable errors</h3><p class="body">Use panic for bugs, broken invariants, and states the process cannot safely continue from: impossible enum states, internal corruption, or violated unsafe preconditions. A panic is not a user-facing validation strategy.</p><p class="body">A panic is not Rust's version of a normal business exception. It is the language saying the program's own assumptions are broken badly enough that continuing may be wrong.</p><h3 class="sub">Errors that cross an async task boundary</h3><p class="body">When you spawn a task, you create two stacked failure layers, and a lot of bugs come from forgetting the outer one. The inner layer is whatever the task body returns: an IO error, a domain rejection, an anyhow::Error. The outer layer is the join result, which tells you whether the task even finished normally or instead panicked or was cancelled. A panicked task is a different operational event from a missing file, and collapsing them into one string hides exactly the distinction an operator needs. The snippet below is worth reading carefully: notice the two separate .context(...) calls and the double ?? at the end, which unwraps the join layer first and then the inner layer.</p><ul class="list"><li>A spawned task often creates two error layers: the task join result and the inner task result.</li><li>Add context both before and after await points when the boundary changes meaning. <code>loading manifest</code> and <code>manifest task failed</code> are different operational events.</li><li>If an error crosses a multithread runtime task boundary, the owned error value usually needs Send + Sync + 'static. That constraint is design feedback, not decoration.</li><li>Cancellation and shutdown are not 'success with no value'. Decide whether the caller should see cancellation distinctly from ordinary failure.</li></ul><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/8d301d590cc9.svg" alt="diagram" /><figcaption class="mermaid-cap">A spawned task has a join layer and an inner layer; the double ?? unwraps both, and each gets its own context.</figcaption></figure><p class="body">The key lesson is that async failures usually have a task layer and an operation layer. Handle both deliberately instead of collapsing them into one generic timeout or one generic string.</p><h3 class="sub">Errors that cross a C ABI boundary</h3><p class="body">A C ABI cannot carry a Rust enum, an anyhow::Error, or the unwinding that a panic implies; letting any of those escape across the boundary is undefined behavior, not a missed opportunity for richness. So the boundary becomes a deliberate narrowing: the rich error stays on the Rust side, and the foreign caller receives the smallest contract it can actually honor, usually a small #[repr(C)] status enum plus out-parameters. In the code below, look at the Status enum: each variant is an integer the other runtime can switch on, and the detailed Rust reason never leaves the wrapper.</p><p class="body">One requirement is not optional: wrap the inner work in std::panic::catch_unwind and map a caught panic to a generic status code. If any inner function can panic, letting that unwind escape across the C ABI is undefined behavior, so the wrapper must catch it at the boundary and turn it into an ordinary status. The diagram shows that catch step explicitly.</p><ul class="list"><li>Do not leak Rust enums, anyhow::Error, or panic semantics directly across a C ABI boundary.</li><li>Translate to status codes, explicit out parameters, and documented ownership rules.</li><li>Keep the rich Rust error inside the safe side of the wrapper. The foreign side gets the smallest contract it can actually honor.</li><li>If the boundary is public or long-lived, treat the status space itself like a versioned contract.</li></ul><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/f8dcba37d257.svg" alt="diagram" /><figcaption class="mermaid-cap">The detailed error stays on the Rust side; the foreign caller sees only a status code and out-parameters.</figcaption></figure><p class="body">This is deliberately boring. That is a virtue. The richer Rust-side error chain should stay behind the wrapper where another Rust layer can still use it safely.</p><p class="body">The #[unsafe(no_mangle)] attribute-wrapper syntax assumes the Rust 2024 edition (rustc 1.82 or newer). On older toolchains, write the bare #[no_mangle] attribute instead.</p><h3 class="sub">Keeping domain errors and infrastructure errors apart</h3><p class="body">This is the single distinction that keeps a large error model from rotting. A domain error speaks the language of the business: an order is empty, a transition is invalid, a quota is exhausted. An infrastructure error speaks the language of the machinery: a row is missing, a connection was refused, a task join failed. The two stay separate as they travel up, and the service layer is the one place that combines them and decides how the next boundary should see the result, whether that is an HTTP status, a broker nack, or a CLI exit code. The layering looks like this.</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/38c0ad0b3cbf.svg" alt="diagram" /><figcaption class="mermaid-cap">Domain and infrastructure errors stay distinct until the service layer, where classification becomes operational policy.</figcaption></figure><p class="body">From that single classify-and-translate point, the service shapes the failure for whichever boundary comes next:</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/a6363fa733df.svg" alt="diagram" /><figcaption class="mermaid-cap">The one classification point fans out into a per-boundary contract: HTTP status, broker nack, CLI exit code, or FFI status code.</figcaption></figure><h3 class="sub">Domain errors</h3><p class="body">Domain errors use domain language: empty order, invalid transition, insufficient quota, duplicate command, unsupported state. They should not mention SQL, HTTP, AMQP, or TCP.</p><h3 class="sub">Infrastructure errors</h3><p class="body">Infrastructure errors describe failed boundaries: timeout, missing row, connection refused, task join failed, queue unavailable, serialization failure. They are not business rules even if the business feels the effect.</p><h3 class="sub">Application or service errors</h3><p class="body">A service layer often combines both, then chooses translation for the next boundary: HTTP status, broker nack, CLI exit code, or FFI status code. This is where classification becomes operational policy.</p><h3 class="sub">Logging a failure once, at the right layer</h3><p class="body">The most common logging mistake in a layered system is not too little logging; it is the same failure logged five times on its way up, each line slightly reworded, until the incident channel is a hall of mirrors. The cure is to pick the one layer where the failure becomes operationally meaningful, log it there with structured fields, and let every layer below simply return the error. Severity should track the caller’s reality too: a rejected business command is not an error-level event just because it came back as a Result.</p><ul class="list"><li>Log once at the boundary that makes the event operationally relevant. Avoid logging the same failure at five layers on the way back up.</li><li>Include operation name, stable IDs, attempt number, queue or resource name, and classification when those fields help incident response.</li><li>Do not log expected domain rejection at error severity just because it returned Result. A rejected business command may be info, warn, or a client-visible response instead.</li><li>Prefer structured fields over string-only logs when retries, queues, or distributed tracing are involved.</li><li>If you return the error to another layer that will log it with more context, avoid eager log-and-return duplication.</li></ul><h3 class="sub">Designing the error contract you expose to callers</h3><p class="body">A public error contract is an API surface, and it ages like one. The discipline is to expose only what the caller can act on, to keep the retryable-versus-terminal distinction visible somewhere other than a substring of a message, and to resist the catch-all error bag that means nothing in particular. When the contract has to stay stable across teams or languages, translate your internal crates and variants at the boundary rather than leaking them, because once another runtime depends on a variant you can no longer freely rename it.</p><ul class="list"><li>Expose only the error detail the caller can act on. Internal storage-driver text is rarely a good public API contract.</li><li>Keep retryable versus terminal failure explicit somewhere visible. The caller should not infer it from a substring match in one message.</li><li>Prefer small enums over giant catch-all error bags at layer boundaries. If a variant exists, it should mean something specific.</li><li>If the public contract must stay stable across teams or languages, translate internal crates and variants at the boundary instead of leaking them.</li></ul><h2 class="sect">Production patterns</h2><ul class="list"><li>Start from caller action: retry, reject, dead-letter, map to status code, or crash. Then shape the error contract to support that action directly.</li><li>Use typed enums for domain and infrastructure boundaries, then aggregate with anyhow or another richer wrapper only at the top-level orchestration layer when pattern matching stops being useful.</li><li>Add context at IO, task, queue, and process boundaries. That is where a low-level failure becomes an operational event with a name.</li><li>Treat JoinHandle&lt;Result&lt;T, E&gt;&gt; and FFI status translation as explicit two-layer error boundaries, not as incidental mechanics.</li><li>Log once with enough structure to debug the incident later, and keep stable IDs flowing through the error path from request or task submission to durable completion.</li></ul><h2 class="sect">Pitfalls and tradeoffs</h2><ul class="list"><li>Returning anyhow::Error from deep domain code because it felt faster. That usually erases caller action and leaves the next layer matching on text.</li><li>Using panic for malformed input, missing rows, timeout, or other ordinary failure just because another language used exceptions there.</li><li>Logging every error at every layer, then drowning the incident channel in five copies of the same failure with slightly different wording.</li><li>Ignoring the join layer in async task failure and only handling the inner Result. A panicked or cancelled task is not the same event as a typed business or adapter error.</li><li>Exporting Rust-shaped errors over FFI or public contracts and discovering too late that another runtime cannot safely consume or stabilize them.</li></ul><p class="body">The hardest production mistake is often not one missing match arm. It is a failure contract that never said which layer owned retry, which layer owned translation, and which layer should have logged the incident only once.</p><h2 class="sect">Examples</h2><p class="body">Both editors simulate their output so you can focus on the shape of the contract rather than on toolchain setup. Read the short pointer and the diagram above each listing first, then run the code and try changing the inputs to see how the error path reshapes.</p><h3 class="sub">Example 1: separate domain and infrastructure errors with typed contracts</h3><p class="body">The service boundary preserves domain language for invalid business state and infrastructure language for missing storage state, then translates both into one service-facing error enum.</p><p class="body">What to look at: trace one charge through the function. The store lookup starts life as an Option, gets promoted into an infrastructure error when the row is missing, while the empty-order check raises a domain error in business language. Both reach the service layer, which folds them into a single service-facing enum without erasing which layer actually failed. The flow is below; the code follows.</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/50bb91ca0bb6.svg" alt="diagram" /><figcaption class="mermaid-cap">Absence becomes an infra error; an invalid order becomes a domain error; the service enum carries both without losing which layer failed.</figcaption></figure><div class="example"><p class="ex-cap"><b>Example 41-1.</b> <span class="fn">domain_and_infrastructure_errors.rs</span> <span class="ex-desc">— Typed contracts</span></p><div class="listing"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">collections</span><span class="p">::</span><span class="n">HashMap</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">thiserror</span><span class="p">::</span><span class="n">Error</span><span class="p">;</span>
+
+<span class="cp">#[derive(Debug, Clone)]</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">Order</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span>
+<span class="w">    </span><span class="n">lines</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="kt">u64</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">DomainError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;order {order_id} has no lines&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">EmptyOrder</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">order_id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">InfraError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;order {order_id} not found in store&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">MissingOrder</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">order_id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">ServiceError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Domain</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">DomainError</span><span class="p">),</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Infra</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">InfraError</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">load_order</span><span class="o">&lt;&#39;</span><span class="na">a</span><span class="o">&gt;</span><span class="p">(</span>
+<span class="w">    </span><span class="n">store</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="na">a</span><span class="w"> </span><span class="nc">HashMap</span><span class="o">&lt;&amp;&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">Order</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">order_id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span>
+<span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;&amp;&#39;</span><span class="na">a</span><span class="w"> </span><span class="n">Order</span><span class="p">,</span><span class="w"> </span><span class="n">InfraError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">store</span>
+<span class="w">        </span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">order_id</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="n">ok_or</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">MissingOrder</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">order_id</span><span class="w"> </span><span class="p">})</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">total_cents</span><span class="p">(</span><span class="n">order</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">Order</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u64</span><span class="p">,</span><span class="w"> </span><span class="n">DomainError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">order</span><span class="p">.</span><span class="n">lines</span><span class="p">.</span><span class="n">is_empty</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">DomainError</span><span class="p">::</span><span class="n">EmptyOrder</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">order_id</span><span class="p">:</span><span class="w"> </span><span class="nc">order</span><span class="p">.</span><span class="n">id</span><span class="p">,</span>
+<span class="w">        </span><span class="p">});</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">order</span><span class="p">.</span><span class="n">lines</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">copied</span><span class="p">().</span><span class="n">sum</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">bill_order</span><span class="p">(</span>
+<span class="w">    </span><span class="n">store</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">HashMap</span><span class="o">&lt;&amp;&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">Order</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">order_id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span>
+<span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u64</span><span class="p">,</span><span class="w"> </span><span class="n">ServiceError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">order</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">load_order</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">order_id</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">total_cents</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">?</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">store</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HashMap</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="n">store</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span>
+<span class="w">        </span><span class="s">&quot;ord-ok&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Order</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ord-ok&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="n">lines</span><span class="p">:</span><span class="w"> </span><span class="nc">vec</span><span class="o">!</span><span class="p">[</span><span class="mi">1200_</span><span class="k">u64</span><span class="p">,</span><span class="w"> </span><span class="mi">3000</span><span class="p">],</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="w">    </span><span class="n">store</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span>
+<span class="w">        </span><span class="s">&quot;ord-empty&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Order</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ord-empty&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="n">lines</span><span class="p">:</span><span class="w"> </span><span class="nc">vec</span><span class="o">!</span><span class="p">[],</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;ok = {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">bill_order</span><span class="p">(</span><span class="o">&amp;</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ord-ok&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">());</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;missing = {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">bill_order</span><span class="p">(</span><span class="o">&amp;</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ord-missing&quot;</span><span class="p">).</span><span class="n">unwrap_err</span><span class="p">());</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;empty = {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">bill_order</span><span class="p">(</span><span class="o">&amp;</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ord-empty&quot;</span><span class="p">).</span><span class="n">unwrap_err</span><span class="p">());</span>
+<span class="p">}</span></pre></div><div class="output"><div class="out-lbl">Output</div><pre>ok = 4200
+missing = order ord-missing not found in store
+empty = order ord-empty has no lines</pre></div></div><p class="body">The store lookup is locally an Option, then promoted into a typed infrastructure error at the service boundary.</p><p class="body">Domain and infrastructure failures stay distinct enough that the next layer can still map or retry them honestly.</p><p class="body">The caller sees one service error type, but the error chain still preserves which layer actually failed.</p><h3 class="sub">Example 2: add context across async boundaries without losing the source error</h3><p class="body">The top-level async path uses anyhow for orchestration context, while the underlying IO error still survives inside the chain. The spawned task boundary is handled explicitly.</p><p class="body">What to look at: there are two paths through this code. The manifest path succeeds and returns ready. The lockfile path fails at the IO layer with missing blob, and the .context("loading lockfile") call wraps it so the final message reads as a chain rather than a bare cause. Notice the original IO reason is still visible at the tail; context adds meaning, it does not replace the source.</p><figure class="mermaid-fig"><img class="mermaid-svg" src="file:///C:/work/advanced_rust_book/exports/mermaid_svgs/127b139e573e.svg" alt="diagram" /><figcaption class="mermaid-cap">The success path returns a value; the failure path attaches operation context while the underlying IO reason survives in the chain.</figcaption></figure><div class="example"><p class="ex-cap"><b>Example 41-2.</b> <span class="fn">async_context_propagation.rs</span> <span class="ex-desc">— Async context</span></p><div class="listing"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">anyhow</span><span class="p">::{</span><span class="n">Context</span><span class="p">,</span><span class="w"> </span><span class="nb">Result</span><span class="p">};</span>
+<span class="k">use</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">io</span><span class="p">::{</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">ErrorKind</span><span class="p">};</span>
+
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">read_artifact</span><span class="p">(</span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;&amp;&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="s">&quot;manifest&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">&quot;ready&quot;</span><span class="p">),</span>
+<span class="w">        </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">io</span><span class="p">::</span><span class="n">Error</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">ErrorKind</span><span class="p">::</span><span class="n">NotFound</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;missing blob&quot;</span><span class="p">).</span><span class="n">into</span><span class="p">()),</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">manifest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tokio</span><span class="p">::</span><span class="n">spawn</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">read_artifact</span><span class="p">(</span><span class="s">&quot;manifest&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="k">await</span>
+<span class="w">            </span><span class="p">.</span><span class="n">context</span><span class="p">(</span><span class="s">&quot;loading manifest&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="p">})</span>
+<span class="w">    </span><span class="p">.</span><span class="k">await</span>
+<span class="w">    </span><span class="p">.</span><span class="n">context</span><span class="p">(</span><span class="s">&quot;manifest task failed&quot;</span><span class="p">)</span><span class="o">??</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">failed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_artifact</span><span class="p">(</span><span class="s">&quot;lockfile&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span>
+<span class="w">        </span><span class="p">.</span><span class="n">context</span><span class="p">(</span><span class="s">&quot;loading lockfile&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="n">err</span><span class="p">()</span>
+<span class="w">        </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">err</span><span class="o">|</span><span class="w"> </span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;{:#}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">err</span><span class="p">))</span>
+<span class="w">        </span><span class="p">.</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="nb">String</span><span class="p">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;none&quot;</span><span class="p">));</span>
+
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;manifest = {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">manifest</span><span class="p">);</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;failed = {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">failed</span><span class="p">);</span>
+
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span></pre></div><div class="output"><div class="out-lbl">Output</div><pre>manifest = ready
+failed = loading lockfile: missing blob</pre></div></div><p class="body">The application shell can keep one rich error channel because the next action is mostly context, logging, and exit or translation.</p><p class="body">The join layer and the inner operation layer are both visible, so a panicked task would not be confused with a missing artifact.</p><p class="body">The context tells operators which operation failed without replacing the underlying IO reason.</p><p class="body">The repository also includes standalone Rust source under examples/ch41_error_handling_in_large_systems/ including a small FFI status-boundary example alongside the two in-browser worked examples.</p><h2 class="sect">Summary</h2><ul class="list"><li>Option is for local absence; Result is for actionable failure; panic is for broken invariants or unrecoverable process state.</li><li>Typed error enums keep domain and infrastructure failures distinct enough for callers to react honestly.</li><li>thiserror is usually the right tool for typed boundary contracts; anyhow is usually the right tool for top-level orchestration context.</li><li>Async task joins, FFI wrappers, brokers, and HTTP APIs are translation boundaries that deserve explicit error contracts.</li><li>Good large-system error handling logs with structure, preserves source context, and exposes only the contract the next layer can actually use.</li></ul></section></body></html>

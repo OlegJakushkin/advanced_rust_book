@@ -59,6 +59,15 @@ EDITOR_RE = re.compile(
 EDITOR_ATTR_RE = re.compile(
     r'(\w+)=(?:\{([\s\S]*?)\}|"([^"]*)")', re.DOTALL)
 
+# Card/list sections are rendered as {ident.map(...)} over a `const ident = [...]`
+# array. The JSX text scanner can't see the array data (it only sees the
+# {x.title}/{x.body} placeholders), so we replace each {ident.map(...)} with a
+# marker and resolve the backing array separately. Without this, sections like
+# "Summary", "Mental model", "Pitfalls", "Production patterns", and the
+# language-background callouts render as an empty heading.
+MAP_START_RE = re.compile(r"\{(\w+)\.map\s*\(")
+MARKER_RE = re.compile(r"@@MAP::(\w+)@@")
+
 # Strip JSX comments
 JSX_COMMENT_RE = re.compile(r"\{/\*[\s\S]*?\*/\}")
 
@@ -73,6 +82,30 @@ def strip_inner_jsx_tags(s):
     # Open/close tags: drop the tag, keep contents.
     s = re.sub(r"</?\w[^>]*?>", "", s)
     return clean_text(s)
+
+
+def resolve_map_array(src, ident):
+    """Resolve `const <ident> = [ ... ]` (the array backing a {ident.map(...)}
+    section) into either a list of strings or a list of {title, body}-style cards.
+    Returns (kind, data) with kind in {"strings", "cards", None}."""
+    blob = _named_array(src, ident)
+    if blob is None:
+        return None, None
+    head = blob.lstrip()[:1]
+    if head in ('"', "'", "`"):
+        return "strings", _parse_string_array(blob)
+    if head == "{":
+        return "cards", _parse_object_array(blob)
+    return None, None
+
+
+def _card_fields(el):
+    """Pull a (title, body) pair from a parsed card object, tolerating the few
+    field-name variants used across chapters."""
+    title = clean_text(el.get("title") or el.get("heading") or el.get("name") or "")
+    body = clean_text(el.get("body") or el.get("detail") or el.get("description")
+                      or el.get("text") or "")
+    return title, body
 
 
 def extract_one(path):
@@ -98,6 +131,17 @@ def extract_one(path):
         i += 1
     body = src[ret + len("return ("):i - 1]
 
+    # Replace {ident.map(...)} content sections with resolvable markers so the
+    # JSX text scanner doesn't choke on the {x.title}/{x.body} placeholders.
+    repls = []
+    for mm in MAP_START_RE.finditer(body):
+        if body[mm.start()] != "{":
+            continue
+        s, e = _balanced_slice(body, "{", "}", mm.start())
+        repls.append((s, e, mm.group(1)))
+    for s, e, ident in sorted(repls, key=lambda t: t[0], reverse=True):
+        body = body[:s] + f"\n@@MAP::{ident}@@\n" + body[e:]
+
     # We need ordered emission. Iterate positions of matches across all
     # pattern types and emit in order.
     matches = []
@@ -108,6 +152,7 @@ def extract_one(path):
         ("ul", UL_RE),
         ("mermaid", MERMAID_RE),
         ("editor", EDITOR_RE),
+        ("map", MARKER_RE),
     ):
         for m in regex.finditer(body):
             matches.append((m.start(), kind, m))
@@ -138,10 +183,35 @@ def extract_one(path):
             lis = []
             for li in LI_RE.finditer(m.group(1)):
                 t = strip_inner_jsx_tags(li.group(1))
-                if t:
+                if t and "@@MAP::" not in t and not re.fullmatch(r"\{?\w+\}?", t):
                     lis.append(t)
+            if not lis:
+                mk = MARKER_RE.search(m.group(1))
+                if mk:
+                    ak, data = resolve_map_array(src, mk.group(1))
+                    if ak == "strings":
+                        lis = [clean_text(x) for x in data if clean_text(x)]
+                    elif ak == "cards":
+                        for el in data:
+                            t, b = _card_fields(el)
+                            joined = ": ".join(p for p in (t, b) if p)
+                            if joined:
+                                lis.append(joined)
             if lis:
                 items.append({"kind": kind, "items": lis})
+        elif kind == "map":
+            ak, data = resolve_map_array(src, m.group(1))
+            if ak == "strings" and data:
+                c = [clean_text(x) for x in data if clean_text(x)]
+                if c:
+                    items.append({"kind": "ul", "items": c})
+            elif ak == "cards" and data:
+                for el in data:
+                    t, b = _card_fields(el)
+                    if t:
+                        items.append({"kind": "h4", "text": t})
+                    if b:
+                        items.append({"kind": "p", "text": b})
         elif kind == "mermaid":
             chart = m.group(1).replace("\\n", "\n").strip()
             caption = clean_text(m.group(2))

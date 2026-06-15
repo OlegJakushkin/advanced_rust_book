@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { getPageIndexById } from "../page-index"
 import { ArrowRight, BookOpen, Bug, Cpu, Gauge, Layers, Shield, TriangleAlert, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { DEFAULT_CODES, PAGES } from "../types"
@@ -214,13 +215,13 @@ export function PageCh23SynchronizationPrimitives() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}>
                 Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(18)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch09-smart-pointers-and-pinning"))}>
                 Chapter 09
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(46)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch22-multithreading-in-rust"))}>
                 Chapter 22
               </Button>
             </div>

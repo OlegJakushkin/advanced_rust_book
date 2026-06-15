@@ -252,16 +252,16 @@ export function PageCh24CoroutinesFuturesAndAsyncRust() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(16)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch09-smart-pointers-and-pinning"))}>
                 Chapter 09
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(26)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch14-interfaces-in-rust-traits"))}>
                 Chapter 14
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(42)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch22-multithreading-in-rust"))}>
                 Chapter 22
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(44)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch23-synchronization-primitives"))}>
                 Chapter 23
               </Button>
             </div>

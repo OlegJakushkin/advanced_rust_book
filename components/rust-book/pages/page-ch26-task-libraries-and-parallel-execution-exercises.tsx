@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { getPageIndexById } from "../page-index"
 import { ArrowLeft, Lightbulb, Target, Trophy, Wrench } from "lucide-react"
 import { useBook } from "../book-context"
 import { PAGES } from "../types"
@@ -210,7 +211,7 @@ export function PageCh26TaskLibrariesAndParallelExecutionExercises() {
                 the ownership handoff, the queue or pool budget, and the stop story before it reaches for a library name.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(54)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch26-task-libraries-and-parallel-execution"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 26
             </Button>

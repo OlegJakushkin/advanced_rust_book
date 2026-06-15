@@ -116,7 +116,7 @@
 "How would you explain `Send` and `Sync` to a teammate coming from Go or C#?"
 ],
 "workingLoop": [
-"Restate the exercise in ownership language before you write code.",
+"Restate the exercise in ownership language before you write code or draft your answer.",
 "Decide whether the boundary wants borrowing, ownership transfer, or explicit cloning.",
 "Run the lab, then explain the result by naming the ownership or borrowing rule involved.",
 "Write down one tradeoff you accepted: allocation, duplication, indirection, or API complexity."
@@ -1351,6 +1351,7 @@
 ],
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
+"Answer the pointer questions in order before writing any type: how many owners, which thread boundary, which mutation model, and must the value stop moving.",
 "Write the smallest version that compiles, then make it correct.",
 "Check each acceptance criterion explicitly before moving on.",
 "Name one tradeoff or failure mode your solution accepts."
@@ -3821,6 +3822,7 @@
 "workingLoop": [
 "Restate the exercise goal in terms of ownership, types, and the chapter's core idea.",
 "Write the smallest version that compiles, then make it correct.",
+"Verify every Poll::Pending arm changes at least one field of self, so the executor is guaranteed to make progress.",
 "Check each acceptance criterion explicitly before moving on.",
 "Name one tradeoff or failure mode your solution accepts."
 ],
@@ -6129,7 +6131,8 @@
 ],
 "hints": [
 "Ask first whether the graph is sparse or dense.",
-"Then ask who should own nodes and how long edges need to stay meaningful."
+"Then ask who should own nodes and how long edges need to stay meaningful.",
+"Treat the grid as a form of adjacency list: each cell's neighbors come from its coordinates, so it maps to the adjacency-list category rather than being a fourth representation."
 ]
 },
 {
@@ -6921,7 +6924,7 @@
 "filename": "trace_service_lab.rs",
 "runKey": "ch43_ex_trace_service",
 "expectedOutput": "instrumented = true\nprocessed = 2\nlast trace = req-12",
-"initialCode": "use tokio::sync::mpsc;\nuse tracing::{info_span, instrument, Instrument};\n\n#[derive(Debug, Clone)]\nstruct Request {\n    trace_id: &'static str,\n    route: &'static str,\n    bytes: usize,\n}\n\nasync fn handle(request: Request) -> Result<usize, &'static str> {\n    if request.bytes == 0 {\n        return Err(\"empty payload\");\n    }\n\n    Ok(request.bytes / 10)\n}\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Request>(4);\n\n    tx.send(Request {\n        trace_id: \"req-11\",\n        route: \"/score\",\n        bytes: 200,\n    })\n    .await\n    .unwrap();\n\n    tx.send(Request {\n        trace_id: \"req-12\",\n        route: \"/health\",\n        bytes: 100,\n    })\n    .await\n    .unwrap();\n\n    drop(tx);\n\n    let mut processed = 0_usize;\n    let mut last_trace = \"none\";\n\n    while let Some(request) = rx.recv().await {\n        last_trace = request.trace_id;\n\n        match handle(request).await {\n            Ok(_) => processed += 1,\n            Err(_) => {}\n        }\n    }\n\n    println!(\"processed = {}\", processed);\n    println!(\"last trace = {}\", last_trace);\n}"
+"initialCode": "use tokio::sync::mpsc;\nuse tracing::{info_span, instrument, Instrument};\n\n#[derive(Debug, Clone)]\nstruct Request {\n    trace_id: &'static str,\n    route: &'static str,\n    bytes: usize,\n}\n\nasync fn handle(request: Request) -> Result<usize, &'static str> {\n    if request.bytes == 0 {\n        return Err(\"empty payload\");\n    }\n\n    Ok(request.bytes / 10)\n}\n\n#[tokio::main]\nasync fn main() {\n    let (tx, mut rx) = mpsc::channel::<Request>(4);\n\n    tx.send(Request {\n        trace_id: \"req-11\",\n        route: \"/score\",\n        bytes: 200,\n    })\n    .await\n    .unwrap();\n\n    tx.send(Request {\n        trace_id: \"req-12\",\n        route: \"/health\",\n        bytes: 100,\n    })\n    .await\n    .unwrap();\n\n    drop(tx);\n\n    let mut processed = 0_usize;\n    let mut last_trace = \"none\";\n\n    while let Some(request) = rx.recv().await {\n        last_trace = request.trace_id;\n\n        match handle(request).await {\n            Ok(_) => processed += 1,\n            Err(_) => {}\n        }\n    }\n\n    println!(\"instrumented = {}\", true);\n    println!(\"processed = {}\", processed);\n    println!(\"last trace = {}\", last_trace);\n}"
 }
 },
 "ch44": {

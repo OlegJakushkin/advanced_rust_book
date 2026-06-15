@@ -1,0 +1,542 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Advanced Rust Solutions · Chapter 41</title><style>/* ============================================================================
+   O'Reilly-style book print theme (homage, using freely available fonts).
+   Serif body, sans headings, monospace code; numbered Example listings;
+   NOTE/TIP/WARNING admonitions; gray sidebars. Page numbers + running heads
+   are stamped onto the PDF after rendering (see oreilly_pdf.add_running_heads).
+   ============================================================================ */
+:root{
+  --ink:#1a1a1a; --muted:#5c5c5c; --rule:#d8d8d8;
+  --accent:#CE412B;                 /* official Rust orange (logo gear / brand) */
+  --code-bg:#f7f7f8; --code-border:#e2e3e6; --code-ink:#1f2328;
+  --note:#1f5fa6;  --note-bg:#eef4fb;
+  --tip:#2f7a43;   --tip-bg:#eef7f0;
+  --warn:#b3531a;  --warn-bg:#fbf2ea;
+  --sidebar-bg:#f4f4f5;
+  --serif:Georgia,"Times New Roman",serif;
+  --sans:"Helvetica Neue",Arial,"Segoe UI",sans-serif;
+  --mono:"Consolas","Cascadia Mono","DejaVu Sans Mono",monospace;
+}
+
+@page{ size:A4; margin:18mm 17mm 20mm 17mm; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:var(--serif); color:var(--ink);
+  font-size:10.6pt; line-height:1.5;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+
+/* ---- chapter opener -------------------------------------------------------*/
+.chapter{ break-before:page; }
+.chapter:first-of-type{ break-before:auto; }
+.ch-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--accent);
+  margin:0 0 6px; }
+h1.ch-title{ font-family:var(--sans); font-weight:700; font-size:27pt;
+  line-height:1.1; letter-spacing:-.01em; margin:0 0 4px; }
+.ch-rule{ height:3px; background:var(--accent); width:54px; margin:10px 0 12px; }
+.ch-desc{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#3a3a3a; margin:0 0 6px; max-width:42em; }
+
+/* ---- headings + prose -----------------------------------------------------*/
+h2.sect{ font-family:var(--sans); font-weight:700; font-size:15pt;
+  margin:22px 0 9px; padding-bottom:4px; border-bottom:1px solid var(--rule);
+  color:var(--ink); }
+h3.sub{ font-family:var(--sans); font-weight:700; font-size:11.5pt;
+  margin:16px 0 7px; color:var(--ink); }
+p{ margin:0 0 9px; }
+p.body{ text-align:justify; hyphens:auto; }
+p.lead{ font-size:11pt; color:#2c2c2c; }
+
+ul.list,ol.list{ margin:0 0 9px; padding-left:20px; }
+ul.list li,ol.list li{ margin:0 0 5px; }
+.tight li{ margin:0 0 3px; }
+
+/* inline code */
+code{ font-family:var(--mono); font-size:.85em; background:#f0f0f1;
+  border-radius:3px; padding:.5px 4px; color:#1f2328; white-space:nowrap;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+
+/* ---- grouped blocks (comparisons, patterns, pitfalls, diagnostics) --------*/
+.group{ display:grid; gap:11px; margin:10px 0; }
+.group.cols-2{ grid-template-columns:1fr 1fr; }
+.group.cols-3{ grid-template-columns:1fr 1fr 1fr; }
+.block{ border:1px solid var(--rule); border-radius:4px; padding:10px 12px;
+  break-inside:avoid; background:#fff; }
+.block .block-t{ font-family:var(--sans); font-weight:700; font-size:9.7pt;
+  display:block; margin-bottom:4px; }
+.block p{ margin:0; }
+.block.plain .block-t{ display:none; }
+.block.diag .dcode{ font-family:var(--mono); font-size:8.4pt; color:var(--accent);
+  display:block; margin-bottom:3px; }
+.block.diag .dfix{ margin-top:5px; }
+.cols-2col{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.col-lbl{ font-family:var(--sans); font-weight:700; font-size:8.4pt;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:5px; }
+
+/* ---- sidebars (How to use / working loop / success / checklists) ----------*/
+.sidebar{ background:var(--sidebar-bg); border:1px solid var(--rule);
+  border-radius:4px; padding:11px 14px; margin:11px 0; break-inside:avoid; }
+.sidebar .side-t{ font-family:var(--sans); font-weight:700; font-size:10.2pt;
+  display:block; margin-bottom:6px; }
+.sidebar p:last-child{ margin-bottom:0; }
+.sidebar ol.list,.sidebar ul.list{ margin-bottom:0; }
+
+/* ---- admonitions: NOTE / TIP / WARNING ------------------------------------*/
+.admon{ display:flex; gap:11px; align-items:flex-start;
+  border:1px solid var(--rule); border-left:4px solid var(--rule);
+  border-radius:4px; padding:10px 13px; margin:10px 0; break-inside:avoid; }
+.admon-ico{ flex:0 0 auto; width:20px; height:20px; margin-top:1px; }
+.admon-body{ flex:1; }
+.admon-body p{ margin:0; }
+.admon-label{ font-family:var(--sans); font-weight:700; font-size:8pt;
+  letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:3px; }
+.admon-note{ border-left-color:var(--note); background:var(--note-bg); }
+.admon-note .admon-label{ color:var(--note); }
+.admon-tip{ border-left-color:var(--tip); background:var(--tip-bg); }
+.admon-tip .admon-label{ color:var(--tip); }
+.admon-warn{ border-left-color:var(--warn); background:var(--warn-bg); }
+.admon-warn .admon-label{ color:var(--warn); }
+
+/* ---- numbered code listings (Example N-M) ---------------------------------*/
+/* Allow the listing to flow across page boundaries: a long Example fills the
+   rest of the page and continues on the next one, instead of being pushed to a
+   blank page just because it doesn't fit in one piece. The caption stays glued
+   to the start of the code. */
+.example{ margin:13px 0; break-inside:auto; }
+.ex-cap{ font-family:var(--sans); font-size:9.4pt; color:var(--ink); margin:0 0 5px;
+  break-after:avoid; page-break-after:avoid; }
+.ex-cap b{ color:var(--accent); }
+.ex-cap .fn{ font-family:var(--mono); font-size:8.8pt; }
+.ex-cap .ex-desc{ font-style:italic; color:#3a3a3a; }
+.listing{ background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:9px 13px; overflow-x:auto; break-inside:auto; }
+pre.hl{ margin:0; font-family:var(--mono); font-size:8.8pt; line-height:1.5;
+  white-space:pre; color:var(--code-ink); break-inside:auto;
+  orphans:3; widows:3;
+  font-feature-settings:"liga" 0,"calt" 0; font-variant-ligatures:none; }
+.output{ margin-top:6px; }
+.output .out-lbl{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.output pre{ margin:0; background:#fff; border:1px solid var(--code-border);
+  border-left:3px solid #c9ccd1; border-radius:3px; padding:7px 13px;
+  font-family:var(--mono); font-size:8.6pt; line-height:1.5; color:#33373d;
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+
+/* ---- inline single-line snippets (illustrative, not numbered) -------------*/
+.snippet{ margin:8px 0 4px; }
+.snippet pre{ margin:0; background:var(--code-bg); border:1px solid var(--code-border);
+  border-radius:3px; padding:7px 11px; overflow-x:auto;
+  font-family:var(--mono); font-size:8.7pt; line-height:1.5; color:var(--code-ink);
+  white-space:pre; font-feature-settings:"liga" 0,"calt" 0; }
+.snippet-note{ font-size:9pt; color:var(--muted); margin:5px 0 0; }
+
+/* ---- exercises ------------------------------------------------------------*/
+.exercise{ border:1px solid var(--rule); border-radius:5px; padding:12px 14px;
+  margin:12px 0; break-inside:avoid; }
+.xr-head{ display:flex; gap:9px; align-items:center; margin-bottom:4px; }
+.xr-num{ font-family:var(--sans); font-weight:700; font-size:7.8pt;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+.xr-kind{ font-family:var(--sans); font-size:7.6pt; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--muted); border:1px solid var(--rule);
+  border-radius:9px; padding:1px 8px; }
+.xr-title{ font-family:var(--sans); font-weight:700; font-size:11.5pt; margin:0 0 8px; }
+.xr-cols{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.xr-lbl{ font-family:var(--sans); font-weight:700; font-size:7.5pt;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.xr-cols p{ margin:0 0 6px; }
+.xr-acc{ margin-top:9px; border-top:1px solid var(--rule); padding-top:8px; }
+.xr-acc .xr-lbl{ color:var(--tip); }
+.xr-hints{ margin-top:9px; }
+.xr-hints .xr-lbl{ color:var(--muted); }
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.hl .hll { background-color: #ffffcc }
+.hl { background: #f7f7f8; }
+.hl .c { color: #6E7781; font-style: italic } /* Comment */
+.hl .g { color: #1F2328 } /* Generic */
+.hl .k { color: #CF222E } /* Keyword */
+.hl .n { color: #1F2328 } /* Name */
+.hl .o { color: #1F2328 } /* Operator */
+.hl .p { color: #1F2328 } /* Punctuation */
+.hl .ch { color: #6E7781; font-style: italic } /* Comment.Hashbang */
+.hl .cm { color: #6E7781; font-style: italic } /* Comment.Multiline */
+.hl .cp { color: #8250DF; font-style: italic } /* Comment.Preproc */
+.hl .cpf { color: #6E7781; font-style: italic } /* Comment.PreprocFile */
+.hl .c1 { color: #6E7781; font-style: italic } /* Comment.Single */
+.hl .cs { color: #6E7781; font-style: italic } /* Comment.Special */
+.hl .gd { color: #1F2328 } /* Generic.Deleted */
+.hl .ge { color: #1F2328 } /* Generic.Emph */
+.hl .ges { color: #1F2328 } /* Generic.EmphStrong */
+.hl .gr { color: #1F2328 } /* Generic.Error */
+.hl .gh { color: #1F2328 } /* Generic.Heading */
+.hl .gi { color: #1F2328 } /* Generic.Inserted */
+.hl .go { color: #1F2328 } /* Generic.Output */
+.hl .gp { color: #1F2328 } /* Generic.Prompt */
+.hl .gs { color: #1F2328 } /* Generic.Strong */
+.hl .gu { color: #1F2328 } /* Generic.Subheading */
+.hl .gt { color: #1F2328 } /* Generic.Traceback */
+.hl .kc { color: #CF222E } /* Keyword.Constant */
+.hl .kd { color: #CF222E } /* Keyword.Declaration */
+.hl .kn { color: #CF222E } /* Keyword.Namespace */
+.hl .kp { color: #CF222E } /* Keyword.Pseudo */
+.hl .kr { color: #CF222E } /* Keyword.Reserved */
+.hl .kt { color: #953800 } /* Keyword.Type */
+.hl .m { color: #0550AE } /* Literal.Number */
+.hl .s { color: #0A3069 } /* Literal.String */
+.hl .na { color: #0550AE } /* Name.Attribute */
+.hl .nb { color: #0550AE } /* Name.Builtin */
+.hl .nc { color: #953800 } /* Name.Class */
+.hl .no { color: #0550AE } /* Name.Constant */
+.hl .nd { color: #1F2328 } /* Name.Decorator */
+.hl .ni { color: #1F2328 } /* Name.Entity */
+.hl .ne { color: #1F2328 } /* Name.Exception */
+.hl .nf { color: #8250DF } /* Name.Function */
+.hl .nl { color: #0550AE } /* Name.Label */
+.hl .nn { color: #1F2328 } /* Name.Namespace */
+.hl .nx { color: #1F2328 } /* Name.Other */
+.hl .py { color: #1F2328 } /* Name.Property */
+.hl .nt { color: #1F2328 } /* Name.Tag */
+.hl .nv { color: #1F2328 } /* Name.Variable */
+.hl .ow { color: #CF222E } /* Operator.Word */
+.hl .pm { color: #1F2328 } /* Punctuation.Marker */
+.hl .mb { color: #0550AE } /* Literal.Number.Bin */
+.hl .mf { color: #0550AE } /* Literal.Number.Float */
+.hl .mh { color: #0550AE } /* Literal.Number.Hex */
+.hl .mi { color: #0550AE } /* Literal.Number.Integer */
+.hl .mo { color: #0550AE } /* Literal.Number.Oct */
+.hl .sa { color: #CF222E } /* Literal.String.Affix */
+.hl .sb { color: #0A3069 } /* Literal.String.Backtick */
+.hl .sc { color: #0A3069 } /* Literal.String.Char */
+.hl .dl { color: #0A3069 } /* Literal.String.Delimiter */
+.hl .sd { color: #0A3069 } /* Literal.String.Doc */
+.hl .s2 { color: #0A3069 } /* Literal.String.Double */
+.hl .se { color: #0A3069 } /* Literal.String.Escape */
+.hl .sh { color: #0A3069 } /* Literal.String.Heredoc */
+.hl .si { color: #0A3069 } /* Literal.String.Interpol */
+.hl .sx { color: #0A3069 } /* Literal.String.Other */
+.hl .sr { color: #0A3069 } /* Literal.String.Regex */
+.hl .s1 { color: #0A3069 } /* Literal.String.Single */
+.hl .ss { color: #0A3069 } /* Literal.String.Symbol */
+.hl .bp { color: #CF222E } /* Name.Builtin.Pseudo */
+.hl .fm { color: #8250DF } /* Name.Function.Magic */
+.hl .vc { color: #1F2328 } /* Name.Variable.Class */
+.hl .vg { color: #1F2328 } /* Name.Variable.Global */
+.hl .vi { color: #1F2328 } /* Name.Variable.Instance */
+.hl .vm { color: #1F2328 } /* Name.Variable.Magic */
+.hl .il { color: #0550AE } /* Literal.Number.Integer.Long */
+
+.title-page{ break-before:auto; height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.title-block{ text-align:center; max-width:34em; }
+.title-eyebrow{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:36px; }
+.title-name{ font-family:var(--sans); font-weight:700; font-size:46pt;
+  line-height:1.05; letter-spacing:-.015em; color:var(--ink); margin:0; }
+.title-rule{ height:4px; width:90px; background:var(--accent); margin:22px auto; }
+.title-sub{ font-family:var(--serif); font-style:italic; font-size:13.5pt;
+  color:#444; margin:0 0 56px; }
+.title-author{ font-family:var(--serif); font-weight:700; font-size:14pt;
+  color:var(--ink); letter-spacing:.02em; }
+
+/* Colophon (back-matter close) */
+.colophon{ height:100vh;
+  display:flex; align-items:center; justify-content:center; }
+.colo-block{ text-align:center; max-width:30em; }
+.colo-mark{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
+.colo-rule{ height:3px; width:60px; background:var(--accent); margin:14px auto 22px; }
+.colo-title{ font-family:var(--sans); font-weight:700; font-size:26pt;
+  margin:0 0 6px; color:var(--ink); }
+.colo-author{ font-family:var(--serif); font-style:italic; font-size:12pt;
+  color:#444; margin:0 0 28px; }
+.colo-meta{ font-family:var(--serif); font-size:10pt; color:var(--muted);
+  margin:0 0 22px; line-height:1.6; }
+.colo-thanks{ font-family:var(--serif); font-size:11pt; color:var(--ink); margin:0; }
+
+/* Keep section headings with the block that follows them — no orphan headings —
+   and clear any floated (slim) diagram so it never bleeds past its section. */
+h2.sect, h3.sub{ break-after:avoid; page-break-after:avoid; clear:both; }
+/* Code listings, labs, and exercises never sit beside a floated diagram. */
+.example, .exercise, .snippet{ clear:both; }
+
+/* Workbook: let exercises flow so several fit per page (like the main book's
+   prose) instead of each one grabbing its own page. They keep their border box;
+   only the "never split across a page" rule is relaxed. */
+.exercise{ break-inside:auto; }
+.xr-head, .xr-title{ break-after:avoid; }
+
+/* Mermaid diagrams.
+   SVGs render at body text size (14px = 10.6pt). A diagram wider than the
+   content column is scaled down to fit (max-width:100%) so it is never clipped
+   at the page edge — its text shrinks proportionally. Slim, portrait diagrams
+   instead float left (.slim) so prose wraps to their right. */
+.mermaid-fig{ margin:14px 0; text-align:center; break-inside:avoid; clear:both; }
+.mermaid-svg{ display:inline-block; width:auto; height:auto; max-width:100%;
+  max-height:none; }
+.mermaid-fig.slim{ float:left; clear:left; width:auto; max-width:44%;
+  text-align:left; margin:4px 22px 8px 0; }
+.mermaid-fig.slim .mermaid-svg{ max-width:100%; }
+.mermaid-fig.slim .mermaid-cap{ text-align:left; margin-left:0; margin-right:0;
+  max-width:100%; }
+.mermaid-cap{ font-family:var(--serif); font-style:italic; font-size:10.6pt;
+  color:#555; margin-top:6px; max-width:38em; margin-left:auto;
+  margin-right:auto; line-height:1.5; }
+.mermaid-missing{ font-family:var(--serif); color:#888; font-size:10.6pt;
+  text-align:center; margin:8px 0; }
+
+/* Table of contents */
+.toc-section{ padding-top:6mm; }
+.toc-h{ font-family:var(--sans); font-weight:700; font-size:24pt;
+  letter-spacing:-.01em; color:var(--ink); margin:0 0 4px; }
+.toc-rule{ height:3px; width:54px; background:var(--accent); margin:0 0 16px; }
+.toc-row{ display:flex; align-items:baseline; gap:8px; padding:3px 0;
+  font-family:var(--serif); font-size:10.6pt; color:var(--ink);
+  break-inside:avoid; }
+.toc-num{ font-family:var(--sans); font-weight:700; font-size:9pt;
+  color:var(--accent); min-width:26px; text-align:right;
+  letter-spacing:.02em; }
+.toc-title{ flex:0 1 auto; }
+.toc-leader{ flex:1 1 auto; border-bottom:1px dotted #b5b5b5;
+  transform:translateY(-3px); margin:0 6px; }
+.toc-page{ font-family:var(--serif); font-size:10.6pt; color:#3a3a3a;
+  min-width:24px; text-align:right; }
+.toc-part{ font-family:var(--sans); font-weight:700; font-size:10pt;
+  letter-spacing:.05em; color:var(--accent); margin:13px 0 3px;
+  padding-top:7px; border-top:1px solid #e3e3e3; break-after:avoid; }
+
+/* Part-divider pages */
+.part-divider{ height:100vh; display:flex; align-items:center;
+  justify-content:center; }
+.part-block{ width:100%; max-width:34em; }
+.part-eyebrow{ font-family:var(--sans); font-weight:700; font-size:11pt;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--accent); }
+.part-name{ font-family:var(--sans); font-weight:700; font-size:33pt;
+  line-height:1.07; letter-spacing:-.012em; color:var(--ink); margin:10px 0 0; }
+.part-rule{ height:4px; width:80px; background:var(--accent); margin:18px 0; }
+.part-sub{ font-family:var(--serif); font-style:italic; font-size:13pt;
+  color:#444; margin:0 0 26px; line-height:1.5; }
+.part-list{ border-top:1px solid #ddd; }
+.part-row{ display:flex; gap:12px; align-items:baseline; padding:6px 0;
+  border-bottom:1px solid #eee; font-family:var(--serif); font-size:11pt;
+  color:var(--ink); break-inside:avoid; }
+.part-row-num{ font-family:var(--sans); font-weight:700; font-size:9.5pt;
+  color:var(--accent); min-width:26px; text-align:right; }
+</style></head><body><section class="chapter"><div class="ch-eyebrow">Chapter 41 · Error Handling in Large Systems</div><h1 class="ch-title">Error Handling in Large Systems</h1><div class="ch-rule"></div><p class="ch-desc">Worked solutions to this chapter's exercises, lab, and review questions.</p><p class="body sol-intro">The exercises in this chapter move error handling out of the realm of message formatting and into the realm of interface design. Each one asks the same underlying question from a different angle: given a failure, what can the caller actually do next, and which layer is responsible for deciding? The warm-up sorts failures into Option, Result, and panic by operational consequence; the code-reading and implementation tasks separate domain language from infrastructure language and replace panic-driven control flow with a small typed contract; and the debugging and design tasks carry those typed contracts across async task boundaries, across a C ABI, and through a full HTTP-to-plugin service path.</p><p class="body sol-intro">The through-line is that a large-system error model survives only when retry policy, translation responsibility, and logging discipline are visible in different places on purpose. The lab is the concrete anchor: a config parser that panics on routine bad input is rewritten so that missing input and malformed input become distinct, matchable variants the caller can branch on.</p><h2 class="sect">Exercise solutions</h2><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 1</span><span class="solx-kind">warm-up comprehension</span></div><h4 class="solx-title">Choose Option, Result, panic, or process abort from the caller's ability to act</h4><p class="body">Sort the four events by what the caller can still do, not by how serious they feel. The missing optional request header is ordinary absence: the header may legitimately not be there, and the local code either supplies a default or takes one branch. That is Option&lt;&amp;str&gt; at the point of access. There is no failure to report yet; absence is unremarkable. Only if a later layer decides a missing header is actually a contract violation (an unauthenticated request, say) does that absence get promoted into a typed Result at that boundary.</p><p class="body">The database timeout and the invalid state transition are both recoverable, but they belong to different layers. The timeout is an infrastructure failure: the caller can retry, fail over, or dead-letter the work, so it becomes a typed infrastructure error variant such as InfraError::Timeout that stays in machinery language and never leaks SQL detail upward. The invalid state transition is a domain failure: the business rule rejected the action, the caller cannot retry the same request and expect a different answer, so it becomes a domain error variant such as DomainError::InvalidTransition in business language. Keeping these two in separate enums is what lets the next layer branch correctly: retry on the first, reject on the second.</p><p class="body">The impossible-coexistence invariant is the one event that is not a Result at all. If two states the code guarantees are mutually exclusive are both observed, the program's own assumptions are broken, and there is no sensible caller response to return. That is a panic (or, under a strict crash-only policy, a process abort), because continuing past a broken invariant risks producing wrong results rather than merely failing. At the next boundary the recoverable errors are translated, not forwarded verbatim: an InfraError::Timeout becomes HTTP 503 with Retry-After, a DomainError::InvalidTransition becomes HTTP 409 or 422, an AMQP consumer maps the timeout to a requeue and the domain rejection to a dead-letter, and an FFI boundary collapses both into a status code while the rich detail stays in the Rust-side log.</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>Option models the missing header (unremarkable absence), Result with typed variants models the timeout and the transition, and the invariant break is panic/abort rather than a returned error.</li><li>The invalid transition is classified as a domain failure and the timeout as an infrastructure failure, in separate enums.</li><li>The translation step is named per boundary: timeout -&gt; 503/requeue, domain rejection -&gt; 409/dead-letter, both -&gt; status code over FFI, so the same contract does not survive unchanged.</li></ul></div></div><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 2</span><span class="solx-kind">code reading</span></div><h4 class="solx-title">Separate domain and infrastructure errors in one service path</h4><p class="body">The billing service returns anyhow::Result&lt;()&gt; from deep inside the domain model, which means three failures with three different caller responses arrive as one free-form message chain that nothing downstream can branch on. Split them by layer. The invalid transition is a business-rule failure and belongs in a domain enum, because it speaks the language of the business and tells the caller to reject the request rather than retry it. The SQL timeout and the missing queue channel are machinery failures and belong in an infrastructure or adapter enum, because they speak the language of the plumbing and tell the caller to retry, fail over, or dead-letter. This is exactly the split the chapter's Example 1 demonstrates: a DomainError for an empty order, an InfraError for a missing store row, and a ServiceError that folds both with #[from] while preserving which layer failed.</p><p class="body">The reason invalid transition must leave the infrastructure bucket is that retry policy depends on it. An infrastructure timeout is often retryable; a rejected business action never is, and retrying it just burns the same request against the same rule. When both are buried in one anyhow chain, the worker cannot tell them apart without parsing message text, which is fragile and breaks the moment someone rewords a string. Once the domain layer returns a named variant, the worker writes a real match arm: retry InfraError::Timeout, dead-letter DomainError::InvalidTransition, surface anything unrecognized.</p><p class="body">anyhow does not disappear after the separation; it moves up. It stays useful at the top-level service shell, where the next action is logging, surfacing to a transport, or exiting, and where pattern matching has stopped paying for itself. There you want rich, aggregated context with a source chain, not a giant match. The rule is: typed enums where a downstream layer still branches on the error, anyhow where the boundary is already orchestration. The caller actions that typed separation enables are concretely retry (on the timeout), reject (on the transition), and dead-letter (on a poison message) rather than one opaque failed result for all three.</p><div class="snippet"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">thiserror</span><span class="p">::</span><span class="n">Error</span><span class="p">;</span>
+
+<span class="c1">// Domain language: a business rule said no. Never retryable on its own.</span>
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">DomainError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;invalid transition from {from} to {to}&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">InvalidTransition</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">from</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">to</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="c1">// Machinery language: the plumbing failed. The caller may retry or dead-letter.</span>
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">InfraError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;database call timed out after {ms} ms&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">SqlTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ms</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;queue channel {name} is not available&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">MissingChannel</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">ServiceError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Domain</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">DomainError</span><span class="p">),</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Infra</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">InfraError</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="c1">// The worker can now branch on real variants instead of message text.</span>
+<span class="k">fn</span><span class="w"> </span><span class="nf">classify</span><span class="p">(</span><span class="n">err</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">ServiceError</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">err</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">Infra</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">SqlTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">&quot;retry&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">Infra</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">MissingChannel</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">&quot;retry&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">Domain</span><span class="p">(</span><span class="n">DomainError</span><span class="p">::</span><span class="n">InvalidTransition</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">&quot;reject&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">from</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">SqlTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ms</span><span class="p">:</span><span class="w"> </span><span class="mi">5000</span><span class="w"> </span><span class="p">});</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">rejected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">from</span><span class="p">(</span><span class="n">DomainError</span><span class="p">::</span><span class="n">InvalidTransition</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">from</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;draft&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">to</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;paid&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;{} -&gt; {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">timeout</span><span class="p">,</span><span class="w"> </span><span class="n">classify</span><span class="p">(</span><span class="o">&amp;</span><span class="n">timeout</span><span class="p">));</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;{} -&gt; {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">rejected</span><span class="p">,</span><span class="w"> </span><span class="n">classify</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rejected</span><span class="p">));</span>
+<span class="p">}</span></pre></div><p class="snippet-note">Typed domain and infra enums fold into one ServiceError, so the worker can match for a retry-versus-reject decision; anyhow stays at the shell above this. Running main prints:
+database call timed out after 5000 ms -&gt; retry
+invalid transition from draft to paid -&gt; reject</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>The invalid transition moves into DomainError, out of the infrastructure bucket.</li><li>anyhow is kept only at the top-level shell where matching no longer pays and aggregated context is what is needed.</li><li>The classify function names concrete caller actions enabled by typing: retry on the timeout, reject on the transition (and dead-letter on a poison variant).</li></ul></div></div><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 3</span><span class="solx-kind">implementation</span></div><h4 class="solx-title">Convert panic-based parsing into typed errors</h4><p class="body">The original parse_port has two unwrap calls, and each one panics on a perfectly routine input that a config loader will see in production: raw.unwrap() panics when the value is absent, and parse().unwrap() panics when the value is present but not a number. Both are recoverable by the caller, so neither should be a panic. The repair is a small typed contract that distinguishes the two cases the caller genuinely needs to tell apart: nothing was provided versus something invalid was provided.</p><p class="body">Replace the first unwrap with ok_or, which converts the Option&lt;&amp;str&gt; into a Result and attaches the MissingPort variant on the None branch, then use ? to short-circuit. Replace the second unwrap with map_err, which keeps the parsed value on success and rewrites the standard library's ParseIntError into the InvalidPort variant on failure. The helper returns the parsed u16 directly and does no logging; logging is a decision for the caller, who has the surrounding context, not for a leaf parser. Keeping the enum to two variants is deliberate: it is small enough to match exhaustively and specific enough that the caller path becomes calm. A missing port might fall back to a default; an invalid port is a real configuration error to surface.</p><p class="body">This is the same contract repair most real config loaders need first, and it is exactly what the lab implements. The function no longer panics on the missing or the malformed case, and the return type alone tells the caller which of the two occurred.</p><div class="snippet"><pre class="hl"><span class="cp">#[derive(Debug, PartialEq, Eq)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">ConfigError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">MissingPort</span><span class="p">,</span>
+<span class="w">    </span><span class="n">InvalidPort</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">parse_port</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;&amp;</span><span class="kt">str</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u16</span><span class="p">,</span><span class="w"> </span><span class="n">ConfigError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// ok_or turns absence into a typed, matchable error instead of a panic.</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">raw</span><span class="p">.</span><span class="n">ok_or</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">::</span><span class="n">MissingPort</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="c1">// map_err rewrites the std ParseIntError into our small contract.</span>
+<span class="w">    </span><span class="n">text</span><span class="p">.</span><span class="n">parse</span><span class="p">::</span><span class="o">&lt;</span><span class="kt">u16</span><span class="o">&gt;</span><span class="p">().</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">_</span><span class="o">|</span><span class="w"> </span><span class="n">ConfigError</span><span class="p">::</span><span class="n">InvalidPort</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;missing = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">None</span><span class="p">));</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;bad = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">&quot;oops&quot;</span><span class="p">)));</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;ok = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">&quot;8080&quot;</span><span class="p">)));</span>
+<span class="p">}</span></pre></div><p class="snippet-note">ok_or handles the missing-input branch and map_err handles the parse-failure branch, so the two cases stay distinguishable in the return type with no panic.</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>Both unwrap calls are gone, so routine missing and invalid input no longer panic.</li><li>MissingPort and InvalidPort are separate variants, so the caller can tell absence from malformed input from the return type.</li><li>Running the function prints the missing, invalid, and success cases exactly as the lab expects.</li></ul></div></div><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 4</span><span class="solx-kind">debugging or refactoring</span></div><h4 class="solx-title">Add context to async task propagation</h4><p class="body">tokio::spawn returns a JoinHandle&lt;Result&lt;T, E&gt;&gt;, so .await on it yields Result&lt;Result&lt;T, E&gt;, JoinError&gt;: two stacked failure layers, and the bug is that the inherited code collapses both with a single .await? and loses the distinction. The outer layer is the join result, which tells you whether the task finished at all: it returns a JoinError if the task panicked or was cancelled. The inner layer is whatever the task body returned: an IO error, a domain rejection, an anyhow::Error. A panic inside the task is a different incident from a typed adapter or domain failure, and the unhelpful error text comes from flattening the two so you can no longer tell which happened.</p><p class="body">Add context at two distinct points, mirroring the chapter's Example 2. Inside the task body, after the inner await, attach operation-level context that names what the work was doing, for example .context("loading manifest for job"). Outside, after the join await, attach task-level context that names the spawn boundary, for example .context("manifest task failed"). Then resolve the two layers with two separate steps rather than one ?: the chapter's Example 2 uses .await.context("...task failed")?? for brevity, where the first ? unwraps the JoinError layer and the second unwraps the inner error. The solution below instead expands that into an explicit match on the join result. Both are correct; the ?? form is tighter when you only need success-or-fail, and the match form is clearer here because it lets the cancellation branch be handled separately from a panic and from an ordinary inner error. The context message should name the operation, not repeat the same low-level noun: "loading manifest" is diagnosable, a second "not found" line is not. Useful fields are the job ID, queue name, attempt number, and the resource name being touched, because those are what an operator needs to reconstruct the incident.</p><p class="body">Retryability is a property of the inner error, not of the join layer, and it should be recorded on the error type rather than inferred from message text. A transient inner failure (a timeout, a temporarily unavailable dependency) is retryable, so the caller can requeue with backoff; a domain rejection that came back through the task is terminal and retrying it just repeats the same answer. Expose that as a method such as is_retryable on the inner error so the worker reads one flag instead of substring-matching the formatted context. A join panic is its own case: it usually signals a bug, so it is not silently retried.</p><p class="body">Cancellation should be modeled distinctly from ordinary inner failure whenever the system can shut a task down deliberately. JoinError exposes is_cancelled() and is_panic(); a task aborted during graceful shutdown is not a failure of the work and must not be reported as a generic timeout or a generic error string, because that would page someone for a clean shutdown. Branch on the JoinError: a cancel during shutdown is expected and logged at low severity, a panic is a bug that should surface loudly, and only the inner error carries the real domain or infrastructure failure.</p><div class="snippet"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">anyhow</span><span class="p">::{</span><span class="n">Context</span><span class="p">,</span><span class="w"> </span><span class="nb">Result</span><span class="p">};</span>
+
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">do_work</span><span class="p">(</span><span class="n">job</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u64</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">job</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">anyhow</span><span class="p">::</span><span class="n">bail</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;empty job payload&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">job</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">job</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="p">,</span><span class="w"> </span><span class="n">queue</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">attempt</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u64</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">handle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tokio</span><span class="p">::</span><span class="n">spawn</span><span class="p">(</span><span class="k">async</span><span class="w"> </span><span class="k">move</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Operation-layer context: names the work, not a repeated noun.</span>
+<span class="w">        </span><span class="n">do_work</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="k">await</span>
+<span class="w">            </span><span class="p">.</span><span class="n">with_context</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;processing job {job}&quot;</span><span class="p">))</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">handle</span><span class="p">.</span><span class="k">await</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Inner Result resolved here: &#39;?&#39; carries the operation error up,</span>
+<span class="w">        </span><span class="c1">// with task-layer context naming the spawn boundary.</span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">inner</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">inner</span><span class="p">.</span><span class="n">with_context</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;job {job} task on queue {queue} (attempt {attempt}) failed&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}),</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">join_err</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">join_err</span><span class="p">.</span><span class="n">is_cancelled</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// Cancellation is not an ordinary failure: do not collapse to a timeout.</span>
+<span class="w">            </span><span class="n">anyhow</span><span class="p">::</span><span class="n">bail</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;job {job} cancelled during shutdown&quot;</span><span class="p">)</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">join_err</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">join_err</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="n">with_context</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="fm">format!</span><span class="p">(</span><span class="s">&quot;job {job} task panicked on queue {queue}&quot;</span><span class="p">)),</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span></pre></div><p class="snippet-note">The join layer (handle.await) and the inner operation layer (do_work) are resolved separately, each with its own context, and cancellation is branched out before generic failure handling. This is a pattern fragment, not a standalone program: it needs a tokio runtime, so call run from inside a #[tokio::main] async fn main (for example, run(1, "orders", 1).await) to compile and run it.</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>The join layer and the inner error layer are resolved in separate match arms rather than one collapsed ?.</li><li>Operation-layer context ("processing job N") and task-layer context ("...task on queue... failed") are added at both points.</li><li>is_cancelled() is branched out so a shutdown-cancel is reported distinctly and never as a generic timeout.</li></ul></div></div><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 5</span><span class="solx-kind">debugging or refactoring</span></div><h4 class="solx-title">Translate a Rust error contract across FFI without leaking internals</h4><p class="body">An extern "C" function that returns anyhow::Result&lt;u64&gt; is unsound at the boundary, not merely inelegant. A C ABI cannot carry a Rust enum, an anyhow::Error, or the stack unwinding a panic implies; letting any of those cross the boundary is undefined behavior. The other runtime has no way to safely consume an internal anyhow chain as if it were a stable public type. So the boundary must become a deliberate narrowing: the rich error stays on the Rust side, and the foreign side sees a small, boring, ABI-safe contract.</p><p class="body">Replace anyhow::Result&lt;u64&gt; with an explicit status code plus an out parameter for the result. The public types are an i32 (or a repr(C) enum of status codes) for the outcome and a *mut u64 for the value written on success. Distinguish the foreign-visible failure classes explicitly: a null or zero-length input is one status (for example STATUS_NULL_INPUT = 1), invalid UTF-8 in the payload is another (STATUS_INVALID_UTF8 = 2), and any internal computation failure is a third generic status (STATUS_INTERNAL = 3). Two or three classes are usually enough; the foreign caller only needs to branch on what it can act on. The richer detail, which row failed, which dependency timed out, the full source chain, stays inside a Rust-side log or trace and never escapes over the ABI, because the foreign runtime cannot use it and exposing it pins your internals as a public contract. The whole function body is wrapped so panics cannot unwind across the boundary: std::panic::catch_unwind converts any internal panic into the generic internal status.</p><p class="body">Test the status boundary with a tiny native harness, a few lines of C that call run with a null pointer, with deliberately invalid UTF-8 bytes, and with a valid payload, asserting on the returned status code and the out value each time. That harness verifies the contract the other runtime actually depends on, independently of any Rust-side richness. This is deliberately boring, and the boredom is the feature: a stable, narrow ABI is what lets the foreign side build against the boundary with confidence.</p><div class="snippet"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">panic</span><span class="p">::</span><span class="n">catch_unwind</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">slice</span><span class="p">;</span>
+
+<span class="cp">#[repr(i32)]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">Status</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="n">NullInput</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="n">InvalidUtf8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">    </span><span class="n">Internal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="sd">/// ABI-safe boundary: status code out, result via out-parameter.</span>
+<span class="sd">/// Rich Rust errors stay behind this wrapper and are only logged.</span>
+<span class="cp">#[no_mangle]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">extern</span><span class="w"> </span><span class="s">&quot;C&quot;</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">ptr</span><span class="p">:</span><span class="w"> </span><span class="o">*</span><span class="k">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="n">len</span><span class="p">:</span><span class="w"> </span><span class="kt">usize</span><span class="p">,</span><span class="w"> </span><span class="n">out</span><span class="p">:</span><span class="w"> </span><span class="o">*</span><span class="k">mut</span><span class="w"> </span><span class="kt">u64</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">ptr</span><span class="p">.</span><span class="n">is_null</span><span class="p">()</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">out</span><span class="p">.</span><span class="n">is_null</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">Status</span><span class="p">::</span><span class="n">NullInput</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// catch_unwind keeps a panic from unwinding across the C ABI (UB).</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">catch_unwind</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">slice</span><span class="p">::</span><span class="n">from_raw_parts</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span><span class="w"> </span><span class="n">len</span><span class="p">)</span><span class="w"> </span><span class="p">};</span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="kt">str</span><span class="p">::</span><span class="n">from_utf8</span><span class="p">(</span><span class="n">bytes</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nb">Ok</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">t</span><span class="p">,</span>
+<span class="w">            </span><span class="nb">Err</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Status</span><span class="p">::</span><span class="n">InvalidUtf8</span><span class="p">),</span>
+<span class="w">        </span><span class="p">};</span>
+<span class="w">        </span><span class="c1">// Real work lives here and may produce a rich internal error,</span>
+<span class="w">        </span><span class="c1">// which we log on the Rust side rather than export over the ABI.</span>
+<span class="w">        </span><span class="n">score</span><span class="p">(</span><span class="n">text</span><span class="p">).</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">err</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="fm">eprintln!</span><span class="p">(</span><span class="s">&quot;internal failure: {err:#}&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="n">Status</span><span class="p">::</span><span class="n">Internal</span>
+<span class="w">        </span><span class="p">})</span>
+<span class="w">    </span><span class="p">});</span>
+
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">Ok</span><span class="p">(</span><span class="n">value</span><span class="p">))</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="n">out</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="p">};</span>
+<span class="w">            </span><span class="n">Status</span><span class="p">::</span><span class="nb">Ok</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">Err</span><span class="p">(</span><span class="n">status</span><span class="p">))</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">Status</span><span class="p">::</span><span class="n">Internal</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span><span class="w"> </span><span class="c1">// a panic was caught</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">score</span><span class="p">(</span><span class="n">text</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u64</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">text</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u64</span><span class="p">)</span><span class="w"> </span><span class="c1">// stand-in for the rich internal path</span>
+<span class="p">}</span></pre></div><p class="snippet-note">anyhow::Result is replaced by an i32 status plus a *mut u64 out-parameter; null, invalid UTF-8, and internal failure are distinct statuses, and catch_unwind stops panics from crossing the ABI.</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>The boundary is translated into a status code plus an out-parameter instead of anyhow::Result.</li><li>Null input, invalid UTF-8, and internal failure are three explicit foreign-visible status classes.</li><li>The rich anyhow detail is logged on the Rust side behind the wrapper and never exported as the public ABI, and a native harness calling run with null, bad UTF-8, and a valid payload checks the status contract.</li></ul></div></div><div class="solx"><div class="solx-head"><span class="solx-num">Exercise 6</span><span class="solx-kind">design or production scenario</span></div><h4 class="solx-title">Design one error contract for HTTP, queue workers, and a native plugin</h4><p class="body">Design three layered error families and one explicit policy for retry, logging, and translation, so another team can operate the failure modes without reading the implementation. The domain layer owns business-rule failures: an empty order, an invalid transition, an exhausted quota. These are DomainError variants in business language, never mentioning SQL or TCP, and they are terminal because retrying the same request against the same rule changes nothing. The infrastructure layer owns machinery failures: a database timeout, a missing queue channel, a plugin call that did not respond. These are InfraError variants in machinery language, and most are retryable. The native risk plugin sits behind the ABI boundary from Exercise 5 and surfaces only a status code, which the adapter maps into an InfraError variant (PluginUnavailable, PluginRejected) so the rest of the system never sees raw ABI codes. At the top, one ServiceError folds domain and infrastructure with #[from] and is what the HTTP handler and the worker both translate from.</p><p class="body">Make retryable-versus-terminal an explicit property, not a guess from message text. The cleanest place is a method on the error, fn is_retryable(&amp;self) -&gt; bool, that returns true for infrastructure timeouts and plugin-unavailable, false for every domain rejection and for plugin-rejected. The HTTP handler reads it to choose 503 with Retry-After versus 409/422; the queue worker reads it to choose requeue-with-backoff versus dead-letter. The policy lives in one place, on the type, so HTTP and the worker cannot drift apart.</p><p class="body">Separate the boundary that logs from the boundary that only translates, or the incident channel fills with the same failure reworded five times. The rule: log once at the layer where the failure first becomes operationally meaningful, usually the adapter that talks to the failing dependency, because that layer has the resource name and the attempt. Every layer above it translates and returns without re-logging. So the database adapter logs the timeout once with full context; the worker translates it into a requeue decision and does not log it again; the HTTP boundary translates a propagated ServiceError into a status code and does not log it again. Finally, every failure path carries the same structured fields so the incident is reconstructable: request ID, task ID, attempt number, queue name, and the plugin call name. With those on the log line, an operator reconstructs the whole charge from one entry instead of correlating five partial ones.</p><div class="snippet"><pre class="hl"><span class="k">use</span><span class="w"> </span><span class="n">thiserror</span><span class="p">::</span><span class="n">Error</span><span class="p">;</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">DomainError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;order {id} has no lines&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">EmptyOrder</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;risk plugin rejected order {id}&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">RiskRejected</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">InfraError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;database timed out after {ms} ms&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">DbTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ms</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="cp">#[error(</span><span class="s">&quot;risk plugin unavailable&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="n">PluginUnavailable</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="cp">#[derive(Debug, Error)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">ServiceError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Domain</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">DomainError</span><span class="p">),</span>
+<span class="w">    </span><span class="cp">#[error(transparent)]</span>
+<span class="w">    </span><span class="n">Infra</span><span class="p">(</span><span class="cp">#[from]</span><span class="w"> </span><span class="n">InfraError</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">ServiceError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// Retry policy lives on the type, in one place, not in message text.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">is_retryable</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="fm">matches!</span><span class="p">(</span>
+<span class="w">            </span><span class="bp">self</span><span class="p">,</span>
+<span class="w">            </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">Infra</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">DbTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">..</span><span class="w"> </span><span class="p">})</span>
+<span class="w">                </span><span class="o">|</span><span class="w"> </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">Infra</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">PluginUnavailable</span><span class="p">)</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// HTTP boundary: translate only, do not log here.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">http_status</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">u16</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">is_retryable</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">503</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">422</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Worker boundary: translate only, do not log here.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">worker_action</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kp">&amp;</span><span class="o">&#39;</span><span class="nb">static</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">is_retryable</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;requeue&quot;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;dead-letter&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">from</span><span class="p">(</span><span class="n">InfraError</span><span class="p">::</span><span class="n">DbTimeout</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">ms</span><span class="p">:</span><span class="w"> </span><span class="mi">5000</span><span class="w"> </span><span class="p">});</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">rejected</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ServiceError</span><span class="p">::</span><span class="n">from</span><span class="p">(</span><span class="n">DomainError</span><span class="p">::</span><span class="n">RiskRejected</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ord-9&quot;</span><span class="w"> </span><span class="p">});</span>
+<span class="w">    </span><span class="c1">// Fields like request_id/task_id/attempt/queue/plugin_call belong on the</span>
+<span class="w">    </span><span class="c1">// single log line emitted by the adapter that first saw the failure.</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;timeout: http={} worker={}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">timeout</span><span class="p">.</span><span class="n">http_status</span><span class="p">(),</span><span class="w"> </span><span class="n">timeout</span><span class="p">.</span><span class="n">worker_action</span><span class="p">());</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;rejected: http={} worker={}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">rejected</span><span class="p">.</span><span class="n">http_status</span><span class="p">(),</span><span class="w"> </span><span class="n">rejected</span><span class="p">.</span><span class="n">worker_action</span><span class="p">());</span>
+<span class="p">}</span></pre></div><p class="snippet-note">DomainError, InfraError, and a folded ServiceError carry an is_retryable method; http_status and worker_action translate without logging, leaving the one log line to the adapter that first saw the failure.</p><div class="solx-crit"><div class="xr-lbl">How it meets the acceptance criteria</div><ul class="list tight"><li>At least one domain error, one infrastructure error, and a translated ServiceError (with HTTP/worker transports) are defined.</li><li>is_retryable makes retryable-versus-terminal an explicit method on the type rather than a message substring.</li><li>The adapter that first sees the failure logs once; http_status and worker_action only translate, avoiding duplicate noise.</li><li>Observability fields named for every path: request ID, task ID, attempt, queue, and plugin call name.</li></ul></div></div><h2 class="sect">Lab solution</h2><p class="body">The original code panics twice on routine input: raw.unwrap() panics when the port value is absent, and text.parse().unwrap() panics when the value is present but not numeric. Both are recoverable by the caller, so both become typed errors instead of panics. The fix swaps each unwrap for an explicit branch that names the failure.</p><p class="body">raw.ok_or(ConfigError::MissingPort)? converts Option&lt;&amp;str&gt; into Result&lt;&amp;str, ConfigError&gt;, attaching the MissingPort variant on None, and the ? operator returns it immediately. On the present path, text.parse::&lt;u16&gt;() yields Result&lt;u16, ParseIntError&gt;, and map_err(|_| ConfigError::InvalidPort) rewrites the standard-library parse error into the InvalidPort variant while leaving a successful parse untouched. The helper does no logging and returns the parsed value directly, leaving any logging or fallback decision to the caller that has the context.</p><p class="body">The three calls in main therefore exercise the three distinct paths. parse_port(None) takes the ok_or branch and prints Err(MissingPort); parse_port(Some("oops")) parses and fails, taking the map_err branch to print Err(InvalidPort); parse_port(Some("8080")) parses successfully and prints Ok(8080). Missing and malformed input are now distinguishable from the return type alone, which is the whole point of the typed contract.</p><div class="example"><p class="ex-cap"><b>Example 41-S.</b> <span class="fn">typed_error_lab.rs</span> <span class="ex-desc">— Reference solution</span></p><div class="listing"><pre class="hl"><span class="cp">#[derive(Debug, PartialEq, Eq)]</span>
+<span class="k">enum</span><span class="w"> </span><span class="nc">ConfigError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">MissingPort</span><span class="p">,</span>
+<span class="w">    </span><span class="n">InvalidPort</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">parse_port</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;&amp;</span><span class="kt">str</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">u16</span><span class="p">,</span><span class="w"> </span><span class="n">ConfigError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// ok_or promotes absence into a typed, matchable error; &#39;?&#39; short-circuits.</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">raw</span><span class="p">.</span><span class="n">ok_or</span><span class="p">(</span><span class="n">ConfigError</span><span class="p">::</span><span class="n">MissingPort</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="c1">// map_err rewrites the std ParseIntError into our small contract.</span>
+<span class="w">    </span><span class="n">text</span><span class="p">.</span><span class="n">parse</span><span class="p">::</span><span class="o">&lt;</span><span class="kt">u16</span><span class="o">&gt;</span><span class="p">().</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">_</span><span class="o">|</span><span class="w"> </span><span class="n">ConfigError</span><span class="p">::</span><span class="n">InvalidPort</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;missing = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">None</span><span class="p">));</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;bad = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">&quot;oops&quot;</span><span class="p">)));</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;ok = {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">parse_port</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="s">&quot;8080&quot;</span><span class="p">)));</span>
+<span class="p">}</span></pre></div><div class="output"><div class="out-lbl">Output</div><pre>missing = Err(MissingPort)
+bad = Err(InvalidPort)
+ok = Ok(8080)</pre></div></div><h2 class="sect">Review question answers</h2><div class="sol-qa"><p class="sol-q">When is Option enough, and when should the boundary promote absence into Result?</p><p class="sol-a">Option is enough when absence is unremarkable and the caller only needs one local branch: supply a default, skip the step, or fall through. You should promote that absence into a typed Result at the boundary where the absence actually becomes a contract violation the caller must classify and handle, for example a missing field that means an invalid request rather than a benign default. The rule is to keep Option at the point of lookup and convert to a named error (often with ok_or) exactly where a downstream layer needs to branch on why the value was missing.</p></div><div class="sol-qa"><p class="sol-q">Why are domain errors and infrastructure errors worth keeping distinct even if both eventually become one HTTP response or one queue outcome?</p><p class="sol-a">They imply different caller actions, and that decision happens above the layer that produced the error, before any HTTP or queue collapse. An infrastructure failure such as a timeout is usually retryable; a domain rejection such as an invalid transition is terminal, and retrying it just repeats the same rejection. If both live in one error bag, the worker cannot tell retry from reject without parsing message text, which is fragile. Keeping them in separate enums lets the next layer match on real variants and choose retry, reject, or dead-letter honestly, even though the final boundary may still fold them into a single status.</p></div><div class="sol-qa"><p class="sol-q">What is the practical split between thiserror and anyhow in a large Rust system?</p><p class="sol-a">They answer different questions, and most systems use both. Reach for thiserror to define named error enums with named variants when a downstream layer still needs to branch on the error; the macro generates the boilerplate for Display, the source chain, and #[from] conversions. Reach for anyhow when the boundary is already top-level orchestration, where the next action is logging, surfacing, or exiting, and where exhaustive matching has stopped paying for itself; there you want rich aggregated context rather than a large match. The deciding factor is simply whether anyone downstream still branches on the variant.</p></div><div class="sol-qa"><p class="sol-q">Why does a spawned task usually create a two-layer error surface rather than one?</p><p class="sol-a">tokio::spawn returns a JoinHandle&lt;Result&lt;T, E&gt;&gt;, so awaiting it produces Result&lt;Result&lt;T, E&gt;, JoinError&gt;: two stacked layers. The outer JoinError layer reports whether the task ran to completion at all, returning an error if the task panicked or was cancelled. The inner Result is whatever the task body returned, such as an IO error or a domain rejection. Collapsing both with a single ? loses the distinction between a task that crashed and a task that finished but returned a typed failure, which are different incidents that deserve different handling, so you resolve the two layers deliberately.</p></div><div class="sol-qa"><p class="sol-q">Why should a boundary usually log once rather than at every layer that propagates the same error upward?</p><p class="sol-a">Logging the same failure at every layer turns the incident channel into a hall of mirrors, where one failure appears five times slightly reworded and an operator cannot tell whether that is one incident or five. The discipline is to log once at the single layer where the failure first becomes operationally meaningful, usually the adapter closest to the failing dependency, which has the resource name and attempt count in hand. Every layer above it translates and returns the error without re-logging, so each failure produces exactly one rich, reconstructable log line.</p></div></section></body></html>

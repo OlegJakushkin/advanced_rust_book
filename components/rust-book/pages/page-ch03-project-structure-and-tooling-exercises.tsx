@@ -207,7 +207,7 @@ export function PageCh03ProjectStructureAndToolingExercises() {
                 material. Use the acceptance criteria as your spec and explain tradeoffs in concrete operational terms.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(5)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch03-project-structure-and-tooling"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 03
             </Button>

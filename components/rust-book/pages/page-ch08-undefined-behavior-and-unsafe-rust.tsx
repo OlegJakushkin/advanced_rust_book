@@ -163,16 +163,16 @@ export function PageCh08UndefinedBehaviorAndUnsafeRust() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(6)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch04-ownership-borrowing-and-lifetimes"))}>
                 Chapter 04
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(8)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch05-ownership-inside-structs"))}>
                 Chapter 05
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(10)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch06-ownership-inside-vectors"))}>
                 Chapter 06
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(12)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch07-copying-data-vs-cloning-data"))}>
                 Chapter 07
               </Button>
             </div>

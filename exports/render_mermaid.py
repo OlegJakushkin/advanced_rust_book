@@ -18,8 +18,6 @@ to_render = [(cid, src) for cid, src in charts.items()
                      and os.path.getsize(os.path.join(SVG_DIR, f"{cid}.svg")) > 200)]
 
 print(f"{len(charts)} charts total; {len(to_render)} need rendering.")
-if not to_render:
-    sys.exit(0)
 
 # mmdc config — light theme, transparent background.
 # Body text in the book is set to 10.6pt. With Mermaid laying out at 96 DPI,
@@ -97,6 +95,10 @@ BATCH = 30
 work_dir = os.path.join(HERE, "_mermaid_work")
 os.makedirs(work_dir, exist_ok=True)
 
+import mermaid_decisions
+DEC_MARK = "<!--decisions-outside-->"
+label_maps = {}   # cid -> {decision-node-id: real label}, for the post-render overlay
+
 ok = 0
 fail = []
 for batch_start in range(0, len(to_render), BATCH):
@@ -105,7 +107,11 @@ for batch_start in range(0, len(to_render), BATCH):
     out_pattern = os.path.join(work_dir, f"batch_{batch_start:04d}.svg")
     with open(md_path, "w", encoding="utf-8") as f:
         for cid, src in batch:
-            f.write(f"```mermaid\n{src}\n```\n\n")
+            # Render with tiny placeholder labels so mmdc lays out SMALL decision
+            # diamonds (compact spacing, correct edges); real text is put back
+            # outside each diamond after rendering.
+            psrc, label_maps[cid] = mermaid_decisions.placeholderize(src)
+            f.write(f"```mermaid\n{psrc}\n```\n\n")
 
     cp = subprocess.run(
         [npx, "-y", "@mermaid-js/mermaid-cli",
@@ -127,6 +133,9 @@ for batch_start in range(0, len(to_render), BATCH):
             dst = os.path.join(SVG_DIR, f"{cid}.svg")
             shutil.move(src_svg, dst)
             _normalize_svg_text_size(dst)
+            svg = open(dst, encoding="utf-8").read()
+            svg = mermaid_decisions.transform(svg, label_maps.get(cid))
+            open(dst, "w", encoding="utf-8").write(DEC_MARK + "\n" + svg)
             ok += 1
         else:
             fail.append(cid)
@@ -139,3 +148,5 @@ if fail:
 
 # Clean working dir
 shutil.rmtree(work_dir, ignore_errors=True)
+# Decision diamonds are laid out small (placeholder labels) and their real text
+# is overlaid outside each diamond inline above, per rendered chart.

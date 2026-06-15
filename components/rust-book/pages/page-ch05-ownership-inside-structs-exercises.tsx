@@ -212,7 +212,7 @@ export function PageCh05OwnershipInsideStructsExercises() {
                 working spec.
               </p>
             </div>
-            <Button variant="outline" onClick={() => setCurrentPage(10)} className="gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch05-ownership-inside-structs"))} className="gap-2 shrink-0">
               <ArrowLeft className="h-4 w-4" />
               Back to Chapter 05
             </Button>

@@ -221,13 +221,13 @@ export function PageCh25Tokio() {
               </p>
             </div>
             <div className="flex gap-2 shrink-0 flex-wrap">
-              <Button variant="outline" onClick={() => setCurrentPage(42)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch22-multithreading-in-rust"))}>
                 Chapter 22
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(44)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch23-synchronization-primitives"))}>
                 Chapter 23
               </Button>
-              <Button variant="outline" onClick={() => setCurrentPage(46)}>
+              <Button variant="outline" onClick={() => setCurrentPage(getPageIndexById("ch24-coroutines-futures-and-async-rust"))}>
                 Chapter 24
               </Button>
             </div>
