@@ -1,0 +1,21 @@
+[package]
+name = "rust-onnx-gpu"
+version = "0.1.0"
+edition = "2021"
+description = "Chapter 54 — real ONNX inference from Rust on the GPU (CUDA) vs CPU."
+
+[dependencies]
+# `ort` binds ONNX Runtime. load-dynamic + ORT_DYLIB_PATH points at a CUDA-enabled
+# onnxruntime build (onnxruntime-gpu) so the CUDA execution provider is available.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "cuda", "load-dynamic"] }
+
+[[bin]]
+name = "onnx_solution"
+path = "src/bin/onnx_solution.rs"
+
+[[bin]]
+name = "onnx_challenge"
+path = "src/bin/onnx_challenge.rs"
+
+[profile.release]
+opt-level = 3

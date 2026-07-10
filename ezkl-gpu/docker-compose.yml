@@ -1,0 +1,22 @@
+# Real GPU-aware zkML — Chapter 53.
+# Requires an NVIDIA GPU, Docker, and the NVIDIA Container Toolkit.
+#
+#   docker compose build
+#   docker compose run --rm ezkl
+#
+# Fallback if compose doesn't pass the GPU through:
+#   docker run --rm --gpus all rust-ezkl-gpu
+
+services:
+  ezkl:
+    build:
+      context: .
+    image: rust-ezkl-gpu
+    working_dir: /work
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

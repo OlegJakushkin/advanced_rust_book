@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[40599,["/advanced_rust_book/_next/static/chunks/157jofl-5yn_t.js","/advanced_rust_book/_next/static/chunks/0~40pabyg16fg.js"],"ViewportBoundary"]
+3:I[40599,["/advanced_rust_book/_next/static/chunks/157jofl-5yn_t.js","/advanced_rust_book/_next/static/chunks/0~40pabyg16fg.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Rust for Senior Engineers"}],["$","meta","1",{"name":"description","content":"Interactive Rust lessons with runnable examples and compiler-style feedback."}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"D76k5h8aY0Bsw_E_OgzPp"}

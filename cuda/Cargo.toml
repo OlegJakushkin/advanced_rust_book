@@ -1,0 +1,23 @@
+[package]
+name = "rust-cuda-matmul"
+version = "0.1.0"
+edition = "2021"
+description = "Chapter 37 — real CUDA from Rust: a GPU matrix-multiply benchmarked against a CPU baseline."
+
+[dependencies]
+# cudarc drives the CUDA driver API and compiles kernels at runtime with NVRTC.
+# `cuda-12060` selects the 12.x driver API (forward-compatible with newer 12.x
+# drivers, e.g. 12.8); dynamic loading means no CUDA libs are linked at build
+# time — they are loaded at run time from the GPU container / host install.
+cudarc = { version = "0.12", default-features = false, features = ["std", "driver", "nvrtc", "cuda-12060"] }
+
+[[bin]]
+name = "matmul_solution"
+path = "src/bin/matmul_solution.rs"
+
+[[bin]]
+name = "matmul_challenge"
+path = "src/bin/matmul_challenge.rs"
+
+[profile.release]
+opt-level = 3

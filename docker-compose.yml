@@ -1,0 +1,24 @@
+# Advanced Rust — code runner.
+#
+# Build the image once:
+#   docker compose build
+#
+# Then run ANY file from the corpus (path is relative to this public/ folder):
+#   docker compose run --rm runner examples/ch10_arrays_slices_and_vectors/slice_first_api.rs
+#   docker compose run --rm runner exercises/ch10_arrays_slices_and_vectors/window_sum_lab.rs
+#   docker compose run --rm runner solutions/ch10_arrays_slices_and_vectors/window_sum_lab.rs
+#   docker compose run --rm runner --list
+#
+# See README.md for details.
+
+services:
+  runner:
+    build:
+      context: ./docker
+    image: advanced-rust-runner
+    # The whole public/ tree is mounted read-only at /work; the runner copies the
+    # requested file into its own writable workspace (/runner, baked into the
+    # image with dependencies pre-compiled) to build it.
+    volumes:
+      - .:/work:ro
+    working_dir: /work
