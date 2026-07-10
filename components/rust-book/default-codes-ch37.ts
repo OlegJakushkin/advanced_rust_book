@@ -45,7 +45,7 @@ unsafe fn raw_launch_vec_add(
 ) -> Result<(), &'static str> {
     // Defensive: the safe wrapper already guarantees equal lengths and a valid
     // launch config. These checks restate the invariant the SAFETY comment relies
-    // on, so the authoritative gate stays in `launch_vec_add` below.
+    // on, so the authoritative gate stays in \`launch_vec_add\` below.
     if a.len != b.len || a.len != out.len {
         return Err("shape mismatch");
     }

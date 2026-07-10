@@ -10,6 +10,10 @@ It combines:
 - **chapter exercises** and reference appendices,
 - and a build flow that outputs a plain static site in `out/`.
 
+**Live site (GitHub Pages):** [https://olegjakushkin.github.io/advanced_rust_book/](https://olegjakushkin.github.io/advanced_rust_book/)
+
+**Runnable examples, exercises, and solutions (MIT):** [advanced-rust-book-examples](https://github.com/advanced-rust-book/advanced-rust-book-examples) — the public code corpus with Docker runners for every listing, workbook lab, and worked solution.
+
 ---
 
 ## Table of Contents
@@ -23,6 +27,7 @@ It combines:
 - [Static build](#static-build)
 - [Docker export to `out/`](#docker-export-to-out)
 - [GitHub Pages deployment](#github-pages-deployment)
+- [Code corpus (examples & solutions)](#code-corpus-examples--solutions)
 - [Repository layout](#repository-layout)
 - [Why the project is structured this way](#why-the-project-is-structured-this-way)
 - [Notes](#notes)
@@ -254,18 +259,27 @@ This is useful when you want a reproducible build without relying on a local Nod
 
 ## GitHub Pages deployment
 
-This project is ready for GitHub Pages-style static hosting.
+Published site: [https://olegjakushkin.github.io/advanced_rust_book/](https://olegjakushkin.github.io/advanced_rust_book/)
 
-For detailed instructions, see:
+The static export is built into a local `gh-pages/` folder (gitignored on `main`) and published on the `gh-pages` branch.
 
-- [`ghpgs.md`](./ghpgs.md)
+```bash
+# Project Pages build (repo subpath)
+GITHUB_PAGES=true PAGES_BASE_PATH=advanced_rust_book npm run build
+# then copy out/ -> gh-pages/ and commit that tree on the gh-pages branch
+```
 
-That guide covers:
+For detailed instructions, see [`ghpgs.md`](./ghpgs.md).
 
-- local Pages-compatible builds,
-- repo-name base path handling,
-- manual deployment,
-- and a GitHub Actions workflow example.
+---
+
+## Code corpus (examples & solutions)
+
+All runnable listings, workbook starters, and verified solutions live in a separate MIT-licensed repository:
+
+- [https://github.com/advanced-rust-book/advanced-rust-book-examples](https://github.com/advanced-rust-book/advanced-rust-book-examples)
+
+That repo includes `examples/`, `exercises/`, `solutions/`, a `CODE_MANIFEST.json` catalog, and a Docker runner so you can build and run any file with one command.
 
 ---
 
@@ -351,7 +365,7 @@ This keeps the project easier to evolve when:
 
 - `npm run build` produces a **static export**.
 - `docker compose up --build` also produces a local static export in `out/`.
-- GitHub Pages support is documented in [`ghpgs.md`](./ghpgs.md).
-- Example Rust files live under `examples/` and mirror chapter topics.
+- GitHub Pages support is documented in [`ghpgs.md`](./ghpgs.md); the live site is on the `gh-pages` branch.
+- Full example / exercise / solution sources are in [advanced-rust-book-examples](https://github.com/advanced-rust-book/advanced-rust-book-examples) (MIT).
 
 If your goal is to read, extend, or publish the book, this repo is designed to make all three straightforward.

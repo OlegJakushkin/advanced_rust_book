@@ -19,6 +19,14 @@ node_modules
 .exec/
 
 out/
+gh-pages/
+
+# Local tooling / binaries / private notes
+.claude/
+reviews/
+OReilly_Book_Proposal.docx
+*.exe
+*.pdb
 
 apply_llm_markdown_patch.out.json
 
