@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react"
 import { Play, Copy, Check, RotateCcw } from "lucide-react"
 import { RUST_COMPILER_ERROR_PREFIX } from "@/components/rust-book/rust-simulator"
 import { Button } from "@/components/ui/button"
+import { trackRun } from "@/lib/analytics"
 import { cn } from "@/lib/utils"
 
 // Rust syntax highlighting tokens
@@ -150,6 +151,8 @@ interface RustCodeEditorProps {
   showResultComparison?: boolean
   originalCode?: string
   onRevert?: () => void
+  analyticsKind?: "chapter" | "exercise"
+  analyticsKey?: string
 }
 
 interface ParsedRunOutput {
@@ -181,7 +184,19 @@ export function RustCodeEditor({
   showResultComparison = false,
   originalCode,
   onRevert,
+  analyticsKind = "chapter",
+  analyticsKey,
 }: RustCodeEditorProps) {
+  const handleRun = () => {
+    trackRun({
+      snippet: filename,
+      kind: analyticsKind,
+      key: analyticsKey,
+      editable: !readOnly,
+    })
+    onRun()
+  }
+
   const [localCode, setLocalCode] = useState(code)
   const [copied, setCopied] = useState(false)
   const [showAutocomplete, setShowAutocomplete] = useState(false)
@@ -427,7 +442,7 @@ export function RustCodeEditor({
           </Button>
           <Button
             size="sm"
-            onClick={onRun}
+            onClick={handleRun}
             disabled={isRunning}
             className="gap-1.5 h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
           >

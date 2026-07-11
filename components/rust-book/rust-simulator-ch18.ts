@@ -39,7 +39,13 @@ export function simulateCh18Output(code: string, key?: string): string | null {
 
   if (key === "generics_associated_types_const") {
     const encodedInput = parseNumericList(code.match(/encode\(\s*&\[\s*([^\]]+)\]/)?.[1])[0] ?? 31
-    const items = parseNumericList(code.match(/items:\s*\[([^\]]+)\]/)?.[1])
+    // `items:` can appear both in the struct definition (e.g. `items: [T; N]`)
+    // and in the struct literal that actually holds the data
+    // (e.g. `items: [3_u32, 5, 8, 13]`). Only the literal has numeric values,
+    // so pick the first `items: [...]` occurrence that contains a digit.
+    const itemsMatches = Array.from(code.matchAll(/items:\s*\[([^\]]+)\]/g))
+    const itemsMatch = itemsMatches.find((match) => /\d/.test(match[1])) ?? itemsMatches[itemsMatches.length - 1]
+    const items = parseNumericList(itemsMatch?.[1])
     const sum = items.reduce((total, value) => total + value, 0)
     const last = items[items.length - 1] ?? 0
 

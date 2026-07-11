@@ -23,7 +23,7 @@ function parseNumberList(source?: string): number[] {
 function parseMatrixFromVec(code: string, variable: string): ParsedMatrix | null {
   const match = code.match(
     new RegExp(
-      `let\\s+${variable}\\s*=\\s*Matrix::from_vec\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*vec!\\[([\\s\\S]*?)\\]\\s*\\)`,
+      `let\\s+${variable}\\s*=\\s*Matrix::from_vec\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*vec!\\[([\\s\\S]*?)\\]\\s*,?\\s*\\)`,
       "m"
     )
   )
@@ -71,8 +71,15 @@ function hasTiledMatmulLogic(code: string): boolean {
       /kk\s*\+=\s*tile/.test(code) &&
       /jj\s*\+=\s*tile/.test(code))
 
+  const hasInlineProduct = /a\.get\(\s*i\s*,\s*k\s*\)\s*\*\s*b\.get\(\s*k\s*,\s*j\s*\)/.test(code)
+
+  // Some tiled implementations hoist `a.get(i, k)` into a local (e.g. `let a_ik = a.get(i, k);`)
+  // before multiplying it against `b.get(k, j)` inside the innermost loop.
+  const hasExtractedProduct =
+    /a\.get\(\s*i\s*,\s*k\s*\)/.test(code) && /\w+\s*\*\s*b\.get\(\s*k\s*,\s*j\s*\)/.test(code)
+
   const hasMultiplyAccumulate =
-    /a\.get\(\s*i\s*,\s*k\s*\)\s*\*\s*b\.get\(\s*k\s*,\s*j\s*\)/.test(code) &&
+    (hasInlineProduct || hasExtractedProduct) &&
     (/out\.set\(\s*i\s*,\s*j/.test(code) || /out\.data\[/.test(code))
 
   return hasTileLoops && hasMultiplyAccumulate

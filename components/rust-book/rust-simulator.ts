@@ -74,7 +74,15 @@ const RUST_PRIMITIVE_TYPES = new Set([
 ])
 
 const RUST_STANDARD_TYPES = new Set([
-  "Arc", "AtomicBool", "AtomicUsize", "Barrier", "BinaryHeap", "BTreeMap", "BTreeSet", "Box", "BuildHasherDefault", "Cell", "Clone", "Condvar", "Context", "Copy", "Cow", "CString", "CStr", "Debug", "Default", "Display", "Entry", "Future", "FuturesUnordered", "HashMap", "HashSet", "IntoIterator", "Iterator", "JoinHandle", "JoinSet", "MaybeUninit", "Mutex", "MutexGuard", "NonNull", "Option", "Ordering", "PhantomData", "Pin", "Poll", "RandomState", "Rc", "Receiver", "RefCell", "Result", "RwLock", "RwLockReadGuard", "RwLockWriteGuard", "ScopedJoinHandle", "Semaphore", "Send", "Sender", "String", "Sync", "SyncSender", "Vec", "VecDeque", "Wake", "Weak", "Waker",
+  "Arc", "AtomicBool", "AtomicU8", "AtomicU16", "AtomicU32", "AtomicU64", "AtomicI32", "AtomicI64", "AtomicUsize", "AtomicIsize", "AtomicPtr", "Barrier", "BinaryHeap", "BTreeMap", "BTreeSet", "Box", "BuildHasherDefault", "Cell", "Clone", "Condvar", "Context", "Copy", "Cow", "CString", "CStr", "Debug", "Default", "Display", "Entry", "Future", "FuturesUnordered", "HashMap", "HashSet", "IntoIterator", "Iterator", "JoinHandle", "JoinSet", "MaybeUninit", "Mutex", "MutexGuard", "NonNull", "Option", "Ordering", "PhantomData", "Pin", "Poll", "RandomState", "Rc", "Receiver", "RefCell", "Result", "RwLock", "RwLockReadGuard", "RwLockWriteGuard", "ScopedJoinHandle", "Semaphore", "Send", "Sender", "String", "Sync", "SyncSender", "Vec", "VecDeque", "Wake", "Weak", "Waker",
+  // Broader std/prelude surface that appears across the book's runnable listings.
+  "Any", "TypeId", "TcpStream", "TcpListener", "UdpSocket", "SocketAddr", "IpAddr", "Ipv4Addr", "Ipv6Addr",
+  "Duration", "Instant", "SystemTime", "SystemTimeError", "IoSlice", "IoSliceMut", "Cursor", "BufReader", "BufWriter",
+  "Read", "Write", "BufRead", "Seek", "Path", "PathBuf", "OsString", "OsStr", "File", "OpenOptions", "Stdin", "Stdout", "Stderr",
+  "Range", "RangeInclusive", "Reverse", "Wrapping", "Bytes", "Chars", "Lines", "Split", "TryReserveError",
+  "Hash", "Hasher", "Eq", "PartialEq", "Ord", "PartialOrd", "From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut", "Deref", "DerefMut",
+  "Fn", "FnMut", "FnOnce", "Drop", "Sized", "ToString", "ToOwned", "Error", "FromIterator", "DoubleEndedIterator", "ExactSizeIterator",
+  "PanicInfo", "Layout", "GlobalAlloc", "NonZeroU32", "NonZeroU64", "NonZeroUsize", "Infallible", "ControlFlow", "Instrument",
 ])
 
 const RUST_TYPE_CONTEXT_KEYWORDS = new Set([
@@ -83,6 +91,12 @@ const RUST_TYPE_CONTEXT_KEYWORDS = new Set([
 
 const RUST_PRELUDE_FUNCTIONS = new Set([
   "drop",
+])
+
+// Tokens that are keyword-like only inside specific macros (e.g. `biased;` inside
+// `tokio::select!`). They are never real value references.
+const RUST_CONTEXTUAL_KEYWORDS = new Set([
+  "biased",
 ])
 
 const RUST_BUILTIN_LIFETIMES = new Set([
@@ -190,6 +204,357 @@ function maskStringsAndLineComments(code: string): string {
   }
 
   return masked
+}
+
+// Blank out every region that is not executable Rust identifiers/operators, while
+// preserving the exact byte length and newline positions so that line/column
+// reporting against the ORIGINAL source stays correct. Handles: line comments,
+// block comments, string literals (including b"", r"", br"", r#"..."#, byte and
+// char literals), and attributes (#[...] and #![...]). This is what stops the
+// heuristic "compiler" from mis-reading `#[derive(Debug)]`, `b"abc"`, or an
+// identifier mentioned inside a comment as a real value/function/type reference.
+function maskNonCode(code: string): string {
+  let out = ""
+  let i = 0
+  const n = code.length
+
+  const blank = (ch: string) => (ch === "\n" ? "\n" : " ")
+
+  while (i < n) {
+    const c = code[i]
+    const next = code[i + 1]
+
+    // line comment
+    if (c === "/" && next === "/") {
+      out += "  "
+      i += 2
+      while (i < n && code[i] !== "\n") {
+        out += " "
+        i += 1
+      }
+      continue
+    }
+
+    // block comment (supports nesting like Rust)
+    if (c === "/" && next === "*") {
+      let depth = 1
+      out += "  "
+      i += 2
+      while (i < n && depth > 0) {
+        if (code[i] === "/" && code[i + 1] === "*") {
+          depth += 1
+          out += "  "
+          i += 2
+          continue
+        }
+        if (code[i] === "*" && code[i + 1] === "/") {
+          depth -= 1
+          out += "  "
+          i += 2
+          continue
+        }
+        out += blank(code[i])
+        i += 1
+      }
+      continue
+    }
+
+    // attribute: #[ ... ]  or  #![ ... ]
+    if (c === "#" && (next === "[" || (next === "!" && code[i + 2] === "["))) {
+      out += " "
+      i += 1
+      if (code[i] === "!") {
+        out += " "
+        i += 1
+      }
+      // code[i] === "[" here
+      let depth = 0
+      let inStr: string | null = null
+      let esc = false
+      while (i < n) {
+        const cj = code[i]
+        if (inStr) {
+          out += blank(cj)
+          if (esc) esc = false
+          else if (cj === "\\") esc = true
+          else if (cj === inStr) inStr = null
+          i += 1
+          continue
+        }
+        if (cj === '"' || cj === "'") {
+          inStr = cj
+          out += " "
+          i += 1
+          continue
+        }
+        if (cj === "[") depth += 1
+        if (cj === "]") depth -= 1
+        out += blank(cj)
+        i += 1
+        if (cj === "]" && depth === 0) break
+      }
+      continue
+    }
+
+    // byte / raw string prefixes and literals: br#"..."#, r#"..."#, r"...", b"...", b'x'
+    const rest = code.slice(i, i + 6)
+    const rawMatch = rest.match(/^(br#*"|r#*")/)
+    if (rawMatch) {
+      const prefix = rawMatch[1]
+      const hashes = (prefix.match(/#/g) || []).length
+      const terminator = '"' + "#".repeat(hashes)
+      out += " ".repeat(prefix.length)
+      let j = i + prefix.length
+      while (j < n && code.slice(j, j + terminator.length) !== terminator) {
+        out += blank(code[j])
+        j += 1
+      }
+      for (let k = 0; k < terminator.length && j < n; k++) {
+        out += " "
+        j += 1
+      }
+      i = j
+      continue
+    }
+
+    const quoteMatch = rest.match(/^(b"|b')/)
+    if (quoteMatch) {
+      const prefix = quoteMatch[1]
+      const quote = prefix[1]
+      out += " ".repeat(prefix.length)
+      let j = i + prefix.length
+      let esc = false
+      while (j < n) {
+        const cj = code[j]
+        out += blank(cj)
+        if (esc) {
+          esc = false
+          j += 1
+          continue
+        }
+        if (cj === "\\") {
+          esc = true
+          j += 1
+          continue
+        }
+        if (cj === quote) {
+          j += 1
+          break
+        }
+        j += 1
+      }
+      i = j
+      continue
+    }
+
+    // ordinary string literal
+    if (c === '"') {
+      out += " "
+      let j = i + 1
+      let esc = false
+      while (j < n) {
+        const cj = code[j]
+        out += blank(cj)
+        if (esc) {
+          esc = false
+          j += 1
+          continue
+        }
+        if (cj === "\\") {
+          esc = true
+          j += 1
+          continue
+        }
+        if (cj === '"') {
+          j += 1
+          break
+        }
+        j += 1
+      }
+      i = j
+      continue
+    }
+
+    // char literal 'x' or '\n' — but leave lifetimes ('a) untouched
+    if (c === "'") {
+      const charLit = code.slice(i).match(/^'(\\.|[^'\\])'/)
+      if (charLit) {
+        out += " ".repeat(charLit[0].length)
+        i += charLit[0].length
+        continue
+      }
+      out += c
+      i += 1
+      continue
+    }
+
+    out += c
+    i += 1
+  }
+
+  return out
+}
+
+// Like maskNonCode but string/char/byte literals are kept verbatim. Used by the
+// statement-structure scanners, which must still see that a right-hand side like
+// `= "burst"` is non-empty while a stray multi-line `#[serde(...)]` is masked away.
+function maskCommentsAndAttributes(code: string): string {
+  let out = ""
+  let i = 0
+  const n = code.length
+  const blank = (ch: string) => (ch === "\n" ? "\n" : " ")
+
+  while (i < n) {
+    const c = code[i]
+    const next = code[i + 1]
+
+    if (c === "/" && next === "/") {
+      out += "  "
+      i += 2
+      while (i < n && code[i] !== "\n") {
+        out += " "
+        i += 1
+      }
+      continue
+    }
+
+    if (c === "/" && next === "*") {
+      let depth = 1
+      out += "  "
+      i += 2
+      while (i < n && depth > 0) {
+        if (code[i] === "/" && code[i + 1] === "*") {
+          depth += 1
+          out += "  "
+          i += 2
+          continue
+        }
+        if (code[i] === "*" && code[i + 1] === "/") {
+          depth -= 1
+          out += "  "
+          i += 2
+          continue
+        }
+        out += blank(code[i])
+        i += 1
+      }
+      continue
+    }
+
+    if (c === "#" && (next === "[" || (next === "!" && code[i + 2] === "["))) {
+      out += " "
+      i += 1
+      if (code[i] === "!") {
+        out += " "
+        i += 1
+      }
+      let depth = 0
+      let inStr: string | null = null
+      let esc = false
+      while (i < n) {
+        const cj = code[i]
+        if (inStr) {
+          out += blank(cj)
+          if (esc) esc = false
+          else if (cj === "\\") esc = true
+          else if (cj === inStr) inStr = null
+          i += 1
+          continue
+        }
+        if (cj === '"' || cj === "'") {
+          inStr = cj
+          out += " "
+          i += 1
+          continue
+        }
+        if (cj === "[") depth += 1
+        if (cj === "]") depth -= 1
+        out += blank(cj)
+        i += 1
+        if (cj === "]" && depth === 0) break
+      }
+      continue
+    }
+
+    // strings/chars kept verbatim: copy the whole literal so its content is not
+    // re-scanned as comments/attributes.
+    const rest = code.slice(i, i + 6)
+    const rawMatch = rest.match(/^(br#*"|r#*")/)
+    if (rawMatch) {
+      const prefix = rawMatch[1]
+      const hashes = (prefix.match(/#/g) || []).length
+      const terminator = '"' + "#".repeat(hashes)
+      let j = i + prefix.length
+      while (j < n && code.slice(j, j + terminator.length) !== terminator) j += 1
+      j = Math.min(n, j + terminator.length)
+      out += code.slice(i, j)
+      i = j
+      continue
+    }
+    const quoteMatch = rest.match(/^(b"|b')/) || (c === '"' ? [null, '"'] as unknown as RegExpMatchArray : null)
+    if (quoteMatch) {
+      const prefix = quoteMatch[1] ?? '"'
+      const quote = prefix[prefix.length - 1]
+      let j = i + prefix.length
+      let esc = false
+      while (j < n) {
+        const cj = code[j]
+        if (esc) { esc = false; j += 1; continue }
+        if (cj === "\\") { esc = true; j += 1; continue }
+        if (cj === quote) { j += 1; break }
+        j += 1
+      }
+      out += code.slice(i, j)
+      i = j
+      continue
+    }
+    if (c === "'") {
+      const charLit = code.slice(i).match(/^'(\\.|[^'\\])'/)
+      if (charLit) {
+        out += charLit[0]
+        i += charLit[0].length
+        continue
+      }
+      out += c
+      i += 1
+      continue
+    }
+
+    out += c
+    i += 1
+  }
+  return out
+}
+
+// Names introduced by `const NAME: ...` / `static NAME: ...` items. These can be
+// referenced as array lengths (`[f32; IN]`), so they must count as known in type
+// position even though they are values, not types.
+function collectConstAndStaticNames(code: string): Set<string> {
+  const names = new Set<string>()
+  for (const match of code.matchAll(/\b(?:const|static)\s+(?:mut\s+)?([a-zA-Z_]\w*)/g)) {
+    names.add(match[1])
+  }
+  return names
+}
+
+// Collect every generic type/const parameter declared anywhere in the snippet:
+// `fn f<T, const IN: usize>`, `impl<T> ...`, `struct S<T>`, `enum E<T>`,
+// `trait Tr<T>`, `type Alias<T>`. These are valid types inside their scope and
+// must not be reported as "cannot find type".
+function collectAllGenericParameters(code: string): Set<string> {
+  const params = new Set<string>()
+  const headerRegex = /\b(?:fn|impl|struct|enum|trait|type|union)\b[^<>={};\n]*?(<[^<>{}();]*>)/g
+  let match: RegExpExecArray | null
+  while ((match = headerRegex.exec(code)) !== null) {
+    const { typeParameters } = parseGenericHeader(match[1])
+    for (const param of typeParameters) params.add(param)
+  }
+  // Also pick up bare `impl<...>` where nothing precedes the angle brackets.
+  for (const m of code.matchAll(/\bimpl\s*(<[^<>{}();]*>)/g)) {
+    const { typeParameters } = parseGenericHeader(m[1])
+    for (const param of typeParameters) params.add(param)
+  }
+  return params
 }
 
 function stripInlineComment(line: string): string {
@@ -341,12 +706,38 @@ function collectDeclaredIdentifiers(code: string): Set<string> {
     identifiers.add(match[1])
   }
 
-  for (const match of code.matchAll(/\bfn\s+[a-zA-Z_]\w*\s*\(([^)]*)\)/g)) {
+  // Function parameters — tolerate an optional generic header (`<'a, T, const N: usize>`)
+  // between the name and the parameter list, otherwise generic functions contribute
+  // none of their parameters and every use of them looks "undeclared".
+  for (const match of code.matchAll(/\bfn\s+[a-zA-Z_]\w*\s*(?:<[^>{}();]*>)?\s*\(([^)]*)\)/g)) {
     for (const parameter of splitTopLevelArgs(match[1])) {
       const bindingFragment = parameter.split(":")[0] ?? ""
       for (const identifier of extractBindingIdentifiers(bindingFragment)) {
         identifiers.add(identifier)
       }
+    }
+  }
+
+  // Names brought into scope by `use` paths (including `{a, b as c}` groups) and
+  // declarative macro names. Both are valid references but are neither `let`
+  // bindings nor function parameters.
+  for (const match of code.matchAll(/\buse\s+([^;]+);/g)) {
+    for (const identifier of match[1].match(/\b[a-zA-Z_]\w*\b/g) ?? []) {
+      if (!RUST_RESERVED_IDENTIFIERS.has(identifier)) identifiers.add(identifier)
+    }
+  }
+
+  for (const match of code.matchAll(/\bmacro_rules!\s*([a-zA-Z_]\w*)/g)) {
+    identifiers.add(match[1])
+  }
+
+  // Struct/enum field names and struct-literal field shorthand (`Foo { total, ready }`).
+  // Shorthand reuses a same-named local, so treating field names as in-scope prevents
+  // false "cannot find value" reports at the shorthand site.
+  for (const match of code.matchAll(/[a-zA-Z_]\w*\s*:\s*[^,{}()\n]+/g)) {
+    const field = match[0].split(":")[0].trim()
+    if (/^[a-z_]\w*$/.test(field) && !RUST_RESERVED_IDENTIFIERS.has(field)) {
+      identifiers.add(field)
     }
   }
 
@@ -567,7 +958,7 @@ function getLikelyRustKeywordSuggestion(identifier: string): string | null {
 }
 
 function findUndefinedValueUsageError(code: string, filename: string): string | null {
-  const maskedCode = maskStringsAndLineComments(code)
+  const maskedCode = maskNonCode(code)
   const declaredIdentifiers = collectDeclaredIdentifiers(maskedCode)
   const identifierRegex = /\b([a-z_]\w*)\b/g
   let match: RegExpExecArray | null
@@ -575,6 +966,8 @@ function findUndefinedValueUsageError(code: string, filename: string): string | 
   while ((match = identifierRegex.exec(maskedCode)) !== null) {
     const identifier = match[1]
     if (identifier === "_") continue
+    // `_foo` is a deliberately-unused binding in Rust; never treat it as undefined.
+    if (identifier.startsWith("_")) continue
     const absoluteIndex = match.index
     const charBefore = maskedCode[absoluteIndex - 1] ?? ""
     const prevTwo = maskedCode.slice(Math.max(absoluteIndex - 2, 0), absoluteIndex)
@@ -586,10 +979,14 @@ function findUndefinedValueUsageError(code: string, filename: string): string | 
     if (RUST_RESERVED_IDENTIFIERS.has(identifier)) continue
     if (RUST_PRIMITIVE_TYPES.has(identifier)) continue
     if (RUST_PRELUDE_FUNCTIONS.has(identifier)) continue
+    if (RUST_CONTEXTUAL_KEYWORDS.has(identifier)) continue
     if (declaredIdentifiers.has(identifier)) continue
 
     if (charBefore === "." || charBefore === "'" || prevTwo === "::") continue
     if (charAfter === "!" || charAfter === ":" || charAfter === "(" || nextTwo === "::") continue
+    // `ident =` is an assignment/field/macro-field target (e.g. `error!(status = ...)`,
+    // `guard.mode = ...`), not a value being read — never report it as undefined.
+    if (/^\s*=(?![=>])/.test(maskedCode.slice(afterIndex))) continue
     if (RUST_DECLARATION_KEYWORDS.has(previousWord)) continue
 
     const { line, column } = getLineColumnFromIndex(code, absoluteIndex)
@@ -659,6 +1056,8 @@ function findUnknownTypeInContext(
 
     if (charBefore === "'" || prevTwo === "::" || nextTwo === "::") continue
     if (afterToken.startsWith("=")) continue
+    if (typeName === "_") continue // inferred-type placeholder (`Vec<_>`, `BTreeMap<_, _>`)
+    if (typeName.startsWith("_")) continue
     if (RUST_TYPE_CONTEXT_KEYWORDS.has(typeName)) continue
     if (knownTypes.has(typeName)) continue
 
@@ -679,9 +1078,18 @@ function findUnknownTypeInContext(
 }
 
 function findUnknownTypeError(code: string, filename: string): string | null {
-  const declaredTypes = collectDeclaredTypes(code)
-  const signatures = collectFunctionSignatures(code)
-  const globallyKnownTypes = new Set<string>([...RUST_PRIMITIVE_TYPES, ...RUST_STANDARD_TYPES, ...declaredTypes])
+  const scanCode = maskNonCode(code)
+  const declaredTypes = collectDeclaredTypes(scanCode)
+  const genericParameters = collectAllGenericParameters(scanCode)
+  const constNames = collectConstAndStaticNames(scanCode)
+  const signatures = collectFunctionSignatures(scanCode)
+  const globallyKnownTypes = new Set<string>([
+    ...RUST_PRIMITIVE_TYPES,
+    ...RUST_STANDARD_TYPES,
+    ...declaredTypes,
+    ...genericParameters,
+    ...constNames, // `const IN: usize` used as an array length `[f32; IN]`
+  ])
 
   for (const signature of signatures) {
     for (const typeParameter of signature.declaredTypeParameters) {
@@ -697,7 +1105,7 @@ function findUnknownTypeError(code: string, filename: string): string | null {
     }
   }
 
-  for (const context of collectAdditionalTypeContexts(code)) {
+  for (const context of collectAdditionalTypeContexts(scanCode)) {
     const error = findUnknownTypeInContext(code, context, globallyKnownTypes, filename)
     if (error) return error
   }
@@ -706,20 +1114,30 @@ function findUnknownTypeError(code: string, filename: string): string | null {
 }
 
 function findUndefinedFunctionCallError(code: string, filename: string): string | null {
-  const declaredFunctions = collectDeclaredFunctions(code)
-  const declaredTypes = collectDeclaredTypes(code)
+  // Scan comment/string/attribute-masked code so identifiers mentioned in prose
+  // (e.g. `// counter by hand (...)`) are never read as function calls.
+  const scanCode = maskNonCode(code)
+  const declaredFunctions = collectDeclaredFunctions(scanCode)
+  const declaredTypes = collectDeclaredTypes(scanCode)
+  const declaredIdentifiers = collectDeclaredIdentifiers(scanCode)
   const functionCallRegex = /\b([a-zA-Z_]\w*)\s*\(/g
   let match: RegExpExecArray | null
 
-  while ((match = functionCallRegex.exec(code)) !== null) {
+  while ((match = functionCallRegex.exec(scanCode)) !== null) {
     const functionName = match[1]
-    const charBefore = code[match.index - 1] ?? ""
-    const previousWord = getPreviousWord(code, match.index)
+    const charBefore = scanCode[match.index - 1] ?? ""
+    const previousWord = getPreviousWord(scanCode, match.index)
 
     if (/[.:\w]/.test(charBefore)) continue
     if (previousWord === "fn") continue
+    // An `Uppercase(...)` call site is a tuple-struct / enum-variant constructor
+    // (or a variant pattern in a `match`/enum body), not a free function. Free
+    // functions are snake_case by convention, so never report these as missing.
+    if (/^[A-Z]/.test(functionName)) continue
     if (RUST_RESERVED_IDENTIFIERS.has(functionName) || RUST_PRELUDE_FUNCTIONS.has(functionName)) continue
     if (declaredFunctions.has(functionName) || declaredTypes.has(functionName)) continue
+    // A local binding of a callable type (closure / fn pointer) can be invoked too.
+    if (declaredIdentifiers.has(functionName)) continue
 
     const { line, column } = getLineColumnFromIndex(code, match.index)
     return formatRustCompilerError({
@@ -879,6 +1297,9 @@ function findMissingMainError(code: string, filename: string): string | null {
 }
 
 function findIncompleteBindingError(code: string, filename: string): string | null {
+  // Detect against comment/attribute-masked code (strings kept) so a multi-line
+  // attribute is ignored but a real string RHS still reads as a value.
+  const scanCode = maskCommentsAndAttributes(code)
   const immediatePatterns: Array<{ regex: RegExp; useLookahead: boolean }> = [
     { regex: /\blet\s+[^=;\n]+\s*=\s*;/g, useLookahead: false },
     { regex: /\b[a-zA-Z_]\w*\s*=(?!=)\s*;/g, useLookahead: false },
@@ -887,7 +1308,7 @@ function findIncompleteBindingError(code: string, filename: string): string | nu
   ]
 
   for (const pattern of immediatePatterns) {
-    const match = pattern.regex.exec(code)
+    const match = pattern.regex.exec(scanCode)
     if (!match) continue
     const problemIndex = pattern.useLookahead ? match.index + match[0].length : match.index + match[0].length - 1
     const problemToken = code[problemIndex] ?? "end of line"
@@ -903,8 +1324,9 @@ function findIncompleteBindingError(code: string, filename: string): string | nu
   }
 
   const lines = code.split("\n")
+  const maskedLines = scanCode.split("\n")
   for (let i = 0; i < lines.length; i++) {
-    const strippedLine = stripInlineComment(lines[i]).trim()
+    const strippedLine = maskedLines[i].trim()
     if (!strippedLine) continue
 
     const looksLikeOpenBinding =
@@ -912,15 +1334,15 @@ function findIncompleteBindingError(code: string, filename: string): string | nu
 
     if (!looksLikeOpenBinding) continue
 
-    const nextIndex = findNextSignificantLine(lines, i + 1)
-    const nextLine = nextIndex === -1 ? "" : stripInlineComment(lines[nextIndex]).trim()
+    const nextIndex = findNextSignificantLine(maskedLines, i + 1)
+    const nextLine = nextIndex === -1 ? "" : maskedLines[nextIndex].trim()
 
     if (nextIndex !== -1 && !/^[;)}\]]/.test(nextLine)) continue
 
     return formatRustCompilerError({
       message: nextIndex === -1 ? "expected expression, found end of input" : `expected expression, found \`${extractLeadingToken(nextLine)}\``,
       line: i + 1,
-      column: stripInlineComment(lines[i]).length + 1,
+      column: maskedLines[i].length + 1,
       sourceLine: lines[i],
       note: "finish the assignment with a valid Rust expression",
       filename,
@@ -960,16 +1382,20 @@ function requiresStatementSemicolon(line: string): boolean {
 
 function findStatementSemicolonError(code: string, filename: string): string | null {
   const lines = code.split("\n")
+  // Detect on masked lines so multi-line attributes such as `#[serde( ... )]`
+  // are treated as blank and never mistaken for an unterminated statement.
+  // Strings are preserved so a real string RHS is not read as an empty statement.
+  const maskedLines = maskCommentsAndAttributes(code).split("\n")
 
   for (let i = 0; i < lines.length; i++) {
-    const lineWithoutComment = stripInlineComment(lines[i])
+    const lineWithoutComment = maskedLines[i]
     const trimmed = lineWithoutComment.trim()
     if (!trimmed || !requiresStatementSemicolon(trimmed)) continue
 
     if (trimmed.endsWith("=>") || /[;{[(,]$/.test(trimmed) || /[=+\-*/%&|:.]$/.test(trimmed)) continue
 
-    const nextIndex = findNextSignificantLine(lines, i + 1)
-    const nextTrimmed = nextIndex === -1 ? "" : stripInlineComment(lines[nextIndex]).trim()
+    const nextIndex = findNextSignificantLine(maskedLines, i + 1)
+    const nextTrimmed = nextIndex === -1 ? "" : maskedLines[nextIndex].trim()
     if (nextTrimmed && isContinuationLine(nextTrimmed)) continue
 
     const foundToken = nextIndex === -1 ? "end of input" : `\`${extractLeadingToken(nextTrimmed)}\``
@@ -987,7 +1413,9 @@ function findStatementSemicolonError(code: string, filename: string): string | n
 }
 
 function findUndefinedPrintArgumentError(code: string, filename: string): string | null {
-  const declaredIdentifiers = collectDeclaredIdentifiers(code)
+  const scanCode = maskNonCode(code)
+  const declaredIdentifiers = collectDeclaredIdentifiers(scanCode)
+  const constNames = collectConstAndStaticNames(scanCode)
   const printlnRegex = /println!\s*\(\s*"((?:[^"\\]|\\.)*)"(\s*,\s*([\s\S]*?))?\s*\)\s*;?/g
   let match: RegExpExecArray | null
 
@@ -997,6 +1425,8 @@ function findUndefinedPrintArgumentError(code: string, filename: string): string
     for (const arg of args) {
       const trimmedArg = arg.trim()
       if (!/^[a-zA-Z_]\w*$/.test(trimmedArg)) continue
+      // Constants (SCREAMING_SNAKE_CASE or declared `const`/`static`) are valid values.
+      if (/^[A-Z][A-Z0-9_]*$/.test(trimmedArg) || constNames.has(trimmedArg)) continue
       if (declaredIdentifiers.has(trimmedArg) || RUST_RESERVED_IDENTIFIERS.has(trimmedArg)) continue
 
       const argumentIndex = match.index + match[0].lastIndexOf(trimmedArg)

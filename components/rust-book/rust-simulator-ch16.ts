@@ -2,7 +2,7 @@ function parseOrderLines(code: string): Array<{ qty: number; price: number }> {
   const lines: Array<{ qty: number; price: number }> = []
 
   for (const match of code.matchAll(
-    /add_line\([\s\S]*?Quantity::new\((\d+)\)\.unwrap\(\)\s*,\s*MoneyCents::new\((\d+)\)(?:\.unwrap\(\))?\s*\)/g
+    /add_line\([\s\S]*?Quantity::new\((\d+)\)\.unwrap\(\)\s*,\s*MoneyCents::new\((\d+)\)(?:\.unwrap\(\))?\s*,?\s*\)/g
   )) {
     lines.push({
       qty: Number(match[1]),
@@ -27,7 +27,7 @@ export function simulateCh16Output(code: string, key?: string): string | null {
     let balance = 0
 
     for (const match of code.matchAll(
-      /(?:AccountEvent::)?(Opened|Deposited|Withdrawn)\s*{\s*(?:opening_balance_cents|cents):\s*(-?\d+)\s*}/g
+      /(?:AccountEvent::)?(Opened|Deposited|Withdrawn)\s*{\s*(?:opening_balance_cents|cents):\s*(-?\d+)\s*,?\s*}/g
     )) {
       const kind = match[1]
       const cents = Number(match[2])

@@ -21,13 +21,19 @@ function parseStageSamples(code: string): StageSample[] {
   )
 }
 
+function parseIntLiteral(code: string, field: string): number {
+  // Rust integer literals may contain underscores as digit separators (e.g. 16_384).
+  const match = code.match(new RegExp(`${field}:\\s*(\\d[\\d_]*)`))
+  return Number((match?.[1] ?? "0").replace(/_/g, ""))
+}
+
 function parseStats(code: string): PipelineStats {
   return {
-    cpuUs: Number(code.match(/cpu_us:\s*(\d+)/)?.[1] ?? "0"),
-    ioWaitUs: Number(code.match(/io_wait_us:\s*(\d+)/)?.[1] ?? "0"),
-    lockWaitUs: Number(code.match(/lock_wait_us:\s*(\d+)/)?.[1] ?? "0"),
-    serializeUs: Number(code.match(/serialize_us:\s*(\d+)/)?.[1] ?? "0"),
-    serializedBytes: Number(code.match(/serialized_bytes:\s*(\d+)/)?.[1] ?? "0"),
+    cpuUs: parseIntLiteral(code, "cpu_us"),
+    ioWaitUs: parseIntLiteral(code, "io_wait_us"),
+    lockWaitUs: parseIntLiteral(code, "lock_wait_us"),
+    serializeUs: parseIntLiteral(code, "serialize_us"),
+    serializedBytes: parseIntLiteral(code, "serialized_bytes"),
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
 import { PAGES, DEFAULT_CODES, BookState } from "./types"
+import { trackChapterView } from "@/lib/analytics"
 
 const STORAGE_KEY = "rust-book-state"
 
@@ -93,6 +94,15 @@ export function BookProvider({ children }: BookProviderProps) {
   useEffect(() => {
     saveState()
   }, [saveState])
+
+  // Attribute analytics to the active chapter and emit an SPA page_view whenever
+  // the reader navigates (the URL never changes, so gtag cannot detect this itself).
+  useEffect(() => {
+    const page = PAGES[currentPage]
+    if (page) {
+      trackChapterView({ index: currentPage, title: page.title, id: page.id })
+    }
+  }, [currentPage])
 
   const setCurrentPage = useCallback((page: number) => {
     const nextPage = clampPageIndex(page)

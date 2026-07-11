@@ -76,6 +76,8 @@ export function RustPracticeCard({
         showResultComparison={Boolean(expectedOutput)}
         originalCode={initialCode}
         onRevert={resetCode}
+        analyticsKind="exercise"
+        analyticsKey={runKey}
       />
 
       {helperText ? <div className="mt-3 text-xs text-muted-foreground leading-5">{helperText}</div> : null}

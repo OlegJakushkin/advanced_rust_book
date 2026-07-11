@@ -52,20 +52,40 @@ export function simulateCh45Output(code: string, key?: string): string | null {
   }
 
   if (key === "capstone_worker_pool_workloads") {
-    const jobCount = (code.match(/Job\s*{/g) ?? []).length
-    const frontier = parseNumberList(code.match(/frontier:\s*vec!\[([^\]]+)\]/)?.[1])
-    const left = parseNumberList(code.match(/left:\s*\[([^\]]+)\]/)?.[1])
-    const right = parseNumberList(code.match(/right:\s*\[([^\]]+)\]/)?.[1])
+    // Only count actual `Job { id: "...", ... }` instantiations, not the
+    // `struct Job { ... }` definition (which also matches a naive `Job\s*{` scan).
+    const jobCount = (code.match(/Job\s*\{\s*id:\s*"[^"]*"/g) ?? []).length
+
+    const frontierLists = Array.from(
+      code.matchAll(/frontier:\s*vec!\[([^\]]*)\]/g),
+      (match) => parseNumberList(match[1])
+    )
+    // Exclude bracket groups containing `;` so the `[f32; 4]` array-type
+    // annotations in `fn matrix_checksum(left: [f32; 4], right: [f32; 4])`
+    // aren't mistaken for the actual literal arrays passed at the call site.
+    const leftLists = Array.from(
+      code.matchAll(/left:\s*\[([^\];]*)\]/g),
+      (match) => parseNumberList(match[1])
+    )
+    const rightLists = Array.from(
+      code.matchAll(/right:\s*\[([^\];]*)\]/g),
+      (match) => parseNumberList(match[1])
+    )
 
     const hasLoop = /while\s+let\s+Some\(job\)\s*=\s*queue\.pop_front\(\)/.test(code)
     const hasGraphPath = /graph_total\s*\+=\s*graph_units\(&frontier\)/.test(code)
     const hasMatrixPath = /matrix_total\s*\+=\s*matrix_checksum\(\s*left\s*,\s*right\s*\)/.test(code)
 
-    const matrixChecksum = left.reduce((total, value, index) => total + value * (right[index] ?? 0), 0)
+    const graphTotal = frontierLists.reduce((total, list) => total + sum(list), 0)
+    const matrixTotal = leftLists.reduce((total, list, index) => {
+      const right = rightLists[index] ?? []
+      const pairSum = list.reduce((acc, value, i) => acc + value * (right[i] ?? 0), 0)
+      return total + pairSum
+    }, 0)
 
     return `completed = ${hasLoop ? jobCount : 0}\ngraph units = ${
-      hasGraphPath ? sum(frontier) : 0
-    }\nmatrix checksum = ${(hasMatrixPath ? matrixChecksum : 0).toFixed(1)}`
+      hasGraphPath ? graphTotal : 0
+    }\nmatrix checksum = ${(hasMatrixPath ? matrixTotal : 0).toFixed(1)}`
   }
 
   if (key === "ch45_ex_capstone_dispatcher") {

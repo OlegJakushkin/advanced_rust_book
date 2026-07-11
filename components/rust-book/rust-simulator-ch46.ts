@@ -45,7 +45,7 @@ export function simulateCh46Output(code: string, key?: string): string | null {
       /struct\s+InvoiceService/.test(code) &&
       /fn\s+create_invoice/.test(code) &&
       /CreateInvoiceCommand/.test(code) &&
-      /state\.invoices\.create_invoice\(\s*cmd\s*\)/.test(code) &&
+      /state\s*\.\s*invoices\s*\.\s*create_invoice\(\s*cmd\s*\)/.test(code) &&
       /status:\s*201/.test(code)
 
     return `status = ${hasServiceBoundary ? 201 : 0}\ninvoice = ${
